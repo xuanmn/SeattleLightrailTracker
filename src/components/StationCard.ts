@@ -7,6 +7,7 @@ import { StationDirectionFilter } from '../services/storage';
 export interface StationCardCallbacks {
   onTogglePin: (stationId: string) => void;
   onDirectionFilterChange?: (stationId: string, filter: StationDirectionFilter) => void;
+  onBecameVisible?: (stationId: string) => void;
 }
 
 export class StationCardComponent {
@@ -23,6 +24,10 @@ export class StationCardComponent {
 
   private approachTrackWrap!: HTMLElement;
   private approachBar!: HTMLElement;
+  private approachTrain!: HTMLElement;
+
+  private observer?: IntersectionObserver;
+  public isVisible: boolean = true;
 
   private directionFilter: StationDirectionFilter = 'both';
   private btnBoth!: HTMLButtonElement;
@@ -49,6 +54,7 @@ export class StationCardComponent {
     this.callbacks = callbacks;
     this.directionFilter = initialDirectionFilter;
     this.element = this.render();
+    this.setupIntersectionObserver();
   }
 
   public getElement(): HTMLElement {
@@ -192,7 +198,8 @@ export class StationCardComponent {
         100,
         Math.max(0, ((APPROACH_WINDOW_MS - Math.max(0, closestDiffMs)) / APPROACH_WINDOW_MS) * 100)
       );
-      this.approachBar.style.width = `${progress}%`;
+      this.approachBar.style.transform = `scaleX(${progress / 100})`;
+      this.approachTrain.style.left = `${progress}%`;
 
       const isLine2 =
         closestArrival.routeName.includes('2') ||
@@ -201,8 +208,14 @@ export class StationCardComponent {
 
       const isArriving = closestDiffMs <= 45000;
       this.approachBar.className = `station-approach-bar ${isLine2 ? 'line-2-approach' : 'line-1-approach'} ${isArriving ? 'arriving-pulse' : ''}`;
+      this.approachTrackWrap.classList.toggle('line-2-approach', isLine2);
+      this.approachTrackWrap.classList.toggle('line-1-approach', !isLine2);
+      this.approachTrackWrap.classList.toggle('arriving-pulse', isArriving);
+      this.approachTrain.className = `station-approach-train ${isLine2 ? 'line-2-train' : 'line-1-train'} ${isArriving ? 'arriving-pulse' : ''}`;
     } else {
-      this.approachTrackWrap.classList.remove('active');
+      this.approachTrackWrap.classList.remove('active', 'line-1-approach', 'line-2-approach', 'arriving-pulse');
+      this.approachBar.style.transform = 'scaleX(0)';
+      this.approachTrain.style.left = '0%';
     }
   }
 
@@ -413,14 +426,39 @@ export class StationCardComponent {
     // Live Approach Track
     this.approachTrackWrap = createElement('div', 'station-approach-track-wrap');
     this.approachBar = createElement('div', 'station-approach-bar');
-    const approachTrain = createElement('div', 'station-approach-train');
-    this.approachBar.appendChild(approachTrain);
+    this.approachTrain = createElement('div', 'station-approach-train');
     this.approachTrackWrap.appendChild(this.approachBar);
+    this.approachTrackWrap.appendChild(this.approachTrain);
     card.appendChild(this.approachTrackWrap);
 
     card.appendChild(this.platformsEl);
 
     this.setLoading();
     return card;
+  }
+
+  private setupIntersectionObserver() {
+    if (typeof window !== 'undefined' && 'IntersectionObserver' in window) {
+      this.observer = new window.IntersectionObserver(
+        (entries) => {
+          for (const entry of entries) {
+            const wasVisible = this.isVisible;
+            this.isVisible = entry.isIntersecting;
+            if (this.isVisible && !wasVisible) {
+              this.callbacks.onBecameVisible?.(this.station.id);
+            }
+          }
+        },
+        { rootMargin: '200px 0px' }
+      );
+      this.observer.observe(this.element);
+    }
+  }
+
+  public destroy() {
+    if (this.observer) {
+      this.observer.disconnect();
+      this.observer = undefined;
+    }
   }
 }

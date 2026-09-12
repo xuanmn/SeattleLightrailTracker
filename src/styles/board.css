@@ -46,6 +46,14 @@
   border-top: 3px solid var(--st-blue);
 }
 
+@media (max-width: 768px) {
+  .station-card {
+    backdrop-filter: none;
+    -webkit-backdrop-filter: none;
+    background: rgba(16, 24, 38, 0.96);
+  }
+}
+
 /* Card Header */
 .station-header {
   padding: 1.15rem 1.35rem;
@@ -72,11 +80,16 @@
 }
 
 .station-approach-bar {
+  position: absolute;
+  top: 0;
+  left: 0;
   height: 100%;
-  width: 0%;
+  width: 100%;
+  transform-origin: left center;
+  transform: scaleX(0);
   border-radius: var(--radius-pill);
-  transition: width 0.9s linear;
-  position: relative;
+  transition: transform 0.9s linear;
+  will-change: transform;
 }
 
 .station-approach-bar.line-1-approach {
@@ -91,40 +104,48 @@
 
 .station-approach-train {
   position: absolute;
-  right: -5px;
+  left: 0%;
   top: 50%;
-  transform: translateY(-50%);
+  transform: translate(-50%, -50%);
   width: 11px;
   height: 11px;
   border-radius: 50%;
   background: #ffffff;
   border: 2px solid var(--st-green);
   box-shadow: 0 0 8px rgba(255, 255, 255, 0.9);
-  transition: border-color var(--transition-fast);
+  transition: left 0.9s linear, border-color var(--transition-fast);
+  pointer-events: none;
+  z-index: 2;
 }
 
-.station-approach-bar.line-2-approach .station-approach-train {
+.station-approach-track-wrap.line-2-approach .station-approach-train,
+.station-approach-bar.line-2-approach .station-approach-train,
+.station-approach-train.line-2-train {
   border-color: var(--st-blue);
 }
 
-.station-approach-bar.arriving-pulse .station-approach-train {
+.station-approach-track-wrap.arriving-pulse .station-approach-train,
+.station-approach-bar.arriving-pulse .station-approach-train,
+.station-approach-train.arriving-pulse {
   animation: train-bullet-pulse 1.1s cubic-bezier(0.4, 0, 0.6, 1) infinite;
 }
 
 @keyframes train-bullet-pulse {
-  0% { transform: translateY(-50%) scale(1); box-shadow: 0 0 4px #ffffff; }
-  50% { transform: translateY(-50%) scale(1.45); box-shadow: 0 0 12px var(--st-green-light); }
-  100% { transform: translateY(-50%) scale(1); box-shadow: 0 0 4px #ffffff; }
+  0% { transform: translate(-50%, -50%) scale(1); box-shadow: 0 0 4px #ffffff; }
+  50% { transform: translate(-50%, -50%) scale(1.45); box-shadow: 0 0 12px var(--st-green-light); }
+  100% { transform: translate(-50%, -50%) scale(1); box-shadow: 0 0 4px #ffffff; }
 }
 
-.station-approach-bar.line-2-approach.arriving-pulse .station-approach-train {
+.station-approach-track-wrap.line-2-approach.arriving-pulse .station-approach-train,
+.station-approach-bar.line-2-approach.arriving-pulse .station-approach-train,
+.station-approach-train.line-2-train.arriving-pulse {
   animation: train-bullet-pulse-blue 1.1s cubic-bezier(0.4, 0, 0.6, 1) infinite;
 }
 
 @keyframes train-bullet-pulse-blue {
-  0% { transform: translateY(-50%) scale(1); box-shadow: 0 0 4px #ffffff; }
-  50% { transform: translateY(-50%) scale(1.45); box-shadow: 0 0 12px var(--st-blue-light); }
-  100% { transform: translateY(-50%) scale(1); box-shadow: 0 0 4px #ffffff; }
+  0% { transform: translate(-50%, -50%) scale(1); box-shadow: 0 0 4px #ffffff; }
+  50% { transform: translate(-50%, -50%) scale(1.45); box-shadow: 0 0 12px var(--st-blue-light); }
+  100% { transform: translate(-50%, -50%) scale(1); box-shadow: 0 0 4px #ffffff; }
 }
 
 .station-title-group {
