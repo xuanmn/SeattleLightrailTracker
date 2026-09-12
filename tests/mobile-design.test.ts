@@ -196,9 +196,13 @@ describe('Mobile Frontend Design & UX Specifications', () => {
     const telLink = document.querySelector('a[href="tel:2063985268"]');
     const smsLink = document.querySelector('a[href="sms:2063985268"]');
     const lostFoundLink = document.querySelector('a[href="tel:2065533000"]');
+    const emergency911Link = document.querySelector('a[href="tel:911"]');
+
     expect(telLink).not.toBeNull();
     expect(smsLink).not.toBeNull();
     expect(lostFoundLink).not.toBeNull();
+    expect(emergency911Link).toBeNull();
+    expect(lostFoundLink?.closest('.faq-action-btns')).not.toBeNull();
 
     // Semantic accordion details and summary
     const accordions = document.querySelectorAll('details.faq-item');

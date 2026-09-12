@@ -164,12 +164,10 @@ export class FaqModal {
               </div>
             </div>
             <div class="faq-contact-row">
-              <span class="faq-contact-label">Platform & Transit Emergency:</span>
-              <a href="tel:911" class="faq-action-btn emergency" title="Call 911">🚨 Call 911</a>
-            </div>
-            <div class="faq-contact-row">
               <span class="faq-contact-label">Lost & Found (King County Metro): <strong>206-553-3000</strong></span>
-              <a href="tel:2065533000" class="faq-action-btn tel" title="Call Lost and Found at 206-553-3000">📞 Call 206-553-3000</a>
+              <div class="faq-action-btns">
+                <a href="tel:2065533000" class="faq-action-btn tel" title="Call Lost and Found at 206-553-3000">📞 Call 206-553-3000</a>
+              </div>
             </div>
           </div>
         </div>
