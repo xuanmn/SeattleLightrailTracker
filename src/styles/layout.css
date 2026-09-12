@@ -538,7 +538,7 @@ body.modal-open {
 .modal-footer {
   padding: 0.9rem 1.5rem;
   border-top: 1px solid var(--border-subtle);
-  background: rgba(0, 0, 0, 0.2);
+  background: transparent;
   display: flex;
   align-items: center;
   justify-content: flex-end;
@@ -1068,9 +1068,13 @@ details.faq-item[open] .faq-chevron {
     border-right: none;
     transform: translateY(100%) translateZ(0);
     -webkit-transform: translateY(100%) translateZ(0);
-    padding-bottom: max(0.85rem, env(safe-area-inset-bottom));
+    padding-bottom: 0;
     touch-action: pan-y;
     transition: transform var(--transition-normal);
+  }
+
+  .modal-body:last-child {
+    padding-bottom: max(1.25rem, env(safe-area-inset-bottom));
   }
 
   .modal-overlay.open .modal-container {
@@ -1127,7 +1131,8 @@ details.faq-item[open] .faq-chevron {
   }
 
   .modal-footer {
-    padding: 0.85rem 1.25rem;
+    padding: 0.85rem 1.25rem max(1rem, env(safe-area-inset-bottom));
+    background: transparent;
   }
 
   .picker-filter-pills {

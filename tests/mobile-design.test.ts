@@ -216,5 +216,15 @@ describe('Mobile Frontend Design & UX Specifications', () => {
     const bodyText = document.body.textContent || '';
     expect(bodyText).toContain('2025–2026');
   });
+
+  it('ensures modal footer has seamless background and mobile safe-area padding without box color cutoffs', () => {
+    const layoutCss = readFileSync(process.cwd() + '/src/styles/layout.css', 'utf-8');
+
+    // Ensure .modal-footer does not have dark rgba(0, 0, 0, 0.2) background creating a jarring box cut off
+    expect(layoutCss).not.toMatch(/\.modal-footer\s*\{[^}]*background:\s*rgba\(0,\s*0,\s*0,\s*0\.2\)/);
+
+    // Ensure mobile .modal-footer includes env(safe-area-inset-bottom) padding
+    expect(layoutCss).toMatch(/\.modal-footer\s*\{[^}]*env\(safe-area-inset-bottom\)/);
+  });
 });
 
