@@ -39,6 +39,62 @@ Object.defineProperty(window, 'localStorage', {
   writable: true,
 });
 
+class MockIntersectionObserver implements IntersectionObserver {
+  readonly root: Element | Document | null = null;
+  readonly rootMargin: string = '';
+  readonly thresholds: ReadonlyArray<number> = [];
+
+  private static instances: MockIntersectionObserver[] = [];
+  public targets: Set<Element> = new Set();
+
+  constructor(public callback: IntersectionObserverCallback) {
+    MockIntersectionObserver.instances.push(this);
+  }
+
+  observe(target: Element): void {
+    this.targets.add(target);
+  }
+
+  unobserve(target: Element): void {
+    this.targets.delete(target);
+  }
+
+  disconnect(): void {
+    this.targets.clear();
+  }
+
+  takeRecords(): IntersectionObserverEntry[] {
+    return [];
+  }
+
+  trigger(entries: Partial<IntersectionObserverEntry>[]): void {
+    this.callback(
+      entries.map((e) => ({
+        boundingClientRect: {} as DOMRectReadOnly,
+        intersectionRatio: e.isIntersecting ? 1 : 0,
+        intersectionRect: {} as DOMRectReadOnly,
+        isIntersecting: false,
+        isVisible: false,
+        rootBounds: null,
+        target: document.createElement('div'),
+        time: Date.now(),
+        ...e,
+      })) as IntersectionObserverEntry[],
+      this
+    );
+  }
+}
+
+Object.defineProperty(globalThis, 'IntersectionObserver', {
+  value: MockIntersectionObserver,
+  writable: true,
+});
+Object.defineProperty(window, 'IntersectionObserver', {
+  value: MockIntersectionObserver,
+  writable: true,
+});
+
 beforeEach(() => {
   mockStorage.clear();
 });
+
