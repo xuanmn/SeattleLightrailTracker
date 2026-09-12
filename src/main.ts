@@ -39,6 +39,7 @@ class TransitTrackerApp {
   private pinnedIds: string[] = [];
   private cardComponents: Map<string, StationCardComponent> = new Map();
   private arrivalsData: Map<string, StationArrivals> = new Map();
+  private inFlightStationFetches: Set<string> = new Set();
 
   private stationsGridEl!: HTMLElement;
   private lineTitleEl!: HTMLElement;
@@ -245,6 +246,7 @@ class TransitTrackerApp {
 
   private renderStationCards() {
     this.stationsGridEl.innerHTML = '';
+    this.cardComponents.forEach((card) => card.destroy());
     this.cardComponents.clear();
 
     const stations = this.getVisibleStations();
@@ -269,6 +271,7 @@ class TransitTrackerApp {
           onDirectionFilterChange: (id, filter) => {
             setStationDirectionFilter(id, filter);
           },
+          onBecameVisible: (id) => this.handleStationBecameVisible(id),
         },
         initialFilter
       );
@@ -282,6 +285,17 @@ class TransitTrackerApp {
         cardComp.updateArrivals(cached);
       }
     });
+  }
+
+  private handleStationBecameVisible(stationId: string) {
+    const cached = this.arrivalsData.get(stationId);
+    const isStale = !cached || Date.now() - cached.lastUpdated > SYNC_INTERVAL_MS;
+    if (isStale) {
+      const station = getStationById(stationId);
+      if (station) {
+        this.fetchSingleStation(station);
+      }
+    }
   }
 
   private renderEmptyDashboard() {
@@ -389,7 +403,21 @@ class TransitTrackerApp {
     this.isFetching = true;
     const currentFetchId = ++this.activeFetchId;
 
-    const stations = this.getVisibleStations();
+    const allStations = this.getVisibleStations();
+    if (allStations.length === 0) {
+      this.isFetching = false;
+      return;
+    }
+
+    // In "All Stations" view, only poll stations whose cards are currently visible (or within buffer)
+    // In "My Stations" view, keep all cards polled since it's already a small set (<= 10 cards)
+    const stations = !this.showOnlyPinned
+      ? allStations.filter((station) => {
+          const card = this.cardComponents.get(station.id);
+          return card ? card.isVisible : true;
+        })
+      : allStations;
+
     if (stations.length === 0) {
       this.isFetching = false;
       return;
@@ -402,8 +430,17 @@ class TransitTrackerApp {
       for (let i = 0; i < stations.length; i += CHUNK_SIZE) {
         if (this.activeFetchId !== currentFetchId) break;
         const chunk = stations.slice(i, i + CHUNK_SIZE);
+        const activeChunk = !this.showOnlyPinned
+          ? chunk.filter((station) => {
+              const card = this.cardComponents.get(station.id);
+              return card ? card.isVisible : true;
+            })
+          : chunk;
+
+        if (activeChunk.length === 0) continue;
+
         await Promise.all(
-          chunk.map(async (station) => {
+          activeChunk.map(async (station) => {
             try {
               const result = await fetchArrivalsForStation(station, undefined, isManual);
               // If a newer fetch was initiated while this one was running, discard old response
@@ -455,10 +492,13 @@ class TransitTrackerApp {
 
   /**
    * Fetch arrivals for a single station and update its card.
-   * Used for surgical updates (e.g. when a new station is pinned) to avoid
-   * re-fetching all visible stations.
+   * Used for surgical updates (e.g. when a new station is pinned or scrolled into view)
+   * to avoid re-fetching all visible stations.
    */
   private async fetchSingleStation(station: Station) {
+    if (this.inFlightStationFetches.has(station.id)) return;
+    this.inFlightStationFetches.add(station.id);
+
     try {
       const result = await fetchArrivalsForStation(station);
       const data: StationArrivals = {
@@ -475,6 +515,8 @@ class TransitTrackerApp {
       }
     } catch (err) {
       console.warn(`Failed fetching arrivals for ${station.name}:`, err);
+    } finally {
+      this.inFlightStationFetches.delete(station.id);
     }
   }
 
