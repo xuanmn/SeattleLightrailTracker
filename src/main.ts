@@ -330,7 +330,10 @@ class TransitTrackerApp {
     if (this.showOnlyPinned) {
       // In "My Saved Stations" mode, removing/adding a card refreshes the visible list
       this.renderStationCards();
-      this.fetchVisibleArrivals();
+      // Only fetch for the newly pinned station instead of re-fetching all visible stations
+      if (isNowPinned && station) {
+        this.fetchSingleStation(station);
+      }
     } else {
       // In "All Line Stations" mode, update ONLY the card's star button in-place without jarring jumps or closing accordion!
       const card = this.cardComponents.get(stationId);
@@ -447,6 +450,31 @@ class TransitTrackerApp {
         this.hasPendingFetch = false;
         this.fetchVisibleArrivals();
       }
+    }
+  }
+
+  /**
+   * Fetch arrivals for a single station and update its card.
+   * Used for surgical updates (e.g. when a new station is pinned) to avoid
+   * re-fetching all visible stations.
+   */
+  private async fetchSingleStation(station: Station) {
+    try {
+      const result = await fetchArrivalsForStation(station);
+      const data: StationArrivals = {
+        station,
+        lastUpdated: Date.now(),
+        direction1: result.direction1,
+        direction2: result.direction2,
+      };
+      this.arrivalsData.set(station.id, data);
+
+      const card = this.cardComponents.get(station.id);
+      if (card) {
+        card.updateArrivals(data);
+      }
+    } catch (err) {
+      console.warn(`Failed fetching arrivals for ${station.name}:`, err);
     }
   }
 

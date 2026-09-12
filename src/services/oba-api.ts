@@ -163,7 +163,7 @@ interface CacheEntry {
 }
 
 const stopArrivalsCache = new Map<string, CacheEntry>();
-export const DEFAULT_CACHE_TTL_MS = 25 * 1000; // 25 seconds TTL
+const DEFAULT_CACHE_TTL_MS = 25 * 1000; // 25 seconds TTL
 
 /**
  * Clear the in-memory arrivals cache (useful on manual refresh or test resets)

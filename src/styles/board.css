@@ -534,7 +534,7 @@
 }
 
 .dep-clock {
-  font-family: var(--font-mono);
+  font-variant-numeric: tabular-nums;
   font-weight: 500;
 }
 
@@ -580,7 +580,7 @@
 
 /* Countdown Chip */
 .countdown-chip {
-  font-family: var(--font-mono);
+  font-variant-numeric: tabular-nums;
   font-weight: 800;
   font-size: 0.92rem;
   letter-spacing: -0.02em;

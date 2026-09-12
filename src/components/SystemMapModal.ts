@@ -6,6 +6,7 @@ export class SystemMapModal {
   private overlay: HTMLElement;
   private bodyEl!: HTMLElement;
   private canvasEl!: HTMLElement;
+  private svgInitialized: boolean = false;
 
   private fitScale: number = 1;
   private minScale: number = 0.5;
@@ -73,6 +74,12 @@ export class SystemMapModal {
 
   public open() {
     if (this.overlay.classList.contains('open')) return;
+    // Lazy-init: generate the heavy SVG map only on first open to avoid ~36KB DOM on page load
+    if (!this.svgInitialized && this.canvasEl) {
+      this.canvasEl.innerHTML = this.generateOfficialSchematicSvg();
+      this.svgInitialized = true;
+    }
+
     this.overlay.classList.add('open');
     lockBodyScroll();
     window.addEventListener('keydown', this.handleKeyDown);
@@ -621,9 +628,8 @@ export class SystemMapModal {
     // Map Viewport Body
     this.bodyEl = createElement('div', 'system-map-body');
 
-    // SVG Canvas
+    // SVG Canvas (content lazily populated on first open())
     this.canvasEl = createElement('div', 'map-svg-canvas');
-    this.canvasEl.innerHTML = this.generateOfficialSchematicSvg();
     this.bodyEl.appendChild(this.canvasEl);
 
     container.appendChild(header);

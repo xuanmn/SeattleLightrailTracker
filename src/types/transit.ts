@@ -47,7 +47,6 @@ export interface StationArrivals {
     platform: StationPlatform;
     arrivals: TransitArrival[];
   };
-  error?: string;
 }
 
 export interface AppSettings {

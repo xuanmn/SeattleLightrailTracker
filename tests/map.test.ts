@@ -10,6 +10,7 @@ describe('SystemMapModal Component', () => {
   beforeEach(() => {
     document.body.innerHTML = '';
     modal = new SystemMapModal();
+    modal.open(); // Trigger lazy SVG initialization
   });
 
   it('renders modal overlay into document body with map elements', () => {
@@ -21,6 +22,8 @@ describe('SystemMapModal Component', () => {
 
   it('opens and closes modal using open/close methods', () => {
     const overlay = document.querySelector('.system-map-modal-overlay') as HTMLElement;
+    // Modal is opened in beforeEach for lazy SVG init — close it first to test the lifecycle
+    modal.close();
     expect(overlay.classList.contains('open')).toBe(false);
 
     modal.open();

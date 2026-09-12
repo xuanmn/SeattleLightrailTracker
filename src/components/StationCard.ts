@@ -1,6 +1,7 @@
 import { Station, StationArrivals, TransitArrival } from '../types/transit';
 import { createElement, ICONS } from '../utils/dom';
-import { formatClockTime, formatCountdownBadge, formatSimpleDestination } from '../utils/time';
+import { formatClockTime, formatCountdownBadge } from '../utils/time';
+import { formatSimpleDestination } from '../utils/format';
 import { StationDirectionFilter } from '../services/storage';
 
 export interface StationCardCallbacks {
@@ -68,7 +69,7 @@ export class StationCardComponent {
     }
   }
 
-  public setDirectionFilter(filter: StationDirectionFilter) {
+  private setDirectionFilter(filter: StationDirectionFilter) {
     this.directionFilter = filter;
     this.updateDirectionFilterUI();
     this.updateApproachTrack();

@@ -4,8 +4,8 @@ import {
   formatCountdownBadge,
   formatClockTime,
   formatDelayStatus,
-  formatSimpleDestination,
 } from '../src/utils/time';
+import { formatSimpleDestination } from '../src/utils/format';
 
 describe('Time and Countdown Utilities', () => {
   const baseTime = 1700000000000; // Fixed timestamp reference
