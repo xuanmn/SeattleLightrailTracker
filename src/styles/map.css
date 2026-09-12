@@ -233,24 +233,38 @@
   stroke-linejoin: round;
 }
 
+.map-track-path.line-1-aura {
+  stroke: var(--st-green);
+  stroke-width: 16;
+  opacity: 0.12;
+}
+
 .map-track-path.line-1-glow {
-  stroke: rgba(0, 133, 66, 0.35);
-  stroke-width: 14;
+  stroke: var(--st-green);
+  stroke-width: 11;
+  opacity: 0.32;
 }
 
 .map-track-path.line-1-main {
   stroke: var(--st-green);
-  stroke-width: 9;
+  stroke-width: 7;
+}
+
+.map-track-path.line-2-aura {
+  stroke: var(--st-blue);
+  stroke-width: 16;
+  opacity: 0.12;
 }
 
 .map-track-path.line-2-glow {
-  stroke: rgba(0, 114, 206, 0.35);
-  stroke-width: 14;
+  stroke: var(--st-blue);
+  stroke-width: 11;
+  opacity: 0.32;
 }
 
 .map-track-path.line-2-main {
   stroke: var(--st-blue);
-  stroke-width: 9;
+  stroke-width: 7;
 }
 
 /* Station Nodes in SVG */

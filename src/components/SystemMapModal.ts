@@ -655,23 +655,11 @@ export class SystemMapModal {
     return `
       <svg class="system-map-svg" viewBox="0 0 830 1280" width="830" height="1280" xmlns="http://www.w3.org/2000/svg">
         <defs>
-          <filter id="track-glow-green" x="-20%" y="-20%" width="140%" height="140%">
-            <feGaussianBlur stdDeviation="3.5" result="blur" />
-            <feComposite in="SourceGraphic" in2="blur" operator="over" />
-          </filter>
-          <filter id="track-glow-blue" x="-20%" y="-20%" width="140%" height="140%">
-            <feGaussianBlur stdDeviation="3.5" result="blur" />
-            <feComposite in="SourceGraphic" in2="blur" operator="over" />
-          </filter>
           <linearGradient id="transfer-border-grad" x1="0%" y1="0%" x2="100%" y2="0%">
             <stop offset="0%" stop-color="#008542" />
             <stop offset="50%" stop-color="#38bdf8" />
             <stop offset="100%" stop-color="#0072CE" />
           </linearGradient>
-          <filter id="transfer-hub-glow" x="-30%" y="-30%" width="160%" height="160%">
-            <feGaussianBlur stdDeviation="4" result="blur" />
-            <feComposite in="SourceGraphic" in2="blur" operator="over" />
-          </filter>
         </defs>
 
         <!-- Background grid -->
@@ -682,19 +670,24 @@ export class SystemMapModal {
 
         <!-- ================= TRACK LINES ================= -->
 
-        <!-- 1 Line Track (Green #008542) -->
+        <!-- 1 Line Track (Green #008542) - Multi-Layer Vector Glow -->
+        <path class="map-track-path line-1-aura map-elem-line-1"
+          d="M 272,75 L 272,1210" stroke="#008542" stroke-width="16" opacity="0.12" stroke-linecap="round" />
         <path class="map-track-path line-1-glow map-elem-line-1"
-          d="M 272,75 L 272,1210" stroke="#008542" stroke-width="14" opacity="0.3" filter="url(#track-glow-green)" />
+          d="M 272,75 L 272,1210" stroke="#008542" stroke-width="11" opacity="0.32" stroke-linecap="round" />
         <path class="map-track-path line-1-main map-elem-line-1"
-          d="M 272,75 L 272,1210" stroke="#008542" stroke-width="9" stroke-linecap="round" fill="none" />
+          d="M 272,75 L 272,1210" stroke="#008542" stroke-width="7" stroke-linecap="round" fill="none" />
 
-        <!-- 2 Line Track (Blue #0072CE) - Shared in North/Tunnel + Eastside Corridor -->
+        <!-- 2 Line Track (Blue #0072CE) - Shared in North/Tunnel + Eastside Corridor - Multi-Layer Vector Glow -->
+        <path class="map-track-path line-2-aura map-elem-line-2 map-elem-shared"
+          d="M 298,75 L 298,615 Q 298,665 338,665 L 500,665 Q 540,665 540,635 L 540,75"
+          stroke="#0072CE" stroke-width="16" opacity="0.12" stroke-linecap="round" stroke-linejoin="round" />
         <path class="map-track-path line-2-glow map-elem-line-2 map-elem-shared"
           d="M 298,75 L 298,615 Q 298,665 338,665 L 500,665 Q 540,665 540,635 L 540,75"
-          stroke="#0072CE" stroke-width="14" opacity="0.3" filter="url(#track-glow-blue)" />
+          stroke="#0072CE" stroke-width="11" opacity="0.32" stroke-linecap="round" stroke-linejoin="round" />
         <path class="map-track-path line-2-main map-elem-line-2 map-elem-shared"
           d="M 298,75 L 298,615 Q 298,665 338,665 L 500,665 Q 540,665 540,635 L 540,75"
-          stroke="#0072CE" stroke-width="9" stroke-linecap="round" stroke-linejoin="round" fill="none" />
+          stroke="#0072CE" stroke-width="7" stroke-linecap="round" stroke-linejoin="round" fill="none" />
 
         <!-- ================= TERMINUS HEADERS & BULLETS ================= -->
 
@@ -786,7 +779,8 @@ export class SystemMapModal {
       <!-- ================= KEY 1 LINE & 2 LINE TRANSFER HUB ================= -->
       <g class="map-station-node map-transfer-hub-node map-elem-line-1 map-elem-line-2 map-elem-shared" id="map-node-${id}">
         <!-- Outer Glowing Capsule -->
-        <rect x="${x - 24}" y="${y - 11}" width="48" height="22" rx="11" fill="#091122" stroke="url(#transfer-border-grad)" stroke-width="2" filter="url(#transfer-hub-glow)" />
+        <rect x="${x - 26}" y="${y - 13}" width="52" height="26" rx="13" fill="none" stroke="#38bdf8" stroke-width="3" opacity="0.25" />
+        <rect x="${x - 24}" y="${y - 11}" width="48" height="22" rx="11" fill="#091122" stroke="url(#transfer-border-grad)" stroke-width="2" />
         
         <!-- Transfer Connector Bridge -->
         <line x1="${x - 13}" y1="${y}" x2="${x + 13}" y2="${y}" stroke="rgba(255, 255, 255, 0.95)" stroke-width="3" stroke-linecap="round" />
