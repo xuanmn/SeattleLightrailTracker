@@ -10,8 +10,12 @@ interface RawObaArrival {
   routeShortName?: string;
   routeLongName?: string;
   tripHeadsign: string;
-  scheduledDepartureTime: number; // ms
+  scheduledDepartureTime?: number; // ms
   predictedDepartureTime?: number | null; // ms
+  scheduledArrivalTime?: number; // ms
+  predictedArrivalTime?: number | null; // ms
+  arrivalEnabled?: boolean;
+  departureEnabled?: boolean;
   predicted?: boolean;
   status?: string;
 }
@@ -38,20 +42,60 @@ export function transformObaArrivals(
   const results: TransitArrival[] = [];
 
   for (const item of items) {
-    const isRealtime = Boolean(item.predicted && item.predictedDepartureTime && item.predictedDepartureTime > 0);
-    const targetDeparture = isRealtime ? (item.predictedDepartureTime as number) : item.scheduledDepartureTime;
+    const isTerminusArrival = item.departureEnabled === false;
+    const schedArr = item.scheduledArrivalTime || 0;
+    const schedDep = item.scheduledDepartureTime || 0;
+    const predArr = item.predictedArrivalTime && item.predictedArrivalTime > 0 ? item.predictedArrivalTime : null;
 
-    // Filter out trips that left more than 60 seconds ago
-    if (targetDeparture < nowEpochMs - 60 * 1000) {
+    // Detect midnight / sentinel departure timestamp (e.g., set to 11:59:59 PM for terminating trips)
+    const rawPredDep = item.predictedDepartureTime && item.predictedDepartureTime > 0 ? item.predictedDepartureTime : null;
+    const isSentinelDep = Boolean(
+      rawPredDep &&
+      rawPredDep - nowEpochMs > 3 * 3600 * 1000 &&
+      predArr &&
+      predArr - nowEpochMs < 2 * 3600 * 1000
+    );
+    const predDep = isSentinelDep ? null : rawPredDep;
+
+    let targetTime: number;
+    let schedTime: number;
+    let isRealtime = false;
+
+    if (isTerminusArrival) {
+      schedTime = schedArr || schedDep;
+      if (item.predicted && predArr) {
+        targetTime = predArr;
+        isRealtime = true;
+      } else if (item.predicted && predDep) {
+        targetTime = predDep;
+        isRealtime = true;
+      } else {
+        targetTime = schedTime;
+      }
+    } else {
+      schedTime = schedDep || schedArr;
+      if (item.predicted && predDep) {
+        targetTime = predDep;
+        isRealtime = true;
+      } else if (item.predicted && predArr) {
+        targetTime = predArr;
+        isRealtime = true;
+      } else {
+        targetTime = schedTime;
+      }
+    }
+
+    // Filter out trips that left/arrived more than 60 seconds ago
+    if (targetTime < nowEpochMs - 60 * 1000) {
       continue;
     }
 
-    const delaySeconds = isRealtime
-      ? Math.round((targetDeparture - item.scheduledDepartureTime) / 1000)
+    const delaySeconds = isRealtime && schedTime > 0
+      ? Math.round((targetTime - schedTime) / 1000)
       : 0;
 
     const delayInfo = formatDelayStatus(delaySeconds, isRealtime);
-    const minutesRemaining = calculateMinutesRemaining(targetDeparture, nowEpochMs);
+    const minutesRemaining = calculateMinutesRemaining(targetTime, nowEpochMs);
 
     const rawRoute = item.routeShortName || item.routeLongName || '';
     const headsign = item.tripHeadsign || platform.terminalDestination;
@@ -66,14 +110,14 @@ export function transformObaArrivals(
     const routeColor = isLine2 ? '#0072CE' : '#008542';
 
     results.push({
-      tripId: item.tripId || `trip_${targetDeparture}`,
+      tripId: item.tripId || `trip_${targetTime}`,
       routeId: item.routeId || (isLine2 ? '40_2_LINE' : '40_100479'),
       routeName,
       routeColor,
       destination: headsign,
       direction: platform.cardinalDirection,
-      scheduledDepartureTime: item.scheduledDepartureTime,
-      predictedDepartureTime: isRealtime ? item.predictedDepartureTime || null : null,
+      scheduledDepartureTime: schedTime,
+      predictedDepartureTime: isRealtime ? targetTime : null,
       minutesUntilArrival: minutesRemaining,
       isRealtime,
       delaySeconds,

@@ -132,6 +132,68 @@ describe('OneBusAway API Transformer', () => {
     expect(arrivals[0].direction).toBe('Eastbound');
     expect(arrivals[0].destination).toBe('Downtown Redmond');
   });
+
+  it('handles terminus arrivals when departureEnabled is false and predictedDepartureTime is midnight sentinel', () => {
+    const mockTerminusPlatform: StationPlatform = {
+      stopId: '40_N23-T1',
+      directionName: 'Northbound Platform (Terminus)',
+      cardinalDirection: 'Northbound',
+      terminalDestination: 'Lynnwood City Center',
+    };
+
+    const now = 1700000000000;
+    const rawData = {
+      code: 200,
+      data: {
+        entry: {
+          stopId: '40_N23-T1',
+          arrivalsAndDepartures: [
+            {
+              tripId: '40_terminus_01',
+              routeId: '40_100479',
+              routeShortName: '1 Line',
+              tripHeadsign: 'Lynnwood City Center',
+              arrivalEnabled: true,
+              departureEnabled: false,
+              scheduledArrivalTime: now + 5 * 60 * 1000, // 5 min
+              predictedArrivalTime: now + 6 * 60 * 1000, // 6 min
+              scheduledDepartureTime: now + 5 * 60 * 1000,
+              predictedDepartureTime: now + 6 * 3600 * 1000, // 6 hours away midnight sentinel!
+              predicted: true,
+            },
+            {
+              tripId: '40_terminus_02',
+              routeId: '40_2LINE',
+              routeShortName: '2 Line',
+              tripHeadsign: 'Lynnwood City Center',
+              arrivalEnabled: true,
+              departureEnabled: false,
+              scheduledArrivalTime: now + 9 * 60 * 1000, // 9 min
+              predictedArrivalTime: now + 9 * 60 * 1000,
+              scheduledDepartureTime: now + 9 * 60 * 1000,
+              predictedDepartureTime: 0,
+              predicted: true,
+            },
+          ],
+        },
+      },
+    };
+
+    const arrivals = transformObaArrivals(rawData, mockTerminusPlatform, now);
+    expect(arrivals.length).toBe(2);
+
+    // Trip 1 should use predictedArrivalTime (6 min), NOT the 6-hour sentinel!
+    expect(arrivals[0].tripId).toBe('40_terminus_01');
+    expect(arrivals[0].minutesUntilArrival).toBe(6);
+    expect(arrivals[0].isRealtime).toBe(true);
+    expect(arrivals[0].predictedDepartureTime).toBe(now + 6 * 60 * 1000);
+
+    // Trip 2 should use predictedArrivalTime (9 min)
+    expect(arrivals[1].tripId).toBe('40_terminus_02');
+    expect(arrivals[1].minutesUntilArrival).toBe(9);
+    expect(arrivals[1].isRealtime).toBe(true);
+    expect(arrivals[1].routeName).toBe('2 Line');
+  });
 });
 
 describe('OneBusAway Stop Arrival Caching & In-Memory TTL', () => {
