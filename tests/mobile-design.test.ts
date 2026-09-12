@@ -187,5 +187,30 @@ describe('Mobile Frontend Design & UX Specifications', () => {
     // Mobile media query must disable backdrop-filter on .faq-modal-overlay to prevent GPU blur pass flicker
     expect(layoutCss).toMatch(/@media\s*\([^)]*max-width:\s*768px[^)]*\)[\s\S]*?\.faq-modal-overlay[\s\S]*?backdrop-filter:\s*none/);
   });
+
+  it('renders actionable phone/SMS links, semantic accordion details, tip badges, and 2 Line staging note', () => {
+    const faq = new FaqModal();
+    faq.open();
+
+    // Actionable contact links
+    const telLink = document.querySelector('a[href="tel:2063985268"]');
+    const smsLink = document.querySelector('a[href="sms:2063985268"]');
+    const lostFoundLink = document.querySelector('a[href="tel:2065533000"]');
+    expect(telLink).not.toBeNull();
+    expect(smsLink).not.toBeNull();
+    expect(lostFoundLink).not.toBeNull();
+
+    // Semantic accordion details and summary
+    const accordions = document.querySelectorAll('details.faq-item');
+    expect(accordions.length).toBeGreaterThan(0);
+    const summary = document.querySelector('details.faq-item summary.faq-q');
+    expect(summary).not.toBeNull();
+
+    // Visual tip badges
+    const tipBadges = document.querySelectorAll('.faq-tip-badge, .faq-badge-tip, .route-badge');
+    expect(tipBadges.length).toBeGreaterThan(0);
+    const bodyText = document.body.textContent || '';
+    expect(bodyText).toContain('2025–2026');
+  });
 });
 
