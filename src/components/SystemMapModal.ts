@@ -27,6 +27,7 @@ export class SystemMapModal {
   private tweenRaf: number | null = null;
   private openRaf: number | null = null;
   private openTimer?: number;
+  private wheelSnapTimer?: number;
 
   private isMouseDown = false;
   private mouseStartX = 0;
@@ -116,6 +117,10 @@ export class SystemMapModal {
       clearTimeout(this.openTimer);
       this.openTimer = undefined;
     }
+    if (this.wheelSnapTimer !== undefined) {
+      clearTimeout(this.wheelSnapTimer);
+      this.wheelSnapTimer = undefined;
+    }
     if (this.isMouseDown) {
       this.isMouseDown = false;
       if (this.bodyEl) this.bodyEl.classList.remove('is-panning');
@@ -164,7 +169,7 @@ export class SystemMapModal {
     const scaleX = (w - padding * 2) / 830;
     const scaleY = (h - padding * 2) / 1280;
     this.fitScale = Math.min(scaleX, scaleY);
-    this.minScale = this.fitScale * 0.85;
+    this.minScale = this.fitScale * 0.88;
     this.maxScale = Math.max(3.0, this.fitScale * 4.5);
 
     this.currentScale = this.fitScale;
@@ -232,15 +237,17 @@ export class SystemMapModal {
     this.stopTween();
   }
 
-  private snapToBoundsIfNeeded() {
-    const strict = this.clampOffsets(this.currentX, this.currentY, this.currentScale, false);
+  private snapToBoundsIfNeeded(isBounce: boolean = false) {
     const targetScale = Math.min(this.maxScale, Math.max(this.fitScale, this.currentScale));
+    const strict = this.clampOffsets(this.currentX, this.currentY, targetScale, false);
 
     const needsPositionSnap = Math.abs(strict.x - this.currentX) > 0.5 || Math.abs(strict.y - this.currentY) > 0.5;
     const needsScaleSnap = Math.abs(targetScale - this.currentScale) > 0.005;
 
     if (needsPositionSnap || needsScaleSnap) {
-      this.animateTo(targetScale, strict.x, strict.y, 220);
+      const isUnderZoomed = this.currentScale < this.fitScale;
+      const duration = isBounce || isUnderZoomed ? 340 : 220;
+      this.animateTo(targetScale, strict.x, strict.y, duration, isBounce || isUnderZoomed);
     }
   }
 
@@ -289,7 +296,13 @@ export class SystemMapModal {
     this.momentumRaf = requestAnimationFrame(step);
   }
 
-  private animateTo(targetScale: number, targetX: number, targetY: number, duration: number = 200) {
+  private animateTo(
+    targetScale: number,
+    targetX: number,
+    targetY: number,
+    duration: number = 200,
+    useSpring: boolean = false
+  ) {
     if (!this.canvasEl) return;
     this.stopMomentum();
 
@@ -311,7 +324,13 @@ export class SystemMapModal {
 
     this.canvasEl.style.transition = 'none';
     const startTime = performance.now();
+
+    // Damped harmonic spring: pleasant bounce overshoot when recovering from over-zoom
+    const springEase = (t: number) => {
+      return 1 - Math.exp(-6 * t) * Math.cos(7 * t);
+    };
     const easeOutCubic = (t: number) => 1 - Math.pow(1 - t, 3);
+    const easingFn = useSpring ? springEase : easeOutCubic;
 
     // Micro-advance immediately on this tick so the user sees an instantaneous, zero-delay response
     this.currentScale = startScale + (targetScale - startScale) * 0.06;
@@ -322,7 +341,7 @@ export class SystemMapModal {
     const step = (now: number) => {
       const elapsed = now - startTime;
       const progress = Math.min(1, elapsed / duration);
-      const eased = easeOutCubic(progress);
+      const eased = easingFn(progress);
 
       this.currentScale = startScale + (targetScale - startScale) * eased;
       this.currentX = startX + (targetX - startX) * eased;
@@ -469,9 +488,14 @@ export class SystemMapModal {
           let newScale = this.currentScale;
           if (lastDist > 0 && curDist > 0) {
             const factor = curDist / lastDist;
+            let rawScale = this.currentScale * factor;
+            if (rawScale < this.fitScale) {
+              // Elastic resistance damping when pinching out beyond fit scale
+              rawScale = this.fitScale - (this.fitScale - rawScale) * 0.45;
+            }
             newScale = Math.min(
               this.maxScale,
-              Math.max(this.minScale, this.currentScale * factor)
+              Math.max(this.minScale, rawScale)
             );
           }
 
@@ -522,7 +546,7 @@ export class SystemMapModal {
         }
 
         if (this.currentScale < this.fitScale) {
-          this.snapToBoundsIfNeeded();
+          this.snapToBoundsIfNeeded(true);
         } else if (Math.hypot(velocityX, velocityY) > 0.5) {
           this.startMomentum(velocityX, velocityY);
         } else {
@@ -556,17 +580,31 @@ export class SystemMapModal {
         const px = e.clientX - this.bodyRectLeft;
         const py = e.clientY - this.bodyRectTop;
         const factor = e.deltaY < 0 ? 1.14 : 0.88;
-        const newScale = Math.min(
+        let newScale = this.currentScale * factor;
+        if (newScale < this.fitScale) {
+          // Elastic resistance damping when scrolling out beyond fit scale
+          newScale = this.fitScale - (this.fitScale - newScale) * 0.45;
+        }
+        newScale = Math.min(
           this.maxScale,
-          Math.max(this.minScale, this.currentScale * factor)
+          Math.max(this.minScale, newScale)
         );
         const nextX = px - (px - this.currentX) * (newScale / this.currentScale);
         const nextY = py - (py - this.currentY) * (newScale / this.currentScale);
-        const clamped = this.clampOffsets(nextX, nextY, newScale, false);
+        const clamped = this.clampOffsets(nextX, nextY, newScale, newScale < this.fitScale);
         this.currentScale = newScale;
         this.currentX = clamped.x;
         this.currentY = clamped.y;
         this.applyTransform();
+
+        // Bounce back if zoomed out beyond fitScale or out of bounds
+        if (this.wheelSnapTimer !== undefined) {
+          clearTimeout(this.wheelSnapTimer);
+        }
+        this.wheelSnapTimer = window.setTimeout(() => {
+          this.wheelSnapTimer = undefined;
+          this.snapToBoundsIfNeeded(this.currentScale < this.fitScale);
+        }, 140);
       },
       { passive: false }
     );
@@ -662,11 +700,11 @@ export class SystemMapModal {
           </linearGradient>
         </defs>
 
-        <!-- Background grid -->
-        <pattern id="grid" width="40" height="40" patternUnits="userSpaceOnUse">
-          <path d="M 40 0 L 0 0 0 40" fill="none" stroke="rgba(255, 255, 255, 0.025)" stroke-width="1"/>
+        <!-- Background crosshair ticks matrix -->
+        <pattern id="grid" width="48" height="48" patternUnits="userSpaceOnUse">
+          <path d="M 24 20.5 L 24 27.5 M 20.5 24 L 27.5 24" fill="none" stroke="rgba(255, 255, 255, 0.075)" stroke-width="1.2" stroke-linecap="round"/>
         </pattern>
-        <rect width="100%" height="100%" fill="url(#grid)" />
+        <rect x="-12000" y="-12000" width="24830" height="25280" fill="url(#grid)" />
 
         <!-- ================= TRACK LINES ================= -->
 

@@ -208,7 +208,8 @@
   left: 0;
   transform-origin: 0 0;
   will-change: transform;
-  contain: layout style paint;
+  contain: layout style;
+  overflow: visible;
   backface-visibility: hidden;
   -webkit-backface-visibility: hidden;
   transform-style: flat;
@@ -220,6 +221,7 @@
   display: block;
   shape-rendering: geometricPrecision;
   text-rendering: optimizeLegibility;
+  overflow: visible;
 }
 
 /* Map SVG Graphic Styles */

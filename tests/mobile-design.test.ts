@@ -188,7 +188,7 @@ describe('Mobile Frontend Design & UX Specifications', () => {
     expect(layoutCss).toMatch(/@media\s*\([^)]*max-width:\s*768px[^)]*\)[\s\S]*?\.faq-modal-overlay[\s\S]*?backdrop-filter:\s*none/);
   });
 
-  it('renders actionable phone/SMS links, semantic accordion details, tip badges, and 2 Line staging note', () => {
+  it('renders actionable phone/SMS links, semantic accordion details, and tip badges', () => {
     const faq = new FaqModal();
     faq.open();
 
@@ -213,8 +213,6 @@ describe('Mobile Frontend Design & UX Specifications', () => {
     // Visual tip badges
     const tipBadges = document.querySelectorAll('.faq-tip-badge, .faq-badge-tip, .route-badge');
     expect(tipBadges.length).toBeGreaterThan(0);
-    const bodyText = document.body.textContent || '';
-    expect(bodyText).toContain('2025–2026');
   });
 
   it('ensures modal footer has seamless background and mobile safe-area padding without box color cutoffs', () => {

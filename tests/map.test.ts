@@ -394,6 +394,52 @@ describe('SystemMapModal Component', () => {
     // Mobile body must use background-attachment: scroll to prevent iOS Safari root layer repaint on modal-open
     expect(themeCss).toMatch(/@media\s*\([^)]*max-width:\s*768px[^)]*\)[\s\S]*?background-attachment:\s*scroll/);
   });
+
+  it('extends background pattern beyond the 830x1280 canvas to prevent cutoffs when zooming out', () => {
+    const svg = document.querySelector('svg.system-map-svg');
+    const bgRect = svg?.querySelector('rect[fill="url(#grid)"]');
+    expect(bgRect).not.toBeNull();
+    const width = Number(bgRect?.getAttribute('width'));
+    const height = Number(bgRect?.getAttribute('height'));
+    expect(width).toBeGreaterThan(10000);
+    expect(height).toBeGreaterThan(10000);
+
+    const mapCss = readFileSync(process.cwd() + '/src/styles/map.css', 'utf-8');
+    expect(mapCss).toMatch(/\.map-svg-canvas\s*\{[^}]*overflow:\s*visible/);
+    expect(mapCss).toMatch(/\.system-map-svg\s*\{[^}]*overflow:\s*visible/);
+  });
+
+  it('caps zoom-out scale and applies damping when zooming out beyond fitScale', () => {
+    modal.open();
+    const mapBody = document.querySelector('.system-map-body') as HTMLElement;
+    const canvas = document.querySelector('.map-svg-canvas') as HTMLElement;
+
+    Object.defineProperty(mapBody, 'clientWidth', { value: 600, configurable: true });
+    Object.defineProperty(mapBody, 'clientHeight', { value: 900, configurable: true });
+    modal.fitToScreen(true);
+
+    const initialTransform = canvas.style.transform;
+    const match = initialTransform.match(/scale\(([\d.]+)\)/);
+    expect(match).not.toBeNull();
+    const initialScale = parseFloat(match![1]);
+
+    // Dispatch wheel zoom-out event
+    mapBody.dispatchEvent(
+      new WheelEvent('wheel', {
+        deltaY: 500,
+        clientX: 300,
+        clientY: 450,
+        bubbles: true,
+        cancelable: true,
+      })
+    );
+
+    const zoomedTransform = canvas.style.transform;
+    const zoomedMatch = zoomedTransform.match(/scale\(([\d.]+)\)/);
+    const zoomedScale = parseFloat(zoomedMatch![1]);
+    expect(zoomedScale).toBeLessThanOrEqual(initialScale);
+    expect(zoomedScale).toBeGreaterThanOrEqual(initialScale * 0.88);
+  });
 });
 
 

@@ -60,7 +60,6 @@ export class FaqModal {
       <div class="faq-featured-header">
         <div class="faq-tag-group">
           <div class="faq-tag">Regional Route Guide</div>
-          <span class="route-badge staging">Cross-Lake Segment Opening 2025–2026</span>
         </div>
         <h4 class="faq-featured-title">Lynnwood / Seattle ⇄ Bellevue / Redmond Connection</h4>
       </div>
