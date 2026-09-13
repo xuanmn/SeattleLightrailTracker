@@ -26,6 +26,7 @@ export class SystemMapModal {
   private momentumRaf: number | null = null;
   private tweenRaf: number | null = null;
   private openRaf: number | null = null;
+  private resizeRaf: number | null = null;
   private openTimer?: number;
   private wheelSnapTimer?: number;
 
@@ -57,13 +58,19 @@ export class SystemMapModal {
     if (this.isMouseDown) {
       this.isMouseDown = false;
       this.bodyEl.classList.remove('is-panning');
+      window.removeEventListener('mousemove', this.handleMouseMove);
+      window.removeEventListener('mouseup', this.handleMouseUp);
       this.snapToBoundsIfNeeded();
     }
   };
 
   private handleResize = () => {
     if (this.overlay.classList.contains('open')) {
-      this.fitToScreen();
+      if (this.resizeRaf !== null) return;
+      this.resizeRaf = requestAnimationFrame(() => {
+        this.resizeRaf = null;
+        this.fitToScreen();
+      });
     }
   };
 
@@ -84,8 +91,6 @@ export class SystemMapModal {
     this.overlay.classList.add('open');
     lockBodyScroll();
     window.addEventListener('keydown', this.handleKeyDown);
-    window.addEventListener('mousemove', this.handleMouseMove);
-    window.addEventListener('mouseup', this.handleMouseUp);
     window.addEventListener('resize', this.handleResize);
 
     // Ensure viewport is measured accurately on next frame and after transition
@@ -121,15 +126,19 @@ export class SystemMapModal {
       clearTimeout(this.wheelSnapTimer);
       this.wheelSnapTimer = undefined;
     }
+    if (this.resizeRaf !== null) {
+      cancelAnimationFrame(this.resizeRaf);
+      this.resizeRaf = null;
+    }
     if (this.isMouseDown) {
       this.isMouseDown = false;
       if (this.bodyEl) this.bodyEl.classList.remove('is-panning');
+      window.removeEventListener('mousemove', this.handleMouseMove);
+      window.removeEventListener('mouseup', this.handleMouseUp);
     }
     this.overlay.classList.remove('open');
     unlockBodyScroll();
     window.removeEventListener('keydown', this.handleKeyDown);
-    window.removeEventListener('mousemove', this.handleMouseMove);
-    window.removeEventListener('mouseup', this.handleMouseUp);
     window.removeEventListener('resize', this.handleResize);
   }
 
@@ -558,8 +567,9 @@ export class SystemMapModal {
     this.bodyEl.addEventListener('touchend', handleTouchEnd);
     this.bodyEl.addEventListener('touchcancel', handleTouchEnd);
 
-    // Desktop Mouse Controls
+    // Desktop Mouse Controls: Attach window listeners only while dragging to eliminate idle CPU overhead
     this.bodyEl.addEventListener('mousedown', (e: MouseEvent) => {
+      if (e.button !== 0) return;
       this.stopMomentum();
       this.updateCachedDimensions();
       this.isMouseDown = true;
@@ -569,6 +579,9 @@ export class SystemMapModal {
       this.mouseStartTransY = this.currentY;
       this.bodyEl.classList.add('is-panning');
       if (this.canvasEl) this.canvasEl.style.transition = 'none';
+
+      window.addEventListener('mousemove', this.handleMouseMove);
+      window.addEventListener('mouseup', this.handleMouseUp);
     });
 
     this.bodyEl.addEventListener(

@@ -213,6 +213,7 @@
   backface-visibility: hidden;
   -webkit-backface-visibility: hidden;
   transform-style: flat;
+  pointer-events: none;
 }
 
 .system-map-svg {
@@ -222,6 +223,7 @@
   shape-rendering: geometricPrecision;
   text-rendering: optimizeLegibility;
   overflow: visible;
+  pointer-events: none;
 }
 
 /* Map SVG Graphic Styles */
