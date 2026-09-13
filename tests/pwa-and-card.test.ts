@@ -139,7 +139,7 @@ describe('SEO Configuration & Discoverability', () => {
   it('contains canonical URL, robots meta, JSON-LD structured data, and noscript crawler fallback in index.html', () => {
     const html = readFileSync(process.cwd() + '/index.html', 'utf-8');
 
-    expect(html).toContain('<link rel="canonical" href="https://xuanmn.github.io/Seattle-Lightrail-Tracker/" />');
+    expect(html).toContain('<link rel="canonical" href="https://xuanmn.github.io/SeattleLightrailTracker/" />');
     expect(html).toContain('<meta name="robots" content="index, follow');
     expect(html).toContain('application/ld+json');
     expect(html).toContain('"@type": "WebApplication"');
@@ -153,10 +153,10 @@ describe('SEO Configuration & Discoverability', () => {
     const robots = readFileSync(process.cwd() + '/public/robots.txt', 'utf-8');
     expect(robots).toContain('User-agent: *');
     expect(robots).toContain('Allow: /');
-    expect(robots).toContain('Sitemap: https://xuanmn.github.io/Seattle-Lightrail-Tracker/sitemap.xml');
+    expect(robots).toContain('Sitemap: https://xuanmn.github.io/SeattleLightrailTracker/sitemap.xml');
 
     const sitemap = readFileSync(process.cwd() + '/public/sitemap.xml', 'utf-8');
-    expect(sitemap).toContain('https://xuanmn.github.io/Seattle-Lightrail-Tracker/');
+    expect(sitemap).toContain('https://xuanmn.github.io/SeattleLightrailTracker/');
     expect(sitemap).toContain('<changefreq>daily</changefreq>');
   });
 });

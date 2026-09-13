@@ -191,7 +191,7 @@ export class FaqModal {
             <span>myORCA Card Management</span>
             <span>↗</span>
           </a>
-          <a href="https://github.com/xuanmn/Seattle-Lightrail-Tracker" target="_blank" rel="noopener noreferrer" class="faq-link-row">
+          <a href="https://github.com/xuanmn/SeattleLightrailTracker" target="_blank" rel="noopener noreferrer" class="faq-link-row">
             <span>GitHub Repository & Source Code</span>
             <span>↗</span>
           </a>

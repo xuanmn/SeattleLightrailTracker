@@ -2,7 +2,7 @@
 
 Real-time departure countdowns and station tracking for Seattle's Sound Transit Link Light Rail (1 Line & 2 Line).
 
-[![Open Live Tracker](https://img.shields.io/badge/🚀_Open_Live_Tracker-008542?style=for-the-badge&logoColor=white)](https://xuanmn.github.io/Seattle-Lightrail-Tracker/)
+[![Open Live Tracker](https://img.shields.io/badge/🚀_Open_Live_Tracker-008542?style=for-the-badge&logoColor=white)](https://xuanmn.github.io/SeattleLightrailTracker/)
 
 ---
 
