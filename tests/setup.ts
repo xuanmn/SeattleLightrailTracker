@@ -1,68 +1,42 @@
 import { beforeEach } from 'vitest';
 
-class LocalStorageMock implements Storage {
-  private store: Record<string, string> = {};
+// Minimal localStorage mock — jsdom's isn't available at setup-file evaluation time.
+const store = new Map<string, string>();
+const mockStorage: Storage = {
+  get length() { return store.size; },
+  clear() { store.clear(); },
+  getItem(key: string) { return store.get(key) ?? null; },
+  key(index: number) { return [...store.keys()][index] ?? null; },
+  removeItem(key: string) { store.delete(key); },
+  setItem(key: string, value: string) { store.set(key, String(value)); },
+};
 
-  get length(): number {
-    return Object.keys(this.store).length;
-  }
-
-  clear(): void {
-    this.store = {};
-  }
-
-  getItem(key: string): string | null {
-    return Object.prototype.hasOwnProperty.call(this.store, key) ? this.store[key] : null;
-  }
-
-  key(index: number): string | null {
-    const keys = Object.keys(this.store);
-    return keys[index] || null;
-  }
-
-  removeItem(key: string): void {
-    delete this.store[key];
-  }
-
-  setItem(key: string, value: string): void {
-    this.store[key] = String(value);
-  }
-}
-
-const mockStorage = new LocalStorageMock();
 Object.defineProperty(globalThis, 'localStorage', {
-  value: mockStorage,
-  writable: true,
-});
-Object.defineProperty(window, 'localStorage', {
   value: mockStorage,
   writable: true,
 });
 
 class MockIntersectionObserver implements IntersectionObserver {
   readonly root: Element | Document | null = null;
-  readonly rootMargin: string = '';
-  readonly thresholds: ReadonlyArray<number> = [];
+  readonly rootMargin: string;
+  readonly thresholds: ReadonlyArray<number>;
 
   public targets: Set<Element> = new Set();
 
-  constructor(public callback: IntersectionObserverCallback) {}
-
-  observe(target: Element): void {
-    this.targets.add(target);
+  constructor(
+    public callback: IntersectionObserverCallback,
+    options?: IntersectionObserverInit
+  ) {
+    this.rootMargin = options?.rootMargin ?? '';
+    this.thresholds = options?.threshold
+      ? Array.isArray(options.threshold) ? options.threshold : [options.threshold]
+      : [0];
   }
 
-  unobserve(target: Element): void {
-    this.targets.delete(target);
-  }
-
-  disconnect(): void {
-    this.targets.clear();
-  }
-
-  takeRecords(): IntersectionObserverEntry[] {
-    return [];
-  }
+  observe(target: Element): void { this.targets.add(target); }
+  unobserve(target: Element): void { this.targets.delete(target); }
+  disconnect(): void { this.targets.clear(); }
+  takeRecords(): IntersectionObserverEntry[] { return []; }
 
   trigger(entries: Partial<IntersectionObserverEntry>[]): void {
     this.callback(
@@ -86,12 +60,7 @@ Object.defineProperty(globalThis, 'IntersectionObserver', {
   value: MockIntersectionObserver,
   writable: true,
 });
-Object.defineProperty(window, 'IntersectionObserver', {
-  value: MockIntersectionObserver,
-  writable: true,
-});
 
 beforeEach(() => {
-  mockStorage.clear();
+  localStorage.clear();
 });
-
