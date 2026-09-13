@@ -44,12 +44,9 @@ class MockIntersectionObserver implements IntersectionObserver {
   readonly rootMargin: string = '';
   readonly thresholds: ReadonlyArray<number> = [];
 
-  private static instances: MockIntersectionObserver[] = [];
   public targets: Set<Element> = new Set();
 
-  constructor(public callback: IntersectionObserverCallback) {
-    MockIntersectionObserver.instances.push(this);
-  }
+  constructor(public callback: IntersectionObserverCallback) {}
 
   observe(target: Element): void {
     this.targets.add(target);
