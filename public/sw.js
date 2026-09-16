@@ -3,7 +3,8 @@
  * Provides offline caching for underground transit stations and rapid app launch.
  */
 
-const CACHE_NAME = 'link-tracker-v1';
+const SW_VERSION = '1.1.0';
+const CACHE_NAME = `link-tracker-v${SW_VERSION}`;
 
 // Core assets required for the app shell to render offline
 const PRECACHE_ASSETS = [
@@ -101,4 +102,11 @@ self.addEventListener('fetch', (event) => {
       })
     )
   );
+});
+
+// 4. Message Event: allow clients to trigger skipWaiting on update
+self.addEventListener('message', (event) => {
+  if (event.data && event.data.type === 'SKIP_WAITING') {
+    self.skipWaiting();
+  }
 });

@@ -54,6 +54,9 @@ class TransitTrackerApp {
   private isFetching: boolean = false;
   private hasPendingFetch: boolean = false;
   private activeFetchId: number = 0;
+  private fetchController?: AbortController;
+  private myStationsBtn?: HTMLButtonElement;
+  private allStationsBtn?: HTMLButtonElement;
 
   constructor() {
     const root = document.getElementById('app');
@@ -140,58 +143,75 @@ class TransitTrackerApp {
   }
 
   private performViewTransition(updateFn: () => void) {
+    const doc = document as Document & {
+      startViewTransition?: (callback: () => void) => void;
+    };
     if (
-      'startViewTransition' in document &&
+      typeof doc.startViewTransition === 'function' &&
       !window.matchMedia('(prefers-reduced-motion: reduce)').matches
     ) {
-      (document as unknown as { startViewTransition: (fn: () => void) => void }).startViewTransition(updateFn);
+      doc.startViewTransition(updateFn);
     } else {
       updateFn();
     }
   }
 
   private renderViewModePills() {
-    this.viewModePillWrap.innerHTML = '';
+    if (!this.myStationsBtn || !this.allStationsBtn) {
+      this.viewModePillWrap.innerHTML = '';
 
-    const myBtn = createElement(
-      'button',
-      `view-mode-btn ${this.showOnlyPinned ? 'active' : ''}`
-    );
-    myBtn.innerHTML = `★ My Stations`;
-    if (this.showOnlyPinned) {
-      myBtn.classList.add(this.activeLine === 'line-1' ? 'line-1-active' : 'line-2-active');
+      this.myStationsBtn = createElement(
+        'button',
+        'view-mode-btn'
+      ) as HTMLButtonElement;
+      this.myStationsBtn.innerHTML = `★ My Stations`;
+      this.myStationsBtn.onclick = () => {
+        if (this.showOnlyPinned) return;
+        this.showOnlyPinned = true;
+        this.performViewTransition(() => {
+          this.renderViewModePills();
+          this.renderStationCards();
+        });
+        this.fetchVisibleArrivals();
+      };
+
+      this.allStationsBtn = createElement(
+        'button',
+        'view-mode-btn'
+      ) as HTMLButtonElement;
+      this.allStationsBtn.innerHTML = `All Stations`;
+      this.allStationsBtn.onclick = () => {
+        if (!this.showOnlyPinned) return;
+        this.showOnlyPinned = false;
+        this.performViewTransition(() => {
+          this.renderViewModePills();
+          this.renderStationCards();
+        });
+        this.fetchVisibleArrivals();
+      };
+
+      this.viewModePillWrap.appendChild(this.myStationsBtn);
+      this.viewModePillWrap.appendChild(this.allStationsBtn);
     }
-    myBtn.onclick = () => {
-      this.showOnlyPinned = true;
-      this.performViewTransition(() => {
-        this.renderViewModePills();
-        this.renderStationCards();
-      });
-      this.fetchVisibleArrivals();
-    };
 
-    const allBtn = createElement(
-      'button',
-      `view-mode-btn ${!this.showOnlyPinned ? 'active' : ''}`
-    );
-    allBtn.innerHTML = `All Stations`;
-    if (!this.showOnlyPinned) {
-      allBtn.classList.add(this.activeLine === 'line-1' ? 'line-1-active' : 'line-2-active');
-    }
-    allBtn.onclick = () => {
-      this.showOnlyPinned = false;
-      this.performViewTransition(() => {
-        this.renderViewModePills();
-        this.renderStationCards();
-      });
-      this.fetchVisibleArrivals();
-    };
+    const activeLineClass = this.activeLine === 'line-1' ? 'line-1-active' : 'line-2-active';
+    const inactiveLineClass = this.activeLine === 'line-1' ? 'line-2-active' : 'line-1-active';
 
-    this.viewModePillWrap.appendChild(myBtn);
-    this.viewModePillWrap.appendChild(allBtn);
+    this.myStationsBtn.classList.toggle('active', this.showOnlyPinned);
+    this.myStationsBtn.classList.toggle(activeLineClass, this.showOnlyPinned);
+    this.myStationsBtn.classList.remove(inactiveLineClass);
+
+    this.allStationsBtn.classList.toggle('active', !this.showOnlyPinned);
+    this.allStationsBtn.classList.toggle(activeLineClass, !this.showOnlyPinned);
+    this.allStationsBtn.classList.remove(inactiveLineClass);
   }
 
   private switchLine(line: TransitLineId) {
+    if (this.fetchController) {
+      this.fetchController.abort();
+      this.fetchController = undefined;
+    }
+    this.arrivalsData.clear();
     this.activeLine = line;
     document.body.dataset.activeLine = line;
     setActiveLine(line);
@@ -342,11 +362,23 @@ class TransitTrackerApp {
     this.renderViewModePills();
 
     if (this.showOnlyPinned) {
-      // In "My Saved Stations" mode, removing/adding a card refreshes the visible list
-      this.renderStationCards();
-      // Only fetch for the newly pinned station instead of re-fetching all visible stations
-      if (isNowPinned && station) {
-        this.fetchSingleStation(station);
+      // In "My Saved Stations" mode, surgical removal of unpinned card avoids rebuilding the entire grid
+      if (!isNowPinned) {
+        const card = this.cardComponents.get(stationId);
+        if (card) {
+          card.destroy();
+          card.getElement().remove();
+          this.cardComponents.delete(stationId);
+        }
+        if (this.cardComponents.size === 0) {
+          this.renderEmptyDashboard();
+        }
+      } else {
+        this.renderStationCards();
+        // Only fetch for the newly pinned station instead of re-fetching all visible stations
+        if (station) {
+          this.fetchSingleStation(station);
+        }
       }
     } else {
       // In "All Line Stations" mode, update ONLY the card's star button in-place without jarring jumps or closing accordion!
@@ -403,6 +435,12 @@ class TransitTrackerApp {
     this.isFetching = true;
     const currentFetchId = ++this.activeFetchId;
 
+    if (this.fetchController) {
+      this.fetchController.abort();
+    }
+    this.fetchController = new AbortController();
+    const currentSignal = this.fetchController.signal;
+
     const allStations = this.getVisibleStations();
     if (allStations.length === 0) {
       this.isFetching = false;
@@ -428,23 +466,15 @@ class TransitTrackerApp {
 
     try {
       for (let i = 0; i < stations.length; i += CHUNK_SIZE) {
-        if (this.activeFetchId !== currentFetchId) break;
+        if (this.activeFetchId !== currentFetchId || currentSignal.aborted) break;
         const chunk = stations.slice(i, i + CHUNK_SIZE);
-        const activeChunk = !this.showOnlyPinned
-          ? chunk.filter((station) => {
-              const card = this.cardComponents.get(station.id);
-              return card ? card.isVisible : true;
-            })
-          : chunk;
-
-        if (activeChunk.length === 0) continue;
 
         await Promise.all(
-          activeChunk.map(async (station) => {
+          chunk.map(async (station) => {
             try {
-              const result = await fetchArrivalsForStation(station, undefined, isManual);
+              const result = await fetchArrivalsForStation(station, undefined, isManual, currentSignal);
               // If a newer fetch was initiated while this one was running, discard old response
-              if (this.activeFetchId !== currentFetchId) return;
+              if (this.activeFetchId !== currentFetchId || currentSignal.aborted) return;
 
               const data: StationArrivals = {
                 station,
@@ -546,13 +576,34 @@ class TransitTrackerApp {
   }
 }
 
-// Bootstrap application immediately when DOM is ready
+// Error Boundary: Bootstrap application safely with recovery fallback
+function initApp(): void {
+  try {
+    new TransitTrackerApp();
+  } catch (err) {
+    console.error('App initialization failed:', err);
+    const root = document.getElementById('app');
+    if (root) {
+      root.innerHTML = `
+        <div style="padding: 2.5rem 1.5rem; text-align: center; color: #f8fafc; max-width: 480px; margin: 4rem auto; background: #151d2a; border-radius: 16px; border: 1px solid rgba(255,255,255,0.1); font-family: 'Inter', -apple-system, sans-serif;">
+          <div style="font-size: 2.5rem; margin-bottom: 1rem;">⚠️</div>
+          <h2 style="font-family: 'Outfit', sans-serif; font-size: 1.5rem; margin-bottom: 0.5rem; color: #f8fafc;">Unable to load tracker</h2>
+          <p style="color: #94a3b8; font-size: 0.95rem; line-height: 1.5; margin-bottom: 1.5rem;">An unexpected error occurred while initializing the application. You can try reloading the page or resetting your saved settings.</p>
+          <div style="display: flex; gap: 0.75rem; justify-content: center; flex-wrap: wrap;">
+            <button onclick="location.reload()" style="background: #008542; color: #fff; border: none; border-radius: 8px; padding: 0.65rem 1.25rem; font-weight: 600; cursor: pointer; font-size: 0.9rem;">Reload Page</button>
+            <button onclick="localStorage.clear();location.reload()" style="background: rgba(255,255,255,0.08); color: #f8fafc; border: 1px solid rgba(255,255,255,0.2); border-radius: 8px; padding: 0.65rem 1.25rem; font-weight: 500; cursor: pointer; font-size: 0.9rem;">Reset &amp; Reload</button>
+          </div>
+        </div>`;
+    }
+  }
+}
+
 if (document.readyState === 'loading') {
   document.addEventListener('DOMContentLoaded', () => {
-    new TransitTrackerApp();
+    initApp();
   });
 } else {
-  new TransitTrackerApp();
+  initApp();
 }
 
 /**
@@ -567,9 +618,22 @@ if (
 ) {
   window.addEventListener('load', () => {
     const swUrl = new URL('./sw.js', window.location.href).href;
-    navigator.serviceWorker.register(swUrl).catch((err) => {
-      console.warn('PWA Service Worker registration failed:', err);
-    });
+    navigator.serviceWorker.register(swUrl)
+      .then((registration) => {
+        registration.addEventListener('updatefound', () => {
+          const newWorker = registration.installing;
+          if (newWorker) {
+            newWorker.addEventListener('statechange', () => {
+              if (newWorker.state === 'installed' && navigator.serviceWorker.controller) {
+                console.info('New Seattle Light Rail Tracker update available.');
+              }
+            });
+          }
+        });
+      })
+      .catch((err) => {
+        console.warn('PWA Service Worker registration failed:', err);
+      });
   });
 }
 

@@ -255,5 +255,39 @@ describe('OneBusAway Stop Arrival Caching & In-Memory TTL', () => {
     clearArrivalsCache();
     expect(getArrivalsCacheSize()).toBe(0);
   });
+
+  it('prunes entries older than eviction threshold when pruneStaleCache runs', async () => {
+    const { clearArrivalsCache, getArrivalsCacheSize, fetchArrivalsForStation, pruneStaleCache } =
+      await import('../src/services/oba-api');
+    clearArrivalsCache();
+
+    await fetchArrivalsForStation(testStation);
+    expect(getArrivalsCacheSize()).toBe(2);
+
+    // Right after fetch, entries are fresh, so pruneStaleCache should not evict them
+    pruneStaleCache();
+    expect(getArrivalsCacheSize()).toBe(2);
+
+    // Mock Date.now to advance past the 100s threshold
+    const realNow = Date.now;
+    try {
+      Date.now = () => realNow() + 110_000;
+      pruneStaleCache();
+      expect(getArrivalsCacheSize()).toBe(0);
+    } finally {
+      Date.now = realNow;
+    }
+  });
+
+  it('handles AbortSignal without crashing', async () => {
+    const { fetchArrivalsForStation } = await import('../src/services/oba-api');
+    const controller = new AbortController();
+    controller.abort();
+
+    // With aborted signal, fallback is returned safely
+    const res = await fetchArrivalsForStation(testStation, undefined, true, controller.signal);
+    expect(res.direction1.arrivals.length).toBeGreaterThan(0);
+    expect(res.direction2.arrivals.length).toBeGreaterThan(0);
+  });
 });
 

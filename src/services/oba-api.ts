@@ -227,7 +227,7 @@ export function getArrivalsCacheSize(): number {
  * Evict cache entries that are well past their TTL to prevent unbounded growth
  * during long sessions (e.g., leaving the tab open all day).
  */
-function pruneStaleCache(): void {
+export function pruneStaleCache(): void {
   const now = Date.now();
   const evictionThreshold = DEFAULT_CACHE_TTL_MS * 4; // 100 seconds
   for (const [key, entry] of stopArrivalsCache) {
@@ -244,7 +244,8 @@ async function fetchArrivalsForStop(
   platform: StationPlatform,
   apiKey: string = DEFAULT_KEY,
   timeoutMs: number = 6000,
-  bypassCache: boolean = false
+  bypassCache: boolean = false,
+  signal?: AbortSignal
 ): Promise<TransitArrival[]> {
   const now = Date.now();
   pruneStaleCache();
@@ -265,6 +266,15 @@ async function fetchArrivalsForStop(
 
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), timeoutMs);
+
+  // If caller provided an abort signal, abort our controller if parent signal aborts
+  if (signal) {
+    if (signal.aborted) {
+      controller.abort();
+    } else {
+      signal.addEventListener('abort', () => controller.abort(), { once: true });
+    }
+  }
 
   const url = `${DEFAULT_OBA_BASE}/arrivals-and-departures-for-stop/${platform.stopId}.json?key=${encodeURIComponent(
     apiKey
@@ -299,7 +309,8 @@ async function fetchArrivalsForStop(
 export async function fetchArrivalsForStation(
   station: Station,
   apiKey: string = DEFAULT_KEY,
-  bypassCache: boolean = false
+  bypassCache: boolean = false,
+  signal?: AbortSignal
 ): Promise<{
   direction1: { platform: StationPlatform; arrivals: TransitArrival[] };
   direction2: { platform: StationPlatform; arrivals: TransitArrival[] };
@@ -312,8 +323,8 @@ export async function fetchArrivalsForStation(
   }
 
   const [arr1, arr2] = await Promise.all([
-    fetchArrivalsForStop(p1, apiKey, 6000, bypassCache),
-    fetchArrivalsForStop(p2, apiKey, 6000, bypassCache),
+    fetchArrivalsForStop(p1, apiKey, 6000, bypassCache, signal),
+    fetchArrivalsForStop(p2, apiKey, 6000, bypassCache, signal),
   ]);
 
   return {
