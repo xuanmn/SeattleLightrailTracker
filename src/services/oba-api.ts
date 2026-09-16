@@ -224,6 +224,20 @@ export function getArrivalsCacheSize(): number {
 }
 
 /**
+ * Evict cache entries that are well past their TTL to prevent unbounded growth
+ * during long sessions (e.g., leaving the tab open all day).
+ */
+function pruneStaleCache(): void {
+  const now = Date.now();
+  const evictionThreshold = DEFAULT_CACHE_TTL_MS * 4; // 100 seconds
+  for (const [key, entry] of stopArrivalsCache) {
+    if (now - entry.timestamp > evictionThreshold) {
+      stopArrivalsCache.delete(key);
+    }
+  }
+}
+
+/**
  * Fetch live departures for a single stop ID with TTL caching, timeout and fallback
  */
 async function fetchArrivalsForStop(
@@ -233,6 +247,7 @@ async function fetchArrivalsForStop(
   bypassCache: boolean = false
 ): Promise<TransitArrival[]> {
   const now = Date.now();
+  pruneStaleCache();
 
   // Return fresh copy from cache if within TTL
   if (!bypassCache) {

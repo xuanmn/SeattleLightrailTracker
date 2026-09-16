@@ -730,12 +730,21 @@ export const STATIONS: Station[] = [
   },
 ];
 
+// Pre-computed lookup maps (static data, computed once at module load)
+const stationMap = new Map<string, Station>(STATIONS.map(s => [s.id, s]));
+const lineStationsMap = new Map<TransitLineId, Station[]>(
+  (['line-1', 'line-2'] as TransitLineId[]).map(line => [
+    line,
+    STATIONS.filter(s => s.lines.includes(line)),
+  ])
+);
+
 export function getStationsByLine(lineId: TransitLineId): Station[] {
-  return STATIONS.filter(s => s.lines.includes(lineId));
+  return lineStationsMap.get(lineId) || [];
 }
 
 export function getStationById(id: string): Station | undefined {
-  return STATIONS.find(s => s.id === id);
+  return stationMap.get(id);
 }
 
 export const LINE_CONFIG = {

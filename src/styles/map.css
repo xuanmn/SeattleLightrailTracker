@@ -23,12 +23,12 @@
   overscroll-behavior: contain;
   transform: translateZ(0);
   -webkit-transform: translateZ(0);
-  will-change: opacity;
 }
 
 .system-map-modal-overlay.open {
   opacity: 1;
   pointer-events: auto;
+  will-change: opacity;
 }
 
 .system-map-container {
@@ -50,13 +50,13 @@
   -webkit-transform: scale(0.96) translateY(12px) translateZ(0);
   backface-visibility: hidden;
   -webkit-backface-visibility: hidden;
-  will-change: transform;
   transition: transform var(--transition-normal), box-shadow var(--transition-normal);
 }
 
 .system-map-modal-overlay.open .system-map-container {
   transform: scale(1) translateY(0) translateZ(0);
   -webkit-transform: scale(1) translateY(0) translateZ(0);
+  will-change: transform;
 }
 
 /* Header with Integrated Route Legend & Directory Link */

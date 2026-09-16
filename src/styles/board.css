@@ -30,6 +30,8 @@
   display: flex;
   flex-direction: column;
   position: relative;
+  content-visibility: auto;
+  contain-intrinsic-size: auto 280px;
 }
 
 .station-card:hover {
@@ -89,6 +91,9 @@
   transform: scaleX(0);
   border-radius: var(--radius-pill);
   transition: transform 0.9s linear;
+}
+
+.station-approach-track-wrap.active .station-approach-bar {
   will-change: transform;
 }
 

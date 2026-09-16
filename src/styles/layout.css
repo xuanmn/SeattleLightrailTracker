@@ -427,12 +427,12 @@ body.modal-open {
   overscroll-behavior: contain;
   transform: translateZ(0);
   -webkit-transform: translateZ(0);
-  will-change: opacity;
 }
 
 .modal-overlay.open {
   opacity: 1;
   pointer-events: auto;
+  will-change: opacity;
 }
 
 .modal-container {
@@ -450,7 +450,6 @@ body.modal-open {
   -webkit-transform: scale(0.96) translateY(8px) translateZ(0);
   backface-visibility: hidden;
   -webkit-backface-visibility: hidden;
-  will-change: transform;
   transition: transform var(--transition-bounce);
   position: relative;
   overscroll-behavior: contain;
@@ -463,6 +462,7 @@ body.modal-open {
 .modal-overlay.open .modal-container {
   transform: scale(1) translateY(0) translateZ(0);
   -webkit-transform: scale(1) translateY(0) translateZ(0);
+  will-change: transform;
 }
 
 .modal-header {
