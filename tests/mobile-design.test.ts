@@ -115,6 +115,20 @@ describe('Mobile Frontend Design & UX Specifications', () => {
     expect(visibleRows.length).toBe(1);
     expect(visibleRows[0].textContent).toContain('Westlake');
 
+    // Search for Pinehurst by street address
+    searchInput.value = '13110 5th Ave';
+    searchInput.dispatchEvent(new Event('input'));
+    const addressRows = document.querySelectorAll('.picker-station-row');
+    expect(addressRows.length).toBe(1);
+    expect(addressRows[0].textContent).toContain('Pinehurst');
+
+    // Search for Pinehurst by zip code
+    searchInput.value = '98125';
+    searchInput.dispatchEvent(new Event('input'));
+    const zipRows = document.querySelectorAll('.picker-station-row');
+    expect(zipRows.length).toBe(1);
+    expect(zipRows[0].textContent).toContain('Pinehurst');
+
     // Clear search
     searchInput.value = '';
     searchInput.dispatchEvent(new Event('input'));
