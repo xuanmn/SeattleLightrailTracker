@@ -113,7 +113,8 @@ export class HeaderComponent {
       'button',
       'header-text-btn header-map-btn',
       `${ICONS.map} <span class="header-btn-label-desktop">Link Map</span><span class="header-btn-label-mobile">Map</span>`
-    );
+    ) as HTMLButtonElement;
+    mapBtn.type = 'button';
     mapBtn.title = 'View Link Light Rail Map';
     mapBtn.onclick = () => this.callbacks.onMapClick();
 
@@ -121,11 +122,13 @@ export class HeaderComponent {
       'button',
       'header-text-btn header-faq-btn',
       `${ICONS.guide} <span class="header-btn-label-desktop">Transit Guide & FAQ</span><span class="header-btn-label-mobile">Guide</span>`
-    );
+    ) as HTMLButtonElement;
+    faqBtn.type = 'button';
     faqBtn.title = 'How to travel between Lynnwood, Seattle, and Bellevue';
     faqBtn.onclick = () => this.callbacks.onFaqClick();
 
-    const settingsBtn = createElement('button', 'icon-btn header-settings-btn', ICONS.settings);
+    const settingsBtn = createElement('button', 'icon-btn header-settings-btn', ICONS.settings) as HTMLButtonElement;
+    settingsBtn.type = 'button';
     settingsBtn.title = 'Settings & Preferences';
     settingsBtn.setAttribute('aria-label', 'Settings & Preferences');
     settingsBtn.onclick = () => this.callbacks.onSettingsClick();

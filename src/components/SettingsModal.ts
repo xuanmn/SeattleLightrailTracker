@@ -96,7 +96,8 @@ export class SettingsModal {
 
     // Footer
     const footer = createElement('div', 'modal-footer');
-    const saveBtn = createElement('button', 'btn-primary', 'Save Settings');
+    const saveBtn = createElement('button', 'btn-primary', 'Save Settings') as HTMLButtonElement;
+    saveBtn.type = 'button';
     saveBtn.onclick = () => this.save();
 
     footer.appendChild(saveBtn);

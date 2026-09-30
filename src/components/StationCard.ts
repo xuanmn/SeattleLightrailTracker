@@ -66,6 +66,7 @@ export class StationCardComponent {
     this.starBtn.className = `star-btn ${pinned ? 'pinned' : ''}`;
     this.starBtn.innerHTML = pinned ? ICONS.starFilled : ICONS.star;
     this.starBtn.title = pinned ? 'Remove from favorites' : 'Add to favorites';
+    this.starBtn.setAttribute('aria-label', `${pinned ? 'Remove' : 'Add'} ${this.station.name} to favorites`);
   }
 
   public setTimeFormat(is24Hour: boolean) {
