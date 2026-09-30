@@ -2,9 +2,9 @@ import { describe, it, expect } from 'vitest';
 import { getStationsByLine, getStationById } from '../src/data/stations';
 
 describe('Station Catalog', () => {
-  it('should include all 26 Line 1 stations', () => {
+  it('should include all 27 Line 1 stations', () => {
     const line1Stations = getStationsByLine('line-1');
-    expect(line1Stations.length).toBe(26);
+    expect(line1Stations.length).toBe(27);
 
     // Verify key terminal & extension stations
     const lynnwood = line1Stations.find(s => s.id === 'lynnwood-city-center');
@@ -12,6 +12,21 @@ describe('Station Catalog', () => {
     expect(lynnwood?.name).toBe('Lynnwood City Center');
     expect(lynnwood?.platforms.northbound).toBeDefined();
     expect(lynnwood?.platforms.southbound).toBeDefined();
+
+    const pinehurst = line1Stations.find(s => s.id === 'pinehurst');
+    expect(pinehurst).toBeDefined();
+    expect(pinehurst?.name).toBe('Pinehurst');
+    expect(pinehurst?.shortName).toBe('NE 130th St / 5th Ave NE');
+    expect(pinehurst?.address).toBe('13110 5th Ave NE, Seattle, WA 98125');
+    expect(pinehurst?.platforms.northbound?.stopId).toBe('40_N13-T1');
+    expect(pinehurst?.platforms.southbound?.stopId).toBe('40_N13-T2');
+
+    // Verify ordering between Shoreline South and Northgate
+    const shorelineIndex = line1Stations.findIndex(s => s.id === 'shoreline-south-148th');
+    const pinehurstIndex = line1Stations.findIndex(s => s.id === 'pinehurst');
+    const northgateIndex = line1Stations.findIndex(s => s.id === 'northgate');
+    expect(pinehurstIndex).toBe(shorelineIndex + 1);
+    expect(northgateIndex).toBe(pinehurstIndex + 1);
 
     const angleLake = line1Stations.find(s => s.id === 'angle-lake');
     expect(angleLake).toBeDefined();

@@ -93,6 +93,7 @@ describe('SystemMapModal Component', () => {
       'mountlake-terrace',
       'shoreline-north-185th',
       'shoreline-south-148th',
+      'pinehurst',
       'northgate',
       'roosevelt',
       'u-district',

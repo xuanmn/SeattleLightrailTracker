@@ -85,6 +85,27 @@ export const STATIONS: Station[] = [
     },
   },
   {
+    id: 'pinehurst',
+    name: 'Pinehurst',
+    shortName: 'NE 130th St / 5th Ave NE',
+    address: '13110 5th Ave NE, Seattle, WA 98125',
+    lines: ['line-1'],
+    platforms: {
+      northbound: {
+        stopId: '40_N13-T1',
+        directionName: 'Northbound to Lynnwood City Center',
+        cardinalDirection: 'Northbound',
+        terminalDestination: 'Lynnwood City Center',
+      },
+      southbound: {
+        stopId: '40_N13-T2',
+        directionName: 'Southbound to Federal Way Downtown',
+        cardinalDirection: 'Southbound',
+        terminalDestination: 'Federal Way Downtown',
+      },
+    },
+  },
+  {
     id: 'northgate',
     name: 'Northgate',
     shortName: 'Park & Ride / Kraken Iceplex',

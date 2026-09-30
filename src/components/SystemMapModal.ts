@@ -767,19 +767,20 @@ export class SystemMapModal {
 
         <!-- ================= LEFT SPINE: SHARED 1 LINE & 2 LINE STATIONS ================= -->
         ${this.renderDualCapsuleStation('lynnwood-city-center', 285, 75, 'Lynnwood City Center', 'Park & Ride / Transit Center', 'left', true)}
-        ${this.renderDualCapsuleStation('mountlake-terrace', 285, 120, 'Mountlake Terrace', 'Park & Ride / Freeway Station', 'left')}
-        ${this.renderDualCapsuleStation('shoreline-north-185th', 285, 165, 'Shoreline North/185th', 'Park & Ride / NE 185th St', 'left')}
-        ${this.renderDualCapsuleStation('shoreline-south-148th', 285, 210, 'Shoreline South/148th', 'Park & Ride / NE 148th St', 'left')}
-        ${this.renderDualCapsuleStation('northgate', 285, 255, 'Northgate', 'Park & Ride / Kraken Iceplex', 'left')}
-        ${this.renderDualCapsuleStation('roosevelt', 285, 300, 'Roosevelt', 'Park & Ride / Roosevelt High', 'left')}
-        ${this.renderDualCapsuleStation('u-district', 285, 345, 'U District', 'UW Tower / The Ave', 'left')}
-        ${this.renderDualCapsuleStation('university-of-washington', 285, 390, 'University of Washington', 'Husky Stadium / UW Medical', 'left')}
-        ${this.renderDualCapsuleStation('capitol-hill', 285, 435, 'Capitol Hill', 'Broadway / First Hill Streetcar', 'left')}
+        ${this.renderDualCapsuleStation('mountlake-terrace', 285, 117, 'Mountlake Terrace', 'Park & Ride / Freeway Station', 'left')}
+        ${this.renderDualCapsuleStation('shoreline-north-185th', 285, 158, 'Shoreline North/185th', 'Park & Ride / NE 185th St', 'left')}
+        ${this.renderDualCapsuleStation('shoreline-south-148th', 285, 200, 'Shoreline South/148th', 'Park & Ride / NE 148th St', 'left')}
+        ${this.renderDualCapsuleStation('pinehurst', 285, 241, 'Pinehurst', 'NE 130th St / 5th Ave NE', 'left')}
+        ${this.renderDualCapsuleStation('northgate', 285, 283, 'Northgate', 'Park & Ride / Kraken Iceplex', 'left')}
+        ${this.renderDualCapsuleStation('roosevelt', 285, 324, 'Roosevelt', 'Park & Ride / Roosevelt High', 'left')}
+        ${this.renderDualCapsuleStation('u-district', 285, 366, 'U District', 'UW Tower / The Ave', 'left')}
+        ${this.renderDualCapsuleStation('university-of-washington', 285, 407, 'University of Washington', 'Husky Stadium / UW Medical', 'left')}
+        ${this.renderDualCapsuleStation('capitol-hill', 285, 449, 'Capitol Hill', 'Broadway / First Hill Streetcar', 'left')}
 
         <!-- Downtown Seattle Transit Tunnel Stations -->
-        ${this.renderDualCapsuleStation('westlake', 285, 480, 'Westlake', 'Seattle Center Monorail / Pine St', 'left')}
-        ${this.renderDualCapsuleStation('symphony', 285, 525, 'Symphony', 'Benaroya Hall / University St', 'left')}
-        ${this.renderDualCapsuleStation('pioneer-square', 285, 570, 'Pioneer Square', 'WA State Ferries / Streetcar', 'left')}
+        ${this.renderDualCapsuleStation('westlake', 285, 490, 'Westlake', 'Seattle Center Monorail / Pine St', 'left')}
+        ${this.renderDualCapsuleStation('symphony', 285, 532, 'Symphony', 'Benaroya Hall / University St', 'left')}
+        ${this.renderDualCapsuleStation('pioneer-square', 285, 573, 'Pioneer Square', 'WA State Ferries / Streetcar', 'left')}
         
         <!-- Highlighted 1 Line ⇄ 2 Line Transfer Hub -->
         ${this.renderTransferHubStation('international-district-chinatown', 285, 615, 'Intl. District / Chinatown')}

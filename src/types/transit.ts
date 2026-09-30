@@ -11,6 +11,7 @@ export interface Station {
   id: string;             // Unique slug e.g. "capitol-hill"
   name: string;           // "Capitol Hill"
   shortName?: string;     // Optional abbreviated name
+  address?: string;       // Optional physical street address
   lines: TransitLineId[]; // ['line-1']
   platforms: {
     northbound?: StationPlatform;

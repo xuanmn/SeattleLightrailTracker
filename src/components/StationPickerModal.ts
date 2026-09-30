@@ -79,7 +79,8 @@ export class StationPickerModal {
       if (!query) return true;
       return (
         station.name.toLowerCase().includes(query) ||
-        (station.shortName && station.shortName.toLowerCase().includes(query))
+        (station.shortName && station.shortName.toLowerCase().includes(query)) ||
+        (station.address && station.address.toLowerCase().includes(query))
       );
     });
 
