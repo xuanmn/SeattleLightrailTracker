@@ -53,8 +53,8 @@ describe('Station Catalog', () => {
   });
 
   it('uses official Sound Transit naming for updated stations', () => {
-    expect(getStationById('shoreline-north-185th')?.name).toBe('Shoreline North/185th');
-    expect(getStationById('shoreline-south-148th')?.name).toBe('Shoreline South/148th');
+    expect(getStationById('shoreline-north-185th')?.name).toBe('Shoreline North');
+    expect(getStationById('shoreline-south-148th')?.name).toBe('Shoreline South');
     expect(getStationById('international-district-chinatown')?.name).toBe('Intl. District / Chinatown');
     expect(getStationById('tukwila-intl-blvd')?.name).toBe('Tukwila Intl. Blvd.');
     expect(getStationById('bel-red')?.name).toBe('BelRed');

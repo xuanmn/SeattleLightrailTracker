@@ -46,7 +46,7 @@ export const STATIONS: Station[] = [
   },
   {
     id: 'shoreline-north-185th',
-    name: 'Shoreline North/185th',
+    name: 'Shoreline North',
     shortName: 'Park & Ride / NE 185th St',
     lines: ['line-1'],
     platforms: {
@@ -66,7 +66,7 @@ export const STATIONS: Station[] = [
   },
   {
     id: 'shoreline-south-148th',
-    name: 'Shoreline South/148th',
+    name: 'Shoreline South',
     shortName: 'Park & Ride / NE 148th St',
     lines: ['line-1'],
     platforms: {

@@ -768,8 +768,8 @@ export class SystemMapModal {
         <!-- ================= LEFT SPINE: SHARED 1 LINE & 2 LINE STATIONS ================= -->
         ${this.renderDualCapsuleStation('lynnwood-city-center', 285, 75, 'Lynnwood City Center', 'Park & Ride / Transit Center', 'left', true)}
         ${this.renderDualCapsuleStation('mountlake-terrace', 285, 117, 'Mountlake Terrace', 'Park & Ride / Freeway Station', 'left')}
-        ${this.renderDualCapsuleStation('shoreline-north-185th', 285, 158, 'Shoreline North/185th', 'Park & Ride / NE 185th St', 'left')}
-        ${this.renderDualCapsuleStation('shoreline-south-148th', 285, 200, 'Shoreline South/148th', 'Park & Ride / NE 148th St', 'left')}
+        ${this.renderDualCapsuleStation('shoreline-north-185th', 285, 158, 'Shoreline North', 'Park & Ride / NE 185th St', 'left')}
+        ${this.renderDualCapsuleStation('shoreline-south-148th', 285, 200, 'Shoreline South', 'Park & Ride / NE 148th St', 'left')}
         ${this.renderDualCapsuleStation('pinehurst', 285, 241, 'Pinehurst', 'NE 130th St / 5th Ave NE', 'left')}
         ${this.renderDualCapsuleStation('northgate', 285, 283, 'Northgate', 'Park & Ride / Kraken Iceplex', 'left')}
         ${this.renderDualCapsuleStation('roosevelt', 285, 324, 'Roosevelt', 'Park & Ride / Roosevelt High', 'left')}
