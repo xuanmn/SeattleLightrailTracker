@@ -36,7 +36,7 @@ class TransitTrackerApp {
   private activeLine: TransitLineId = 'line-1';
   private showOnlyPinned: boolean = true; // Default to showing only user's chosen favorite stations
   private settings: AppSettings;
-  private pinnedIds: string[] = [];
+  private pinnedIds: Set<string> = new Set();
   private cardComponents: Map<string, StationCardComponent> = new Map();
   private arrivalsData: Map<string, StationArrivals> = new Map();
   private inFlightStationFetches: Set<string> = new Set();
@@ -65,7 +65,7 @@ class TransitTrackerApp {
 
     this.settings = getSettings();
     this.activeLine = getActiveLine();
-    this.pinnedIds = getPinnedStationIds();
+    this.pinnedIds = new Set(getPinnedStationIds());
     document.body.dataset.activeLine = this.activeLine;
 
     this.initUI();
@@ -80,7 +80,7 @@ class TransitTrackerApp {
     // Modals
     this.pickerModal = new StationPickerModal({
       onTogglePin: (stationId) => this.handleTogglePin(stationId),
-      isStationPinned: (stationId) => this.pinnedIds.includes(stationId),
+      isStationPinned: (stationId) => this.pinnedIds.has(stationId),
     });
 
     this.settingsModal = new SettingsModal({
@@ -211,7 +211,8 @@ class TransitTrackerApp {
       this.fetchController.abort();
       this.fetchController = undefined;
     }
-    this.arrivalsData.clear();
+    // Keep arrivalsData across line switch (Fix #3) — it's keyed by station ID
+    // so Line 2 data doesn't collide with Line 1 data.
     this.activeLine = line;
     document.body.dataset.activeLine = line;
     setActiveLine(line);
@@ -257,54 +258,81 @@ class TransitTrackerApp {
 
     if (this.showOnlyPinned) {
       // Return only stations the user has pinned for this line
-      return lineStations.filter((s) => this.pinnedIds.includes(s.id));
+      return lineStations.filter((s) => this.pinnedIds.has(s.id));
     }
 
     // In "All Line Stations" view, maintain the natural geographic route order (North -> South)
     return lineStations;
   }
 
+  /**
+   * DOM-recycling station card renderer (Fix #1).
+   * Diffs the new station list against existing cardComponents,
+   * reusing cards that persist and only creating/destroying those that changed.
+   */
   private renderStationCards() {
-    this.stationsGridEl.innerHTML = '';
-    this.cardComponents.forEach((card) => card.destroy());
-    this.cardComponents.clear();
-
     const stations = this.getVisibleStations();
 
     if (stations.length === 0) {
+      // Tear down all existing cards and show empty state
+      this.cardComponents.forEach((card) => card.destroy());
+      this.cardComponents.clear();
+      this.stationsGridEl.innerHTML = '';
       this.renderEmptyDashboard();
       return;
     }
 
+    const newIds = new Set(stations.map(s => s.id));
     const savedDirectionFilters = getStationDirectionFilters();
 
-    stations.forEach((station) => {
-      const isPinned = this.pinnedIds.includes(station.id);
-      const initialFilter = savedDirectionFilters[station.id] || 'both';
-
-      const cardComp = new StationCardComponent(
-        station,
-        isPinned,
-        this.settings.timeFormat24Hour,
-        {
-          onTogglePin: (id) => this.handleTogglePin(id),
-          onDirectionFilterChange: (id, filter) => {
-            setStationDirectionFilter(id, filter);
-          },
-          onBecameVisible: (id) => this.handleStationBecameVisible(id),
-        },
-        initialFilter
-      );
-
-      this.cardComponents.set(station.id, cardComp);
-      this.stationsGridEl.appendChild(cardComp.getElement());
-
-      // If we already have cached arrivals data for this station, populate it
-      const cached = this.arrivalsData.get(station.id);
-      if (cached) {
-        cardComp.updateArrivals(cached);
+    // 1. Remove cards that are no longer in the visible set
+    for (const [id, card] of this.cardComponents) {
+      if (!newIds.has(id)) {
+        card.destroy();
+        card.getElement().remove();
+        this.cardComponents.delete(id);
       }
+    }
+
+    // 2. Create new cards for stations not yet rendered, and reorder all into correct position
+    stations.forEach((station) => {
+      let cardComp = this.cardComponents.get(station.id);
+
+      if (!cardComp) {
+        // New card
+        const isPinned = this.pinnedIds.has(station.id);
+        const initialFilter = savedDirectionFilters[station.id] || 'both';
+
+        cardComp = new StationCardComponent(
+          station,
+          isPinned,
+          this.settings.timeFormat24Hour,
+          {
+            onTogglePin: (id) => this.handleTogglePin(id),
+            onDirectionFilterChange: (id, filter) => {
+              setStationDirectionFilter(id, filter);
+            },
+            onBecameVisible: (id) => this.handleStationBecameVisible(id),
+          },
+          initialFilter
+        );
+
+        this.cardComponents.set(station.id, cardComp);
+
+        // If we already have cached arrivals data for this station, populate it
+        const cached = this.arrivalsData.get(station.id);
+        if (cached) {
+          cardComp.updateArrivals(cached);
+        }
+      }
+
+      // Append in correct order (appendChild moves existing nodes)
+      this.stationsGridEl.appendChild(cardComp.getElement());
     });
+
+    // 3. Remove the empty-dashboard-card if it was previously rendered
+    const emptyCard = this.stationsGridEl.querySelector('.empty-dashboard-card');
+    if (emptyCard) emptyCard.remove();
   }
 
   private handleStationBecameVisible(stationId: string) {
@@ -353,7 +381,7 @@ class TransitTrackerApp {
 
   private handleTogglePin(stationId: string) {
     const isNowPinned = togglePinnedStation(stationId);
-    this.pinnedIds = getPinnedStationIds();
+    this.pinnedIds = new Set(getPinnedStationIds());
 
     const station = getStationById(stationId);
     const stationName = station?.name || 'Station';
@@ -568,9 +596,12 @@ class TransitTrackerApp {
     }
 
     // Ticks every second to smoothly update countdown values and clock
+    // Fix #5: Only tick cards that are visible in the viewport
     this.countdownTickTimer = window.setInterval(() => {
       this.cardComponents.forEach((card) => {
-        card.tickCountdowns();
+        if (card.isVisible) {
+          card.tickCountdowns();
+        }
       });
     }, 1000);
   }

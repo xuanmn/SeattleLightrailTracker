@@ -65,18 +65,23 @@ export function formatDelayStatus(
   };
 }
 
-export function formatClockTime(epochMs: number, is24Hour: boolean = false): string {
-  const date = new Date(epochMs);
-  if (is24Hour) {
-    const hours = date.getHours().toString().padStart(2, '0');
-    const minutes = date.getMinutes().toString().padStart(2, '0');
-    return `${hours}:${minutes}`;
-  }
+// ── Reusable Intl.DateTimeFormat instances (Fix #9) ──
+// Created once and reused for all formatClockTime calls to avoid repeated Date/formatter allocations.
+const formatter12h = new Intl.DateTimeFormat('en-US', {
+  hour: 'numeric',
+  minute: '2-digit',
+  hour12: true,
+  timeZone: 'America/Los_Angeles',
+});
 
-  let hours = date.getHours();
-  const minutes = date.getMinutes().toString().padStart(2, '0');
-  const ampm = hours >= 12 ? 'PM' : 'AM';
-  hours = hours % 12;
-  hours = hours ? hours : 12; // 0 becomes 12
-  return `${hours}:${minutes} ${ampm}`;
+const formatter24h = new Intl.DateTimeFormat('en-US', {
+  hour: '2-digit',
+  minute: '2-digit',
+  hour12: false,
+  timeZone: 'America/Los_Angeles',
+});
+
+export function formatClockTime(epochMs: number, is24Hour: boolean = false): string {
+  const formatter = is24Hour ? formatter24h : formatter12h;
+  return formatter.format(epochMs);
 }

@@ -64,9 +64,8 @@ describe('Time and Countdown Utilities', () => {
   });
 
   it('formats clock time in 12-hour and 24-hour formats', () => {
-    // Epoch timestamp corresponding to a specific hour
-    const date = new Date(2026, 7, 25, 14, 5, 0); // 2:05 PM
-    const epoch = date.getTime();
+    // Use a known UTC epoch: 2026-08-25T21:05:00Z = 2:05 PM Pacific (PDT, UTC-7)
+    const epoch = Date.UTC(2026, 7, 25, 21, 5, 0);
 
     const time12 = formatClockTime(epoch, false);
     expect(time12).toMatch(/2:05\s*PM/i);

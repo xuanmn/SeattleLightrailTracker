@@ -16,18 +16,46 @@ const DEFAULT_SETTINGS: AppSettings = {
   timeFormat24Hour: false,
 };
 
+// ── In-memory caches to avoid repeated localStorage.getItem + JSON.parse ──
+let _pinnedCache: string[] | null = null;
+let _settingsCache: AppSettings | null = null;
+let _directionFiltersCache: Record<string, StationDirectionFilter> | null = null;
+
+/**
+ * Invalidate in-memory caches (for tests, storage resets, and cross-tab sync).
+ */
+export function clearStorageCache(): void {
+  _pinnedCache = null;
+  _settingsCache = null;
+  _directionFiltersCache = null;
+}
+
+// Invalidate in-memory caches if another browser tab modifies localStorage
+if (typeof window !== 'undefined' && typeof window.addEventListener === 'function') {
+  window.addEventListener('storage', () => {
+    clearStorageCache();
+  });
+}
+
 export function getPinnedStationIds(): string[] {
+  if (_pinnedCache !== null) return [..._pinnedCache];
   try {
     const raw = localStorage.getItem(PINNED_STATIONS_KEY);
-    if (raw === null) return [...DEFAULT_PINNED_STATIONS];
+    if (raw === null) {
+      _pinnedCache = [...DEFAULT_PINNED_STATIONS];
+      return [..._pinnedCache];
+    }
     const parsed = JSON.parse(raw);
-    return Array.isArray(parsed) ? parsed : [...DEFAULT_PINNED_STATIONS];
+    _pinnedCache = Array.isArray(parsed) ? parsed : [...DEFAULT_PINNED_STATIONS];
+    return [..._pinnedCache];
   } catch {
-    return [...DEFAULT_PINNED_STATIONS];
+    _pinnedCache = [...DEFAULT_PINNED_STATIONS];
+    return [..._pinnedCache];
   }
 }
 
 function setPinnedStationIds(ids: string[]): void {
+  _pinnedCache = [...ids];
   try {
     localStorage.setItem(PINNED_STATIONS_KEY, JSON.stringify(ids));
   } catch {
@@ -69,15 +97,22 @@ export function setActiveLine(line: TransitLineId): void {
 }
 
 export function getSettings(): AppSettings {
+  if (_settingsCache !== null) return { ..._settingsCache };
   try {
     const raw = localStorage.getItem(SETTINGS_KEY);
-    if (!raw) return { ...DEFAULT_SETTINGS };
+    if (!raw) {
+      _settingsCache = { ...DEFAULT_SETTINGS };
+      return { ...DEFAULT_SETTINGS };
+    }
     const parsed = JSON.parse(raw);
-    return {
+    const result: AppSettings = {
       ...DEFAULT_SETTINGS,
       ...parsed,
     };
+    _settingsCache = result;
+    return { ...result };
   } catch {
+    _settingsCache = { ...DEFAULT_SETTINGS };
     return { ...DEFAULT_SETTINGS };
   }
 }
@@ -85,7 +120,8 @@ export function getSettings(): AppSettings {
 export function updateSettings(partial: Partial<AppSettings>): AppSettings {
   try {
     const current = getSettings();
-    const merged = { ...current, ...partial };
+    const merged: AppSettings = { ...current, ...partial };
+    _settingsCache = { ...merged };
     localStorage.setItem(SETTINGS_KEY, JSON.stringify(merged));
     return merged;
   } catch {
@@ -99,12 +135,18 @@ const DIRECTION_FILTERS_KEY = 'seattle_transit_direction_filters';
 export type StationDirectionFilter = 'both' | 'dir1' | 'dir2';
 
 export function getStationDirectionFilters(): Record<string, StationDirectionFilter> {
+  if (_directionFiltersCache !== null) return { ..._directionFiltersCache };
   try {
     const raw = localStorage.getItem(DIRECTION_FILTERS_KEY);
-    if (!raw) return {};
+    if (!raw) {
+      _directionFiltersCache = {};
+      return {};
+    }
     const parsed = JSON.parse(raw);
-    return typeof parsed === 'object' && parsed !== null ? parsed : {};
+    _directionFiltersCache = typeof parsed === 'object' && parsed !== null ? parsed : {};
+    return { ..._directionFiltersCache };
   } catch {
+    _directionFiltersCache = {};
     return {};
   }
 }
@@ -116,6 +158,7 @@ export function setStationDirectionFilter(
   try {
     const current = getStationDirectionFilters();
     current[stationId] = filter;
+    _directionFiltersCache = { ...current };
     localStorage.setItem(DIRECTION_FILTERS_KEY, JSON.stringify(current));
   } catch {
     // ignore

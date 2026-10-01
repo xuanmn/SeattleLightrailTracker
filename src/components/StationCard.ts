@@ -41,6 +41,15 @@ export class StationCardComponent {
   private countdownRows: HTMLElement[] = [];
   private arrivalTimes: number[] = [];
 
+  // Track current trip keys per direction for fast diff (Fix #6)
+  private currentDir1TripKey: string = '';
+  private currentDir2TripKey: string = '';
+  private clockElements: HTMLElement[] = [];
+  private statusElements: HTMLElement[] = [];
+  private scheduledTimes: number[] = [];
+  private isRealtimeFlags: boolean[] = [];
+  private delaySecondsArr: number[] = [];
+
   constructor(
     station: Station,
     isPinned: boolean,
@@ -112,23 +121,104 @@ export class StationCardComponent {
   public updateArrivals(data: StationArrivals) {
     this.currentArrivals = data;
 
-    // Clear tracked DOM refs before full rebuild
-    this.countdownChips = [];
-    this.countdownRows = [];
-    this.arrivalTimes = [];
+    const dir1Key = data.direction1.arrivals.map(a => a.tripId).join(',');
+    const dir2Key = data.direction2.arrivals.map(a => a.tripId).join(',');
 
-    this.renderPlatformArrivals(
-      this.platform1Container,
-      data.direction1.arrivals,
-      data.direction1.platform.terminalDestination
-    );
-    this.renderPlatformArrivals(
-      this.platform2Container,
-      data.direction2.arrivals,
-      data.direction2.platform.terminalDestination
-    );
+    const sameTrips =
+      dir1Key === this.currentDir1TripKey &&
+      dir2Key === this.currentDir2TripKey;
+
+    if (sameTrips && this.countdownChips.length > 0) {
+      // Same trips in same order — patch values in-place without DOM rebuild
+      this.patchArrivalsInPlace(data);
+    } else {
+      // Trip list changed — full rebuild
+      this.currentDir1TripKey = dir1Key;
+      this.currentDir2TripKey = dir2Key;
+
+      // Clear tracked DOM refs before full rebuild
+      this.countdownChips = [];
+      this.countdownRows = [];
+      this.arrivalTimes = [];
+      this.clockElements = [];
+      this.statusElements = [];
+      this.scheduledTimes = [];
+      this.isRealtimeFlags = [];
+      this.delaySecondsArr = [];
+
+      this.renderPlatformArrivals(
+        this.platform1Container,
+        data.direction1.arrivals,
+        data.direction1.platform.terminalDestination
+      );
+      this.renderPlatformArrivals(
+        this.platform2Container,
+        data.direction2.arrivals,
+        data.direction2.platform.terminalDestination
+      );
+    }
 
     this.updateApproachTrack();
+  }
+
+  /**
+   * Patch existing DOM elements in-place when the trip list hasn't changed.
+   * Updates countdown, clock, status text, and timing data without DOM destruction.
+   */
+  private patchArrivalsInPlace(data: StationArrivals) {
+    const allArrivals = [
+      ...data.direction1.arrivals,
+      ...data.direction2.arrivals,
+    ];
+
+    const now = Date.now();
+
+    for (let i = 0; i < allArrivals.length && i < this.countdownChips.length; i++) {
+      const arrival = allArrivals[i];
+      const targetTime = arrival.predictedDepartureTime || arrival.scheduledDepartureTime;
+
+      // Update cached time data
+      this.arrivalTimes[i] = targetTime;
+      this.scheduledTimes[i] = arrival.scheduledDepartureTime;
+      this.isRealtimeFlags[i] = arrival.isRealtime;
+      this.delaySecondsArr[i] = arrival.delaySeconds;
+
+      // Patch countdown chip
+      const badge = formatCountdownBadge(targetTime, now);
+      const chip = this.countdownChips[i];
+      if (chip.textContent !== badge.text) {
+        chip.textContent = badge.text;
+      }
+      if (chip.classList.contains('now') !== badge.isNow) {
+        chip.classList.toggle('now', badge.isNow);
+      }
+
+      // Patch arriving-soon class on row
+      const row = this.countdownRows[i];
+      if (row && row.classList.contains('arriving-soon') !== badge.isNow) {
+        row.classList.toggle('arriving-soon', badge.isNow);
+      }
+
+      // Patch clock time
+      const clockEl = this.clockElements[i];
+      if (clockEl) {
+        const clockText = formatClockTime(targetTime, this.is24Hour);
+        if (clockEl.textContent !== clockText) {
+          clockEl.textContent = clockText;
+        }
+      }
+
+      // Patch status pill
+      const statusEl = this.statusElements[i];
+      if (statusEl) {
+        if (statusEl.textContent !== arrival.statusText) {
+          statusEl.textContent = arrival.statusText;
+        }
+        if (statusEl.className !== `status-pill ${arrival.statusType}`) {
+          statusEl.className = `status-pill ${arrival.statusType}`;
+        }
+      }
+    }
   }
 
   /**
@@ -150,9 +240,13 @@ export class StationCardComponent {
       if (chip.textContent !== badge.text) {
         chip.textContent = badge.text;
       }
-      chip.classList.toggle('now', badge.isNow);
 
-      if (row) {
+      // Fix #10: Guard classList.toggle with contains() check
+      if (chip.classList.contains('now') !== badge.isNow) {
+        chip.classList.toggle('now', badge.isNow);
+      }
+
+      if (row && row.classList.contains('arriving-soon') !== badge.isNow) {
         row.classList.toggle('arriving-soon', badge.isNow);
       }
     }
@@ -289,10 +383,15 @@ export class StationCardComponent {
         badge.text
       );
 
-      // Track DOM refs for lightweight tick updates
+      // Track DOM refs for lightweight tick and in-place patch updates
       this.countdownChips.push(chip);
       this.countdownRows.push(row);
       this.arrivalTimes.push(targetTime);
+      this.clockElements.push(clock);
+      this.statusElements.push(status);
+      this.scheduledTimes.push(arrival.scheduledDepartureTime);
+      this.isRealtimeFlags.push(arrival.isRealtime);
+      this.delaySecondsArr.push(arrival.delaySeconds);
 
       row.appendChild(info);
       row.appendChild(chip);
@@ -446,6 +545,7 @@ export class StationCardComponent {
             const wasVisible = this.isVisible;
             this.isVisible = entry.isIntersecting;
             if (this.isVisible && !wasVisible) {
+              this.tickCountdowns();
               this.callbacks.onBecameVisible?.(this.station.id);
             }
           }

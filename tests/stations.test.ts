@@ -41,15 +41,21 @@ describe('Station Catalog', () => {
     expect(westlake?.name).toBe('Westlake');
   });
 
-  it('should include all 10 Line 2 stations', () => {
+  it('should include all 12 Line 2 stations', () => {
     const line2Stations = getStationsByLine('line-2');
-    expect(line2Stations.length).toBe(10);
+    expect(line2Stations.length).toBe(12);
 
     const southBellevue = line2Stations.find(s => s.id === 'south-bellevue');
     expect(southBellevue).toBeDefined();
 
     const downtownRedmond = line2Stations.find(s => s.id === 'downtown-redmond');
     expect(downtownRedmond).toBeDefined();
+
+    const mercerIsland = line2Stations.find(s => s.id === 'mercer-island');
+    expect(mercerIsland).toBeDefined();
+
+    const judkinsPark = line2Stations.find(s => s.id === 'judkins-park');
+    expect(judkinsPark).toBeDefined();
   });
 
   it('uses official Sound Transit naming for updated stations', () => {

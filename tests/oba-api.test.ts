@@ -1,5 +1,5 @@
-import { describe, it, expect } from 'vitest';
-import { transformObaArrivals } from '../src/services/oba-api';
+import { describe, it, expect, afterAll } from 'vitest';
+import { transformObaArrivals, stopPruneTimer } from '../src/services/oba-api';
 import { StationPlatform } from '../src/types/transit';
 
 describe('OneBusAway API Transformer', () => {
@@ -288,6 +288,10 @@ describe('OneBusAway Stop Arrival Caching & In-Memory TTL', () => {
     const res = await fetchArrivalsForStation(testStation, undefined, true, controller.signal);
     expect(res.direction1.arrivals.length).toBeGreaterThan(0);
     expect(res.direction2.arrivals.length).toBeGreaterThan(0);
+  });
+
+  afterAll(() => {
+    stopPruneTimer();
   });
 });
 

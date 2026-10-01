@@ -8,11 +8,13 @@ import {
   updateSettings,
   getStationDirectionFilters,
   setStationDirectionFilter,
+  clearStorageCache,
 } from '../src/services/storage';
 
 describe('Local Storage & Settings Service', () => {
   beforeEach(() => {
     localStorage.clear();
+    clearStorageCache();
   });
 
   it('provides default pinned stations on first load', () => {
@@ -81,5 +83,21 @@ describe('Local Storage & Settings Service', () => {
     setStationDirectionFilter('capitol-hill', 'both');
     filters = getStationDirectionFilters();
     expect(filters['capitol-hill']).toBe('both');
+  });
+
+  it('resets in-memory caches when clearStorageCache is called', () => {
+    // Unpin all stations so cache is empty array
+    const defaultStations = getPinnedStationIds();
+    defaultStations.forEach((id) => togglePinnedStation(id));
+    expect(getPinnedStationIds()).toEqual([]);
+
+    // Clear storage and invalidate in-memory cache
+    localStorage.clear();
+    clearStorageCache();
+
+    // Now it should return defaults fresh from initial state
+    const restored = getPinnedStationIds();
+    expect(restored.length).toBeGreaterThanOrEqual(3);
+    expect(restored).toContain('westlake');
   });
 });

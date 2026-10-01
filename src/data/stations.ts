@@ -749,6 +749,46 @@ export const STATIONS: Station[] = [
       },
     },
   },
+  {
+    id: 'mercer-island',
+    name: 'Mercer Island',
+    shortName: 'Park & Ride / I-90 Trail',
+    lines: ['line-2'],
+    platforms: {
+      eastbound: {
+        stopId: '40_E07-T1',
+        directionName: 'Eastbound to Downtown Redmond',
+        cardinalDirection: 'Eastbound',
+        terminalDestination: 'Downtown Redmond',
+      },
+      westbound: {
+        stopId: '40_E07-T2',
+        directionName: 'Westbound to Lynnwood City Center',
+        cardinalDirection: 'Westbound',
+        terminalDestination: 'Lynnwood City Center',
+      },
+    },
+  },
+  {
+    id: 'judkins-park',
+    name: 'Judkins Park',
+    shortName: 'Rainier Ave S / I-90 Trail',
+    lines: ['line-2'],
+    platforms: {
+      eastbound: {
+        stopId: '40_E05-T1',
+        directionName: 'Eastbound to Downtown Redmond',
+        cardinalDirection: 'Eastbound',
+        terminalDestination: 'Downtown Redmond',
+      },
+      westbound: {
+        stopId: '40_E05-T2',
+        directionName: 'Westbound to Lynnwood City Center',
+        cardinalDirection: 'Westbound',
+        terminalDestination: 'Lynnwood City Center',
+      },
+    },
+  },
 ];
 
 // Pre-computed lookup maps (static data, computed once at module load)

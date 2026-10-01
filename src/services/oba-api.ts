@@ -226,6 +226,9 @@ export function getArrivalsCacheSize(): number {
 /**
  * Evict cache entries that are well past their TTL to prevent unbounded growth
  * during long sessions (e.g., leaving the tab open all day).
+ *
+ * Runs on a 5-minute interval rather than on every individual fetch call
+ * (Fix #2: moved off the critical fetch path).
  */
 export function pruneStaleCache(): void {
   const now = Date.now();
@@ -234,6 +237,23 @@ export function pruneStaleCache(): void {
     if (now - entry.timestamp > evictionThreshold) {
       stopArrivalsCache.delete(key);
     }
+  }
+}
+
+// Run cache eviction on a background timer instead of per-fetch
+let _pruneTimer: ReturnType<typeof setInterval> | undefined;
+if (typeof window !== 'undefined') {
+  _pruneTimer = setInterval(pruneStaleCache, 5 * 60 * 1000);
+  if (typeof (_pruneTimer as any)?.unref === 'function') {
+    (_pruneTimer as any).unref();
+  }
+}
+
+/** Stop the background prune timer (for tests / cleanup) */
+export function stopPruneTimer(): void {
+  if (_pruneTimer !== undefined) {
+    clearInterval(_pruneTimer);
+    _pruneTimer = undefined;
   }
 }
 
@@ -248,7 +268,6 @@ async function fetchArrivalsForStop(
   signal?: AbortSignal
 ): Promise<TransitArrival[]> {
   const now = Date.now();
-  pruneStaleCache();
 
   // Return fresh copy from cache if within TTL
   if (!bypassCache) {

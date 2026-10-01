@@ -3,7 +3,7 @@
  * Provides offline caching for underground transit stations and rapid app launch.
  */
 
-const SW_VERSION = '1.1.0';
+const SW_VERSION = '1.2.0';
 const CACHE_NAME = `link-tracker-v${SW_VERSION}`;
 
 // Core assets required for the app shell to render offline
@@ -16,12 +16,33 @@ const PRECACHE_ASSETS = [
   './icons/apple-touch-icon.png',
 ];
 
-// Install Event: pre-cache the critical app shell
+// Install Event: pre-cache the critical app shell + discover hashed bundles from index.html
 self.addEventListener('install', (event) => {
   event.waitUntil(
     caches
       .open(CACHE_NAME)
-      .then((cache) => cache.addAll(PRECACHE_ASSETS))
+      .then(async (cache) => {
+        // Pre-cache known static assets
+        await cache.addAll(PRECACHE_ASSETS);
+
+        // Dynamically discover hashed JS/CSS bundles referenced in index.html
+        // so the first offline visit after install has everything it needs
+        try {
+          const htmlResponse = (await cache.match('./index.html')) || (await fetch('./index.html'));
+          const htmlText = await htmlResponse.text();
+          const assetUrls = [];
+          const matches = htmlText.matchAll(/(?:src|href)=["'](\.\/?assets\/[^"']+)["']/g);
+          for (const match of matches) {
+            assetUrls.push(new URL(match[1], self.location.href).href);
+          }
+          if (assetUrls.length > 0) {
+            await cache.addAll(assetUrls);
+          }
+        } catch (err) {
+          // Non-fatal: hashed bundles will be cached on first stale-while-revalidate hit
+          console.warn('PWA: Could not discover hashed bundles from index.html:', err);
+        }
+      })
       .then(() => self.skipWaiting())
       .catch((err) => console.warn('PWA Precache failed:', err))
   );
