@@ -4,7 +4,7 @@ export default defineConfig({
   base: './',
   build: {
     target: 'es2022',
-    minify: 'esbuild',
+    minify: true,
     cssMinify: true,
   },
   test: {

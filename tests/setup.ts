@@ -19,6 +19,7 @@ Object.defineProperty(globalThis, 'localStorage', {
 class MockIntersectionObserver implements IntersectionObserver {
   readonly root: Element | Document | null = null;
   readonly rootMargin: string;
+  readonly scrollMargin: string;
   readonly thresholds: ReadonlyArray<number>;
 
   public targets: Set<Element> = new Set();
@@ -28,6 +29,7 @@ class MockIntersectionObserver implements IntersectionObserver {
     options?: IntersectionObserverInit
   ) {
     this.rootMargin = options?.rootMargin ?? '';
+    this.scrollMargin = options?.scrollMargin ?? '';
     this.thresholds = options?.threshold
       ? Array.isArray(options.threshold) ? options.threshold : [options.threshold]
       : [0];
