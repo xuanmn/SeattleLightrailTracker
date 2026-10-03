@@ -103,14 +103,11 @@ describe('Mobile Performance Optimizations', () => {
           arrivals: [
             {
               tripId: 'trip_approach',
-              routeId: '40_100479',
               routeName: '1 Line',
-              routeColor: '#008542',
               destination: 'Lynnwood City Center',
               direction: 'Northbound',
               scheduledDepartureTime: now + 2.5 * 60 * 1000, // 2.5 min = 50% progress
               predictedDepartureTime: now + 2.5 * 60 * 1000,
-              minutesUntilArrival: 2,
               delaySeconds: 0,
               isRealtime: true,
               statusText: 'On Time',
@@ -155,14 +152,11 @@ describe('Mobile Performance Optimizations', () => {
           arrivals: [
             {
               tripId: 'trip_far',
-              routeId: '40_100479',
               routeName: '1 Line',
-              routeColor: '#008542',
               destination: 'Lynnwood City Center',
               direction: 'Northbound',
               scheduledDepartureTime: now + 15 * 60 * 1000, // 15 min away (> 5 min)
               predictedDepartureTime: now + 15 * 60 * 1000,
-              minutesUntilArrival: 15,
               delaySeconds: 0,
               isRealtime: true,
               statusText: 'Scheduled',

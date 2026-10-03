@@ -15,13 +15,11 @@ describe('StationCard Live Approach Track', () => {
     platforms: {
       northbound: {
         stopId: '40_1121',
-        directionName: 'Northbound',
         cardinalDirection: 'Northbound',
         terminalDestination: 'Lynnwood City Center',
       },
       southbound: {
         stopId: '40_1108',
-        directionName: 'Southbound',
         cardinalDirection: 'Southbound',
         terminalDestination: 'Federal Way Downtown',
       },
@@ -47,14 +45,11 @@ describe('StationCard Live Approach Track', () => {
         arrivals: [
           {
             tripId: 'trip_1',
-            routeId: '40_100479',
             routeName: '1 Line',
-            routeColor: '#008542',
             destination: 'Lynnwood City Center',
             direction: 'Northbound',
             scheduledDepartureTime: now + 3 * 60 * 1000, // 3 minutes away
             predictedDepartureTime: now + 3 * 60 * 1000,
-            minutesUntilArrival: 3,
             delaySeconds: 0,
             isRealtime: true,
             statusText: 'On Time',
@@ -93,14 +88,11 @@ describe('StationCard Live Approach Track', () => {
         arrivals: [
           {
             tripId: 'trip_far',
-            routeId: '40_100479',
             routeName: '1 Line',
-            routeColor: '#008542',
             destination: 'Lynnwood City Center',
             direction: 'Northbound',
             scheduledDepartureTime: now + 12 * 60 * 1000, // 12 minutes away
             predictedDepartureTime: now + 12 * 60 * 1000,
-            minutesUntilArrival: 12,
             delaySeconds: 0,
             isRealtime: true,
             statusText: 'On Time',

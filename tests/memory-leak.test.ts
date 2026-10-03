@@ -111,14 +111,11 @@ describe('Memory Leak Prevention & Lifecycle Tests', () => {
             arrivals: [
               {
                 tripId: `trip_${i}`,
-                routeId: '40_100479',
                 routeName: '1 Line',
-                routeColor: '#008542',
                 destination: 'Lynnwood City Center',
                 direction: 'Northbound',
                 scheduledDepartureTime: Date.now() + 180000,
                 predictedDepartureTime: Date.now() + 180000,
-                minutesUntilArrival: 3,
                 isRealtime: true,
                 delaySeconds: 0,
                 statusText: 'On Time',

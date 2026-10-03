@@ -4,7 +4,7 @@ import { createElement, ICONS } from '../utils/dom';
 import { lockBodyScroll, unlockBodyScroll } from '../utils/scrollLock';
 import { attachBottomSheetSwipe } from '../utils/bottomSheetGesture';
 
-export interface StationPickerCallbacks {
+interface StationPickerCallbacks {
   onTogglePin: (stationId: string) => void;
   isStationPinned: (stationId: string) => boolean;
 }
@@ -33,14 +33,14 @@ export class StationPickerModal {
 
   public open(initialLine?: TransitLineId) {
     if (this.overlay.classList.contains('open')) return;
+    if (this.searchInput) {
+      this.searchInput.value = '';
+      this.searchQuery = '';
+    }
     if (initialLine) {
       this.setFilter(initialLine);
     } else {
       this.setFilter(this.activeFilterLine);
-    }
-    if (this.searchInput) {
-      this.searchInput.value = '';
-      this.searchQuery = '';
     }
     if (this.listContainer) {
       this.listContainer.scrollTop = 0;

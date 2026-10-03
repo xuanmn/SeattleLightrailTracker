@@ -1,8 +1,8 @@
 import { Station, StationPlatform, TransitArrival } from '../types/transit';
-import { calculateMinutesRemaining, formatDelayStatus } from '../utils/time';
+import { formatDelayStatus } from '../utils/time';
 
-const DEFAULT_OBA_BASE = 'https://api.pugetsound.onebusaway.org/api/where';
-const DEFAULT_KEY = '5654bb33-edab-4322-8688-94b9d262abe4'; // Sound Transit official public client key
+const OBA_BASE = 'https://api.pugetsound.onebusaway.org/api/where';
+const OBA_KEY = '5654bb33-edab-4322-8688-94b9d262abe4'; // Sound Transit official public client key
 
 interface RawObaArrival {
   tripId: string;
@@ -95,7 +95,6 @@ export function transformObaArrivals(
       : 0;
 
     const delayInfo = formatDelayStatus(delaySeconds, isRealtime);
-    const minutesRemaining = calculateMinutesRemaining(targetTime, nowEpochMs);
 
     const rawRoute = item.routeShortName || item.routeLongName || '';
     const headsign = item.tripHeadsign || platform.terminalDestination;
@@ -106,19 +105,13 @@ export function transformObaArrivals(
       platform.cardinalDirection === 'Eastbound' ||
       platform.cardinalDirection === 'Westbound';
 
-    const routeName = isLine2 ? '2 Line' : '1 Line';
-    const routeColor = isLine2 ? '#0072CE' : '#008542';
-
     results.push({
       tripId: item.tripId || `trip_${targetTime}`,
-      routeId: item.routeId || (isLine2 ? '40_2_LINE' : '40_100479'),
-      routeName,
-      routeColor,
+      routeName: isLine2 ? '2 Line' : '1 Line',
       destination: headsign,
       direction: platform.cardinalDirection,
       scheduledDepartureTime: schedTime,
       predictedDepartureTime: isRealtime ? targetTime : null,
-      minutesUntilArrival: minutesRemaining,
       isRealtime,
       delaySeconds,
       statusText: delayInfo.text,
@@ -137,69 +130,11 @@ export function transformObaArrivals(
 }
 
 /**
- * Generate simulated arrival data for demonstration / offline fallback
- */
-function generateFallbackArrivals(
-  platform: StationPlatform,
-  nowEpochMs: number = Date.now()
-): TransitArrival[] {
-  const isEastside =
-    platform.cardinalDirection === 'Eastbound' || platform.cardinalDirection === 'Westbound';
-
-  // Realistic intervals: ~5-10 min combined headway
-  const offsetsMinutes = [3, 8, 16, 24];
-
-  return offsetsMinutes.map((mins, idx) => {
-    const schedTime = nowEpochMs + mins * 60 * 1000;
-    const isRt = idx < 2; // First two have live telemetry
-    const delaySec = isRt ? (idx === 0 ? 30 : 90) : 0;
-    const predTime = isRt ? schedTime + delaySec * 1000 : null;
-    const delayInfo = formatDelayStatus(delaySec, isRt);
-
-    let routeName = '1 Line';
-    let routeColor = '#008542';
-    let destination = platform.terminalDestination;
-
-    if (isEastside) {
-      routeName = '2 Line';
-      routeColor = '#0072CE';
-      destination = platform.terminalDestination;
-    } else if (platform.cardinalDirection === 'Southbound') {
-      // Shared North/Tunnel corridor: alternate 1 Line (Federal Way) & 2 Line (Downtown Redmond)
-      const isAltLine2 = idx % 2 === 1;
-      routeName = isAltLine2 ? '2 Line' : '1 Line';
-      routeColor = isAltLine2 ? '#0072CE' : '#008542';
-      destination = isAltLine2 ? 'Downtown Redmond' : 'Federal Way Downtown';
-    } else if (platform.cardinalDirection === 'Northbound') {
-      // Heading North to Lynnwood: alternate line badges on shared spine
-      const isAltLine2 = idx % 2 === 1;
-      routeName = isAltLine2 ? '2 Line' : '1 Line';
-      routeColor = isAltLine2 ? '#0072CE' : '#008542';
-      destination = 'Lynnwood City Center';
-    }
-
-    return {
-      tripId: `sim_${platform.stopId}_${idx}`,
-      routeId: routeName === '2 Line' ? '40_2_LINE' : '40_100479',
-      routeName,
-      routeColor,
-      destination,
-      direction: platform.cardinalDirection,
-      scheduledDepartureTime: schedTime,
-      predictedDepartureTime: predTime,
-      minutesUntilArrival: mins,
-      isRealtime: isRt,
-      delaySeconds: delaySec,
-      statusText: delayInfo.text,
-      statusType: delayInfo.type,
-    };
-  });
-}
-
-/**
  * In-Memory Stop Arrival Cache
  * Caches arrival predictions per stopId with a short TTL (25s) to eliminate redundant
  * network requests across shared 1 Line & 2 Line platforms and fast view toggles.
+ * Keyed by stopId, so size is naturally bounded by the number of platforms.
+ * Only successful API responses are cached — failures and aborts never are.
  */
 interface CacheEntry {
   timestamp: number;
@@ -207,7 +142,8 @@ interface CacheEntry {
 }
 
 const stopArrivalsCache = new Map<string, CacheEntry>();
-const DEFAULT_CACHE_TTL_MS = 25 * 1000; // 25 seconds TTL
+const CACHE_TTL_MS = 25 * 1000;
+const REQUEST_TIMEOUT_MS = 6000;
 
 /**
  * Clear the in-memory arrivals cache (useful on manual refresh or test resets)
@@ -217,86 +153,38 @@ export function clearArrivalsCache(): void {
 }
 
 /**
- * Get current count of cached stops (for inspection & testing)
- */
-export function getArrivalsCacheSize(): number {
-  return stopArrivalsCache.size;
-}
-
-/**
- * Evict cache entries that are well past their TTL to prevent unbounded growth
- * during long sessions (e.g., leaving the tab open all day).
- *
- * Runs on a 5-minute interval rather than on every individual fetch call
- * (Fix #2: moved off the critical fetch path).
- */
-export function pruneStaleCache(): void {
-  const now = Date.now();
-  const evictionThreshold = DEFAULT_CACHE_TTL_MS * 4; // 100 seconds
-  for (const [key, entry] of stopArrivalsCache) {
-    if (now - entry.timestamp > evictionThreshold) {
-      stopArrivalsCache.delete(key);
-    }
-  }
-}
-
-// Run cache eviction on a background timer instead of per-fetch
-let _pruneTimer: ReturnType<typeof setInterval> | undefined;
-if (typeof window !== 'undefined') {
-  _pruneTimer = setInterval(pruneStaleCache, 5 * 60 * 1000);
-  if (typeof (_pruneTimer as any)?.unref === 'function') {
-    (_pruneTimer as any).unref();
-  }
-}
-
-/** Stop the background prune timer (for tests / cleanup) */
-export function stopPruneTimer(): void {
-  if (_pruneTimer !== undefined) {
-    clearInterval(_pruneTimer);
-    _pruneTimer = undefined;
-  }
-}
-
-/**
- * Fetch live departures for a single stop ID with TTL caching, timeout and fallback
+ * Fetch live departures for a single stop ID with TTL caching and a request timeout.
+ * Rejects on network/HTTP errors, timeouts, and aborts.
  */
 async function fetchArrivalsForStop(
   platform: StationPlatform,
-  apiKey: string = DEFAULT_KEY,
-  timeoutMs: number = 6000,
-  bypassCache: boolean = false,
+  bypassCache: boolean,
   signal?: AbortSignal
 ): Promise<TransitArrival[]> {
   const now = Date.now();
 
-  // Return fresh copy from cache if within TTL
   if (!bypassCache) {
     const cached = stopArrivalsCache.get(platform.stopId);
-    if (cached && now - cached.timestamp < DEFAULT_CACHE_TTL_MS) {
-      return cached.arrivals.map((arr) => {
-        const targetDeparture = arr.predictedDepartureTime || arr.scheduledDepartureTime;
-        return {
-          ...arr,
-          minutesUntilArrival: calculateMinutesRemaining(targetDeparture, now),
-        };
-      });
+    if (cached && now - cached.timestamp < CACHE_TTL_MS) {
+      return cached.arrivals;
     }
   }
 
   const controller = new AbortController();
-  const timer = setTimeout(() => controller.abort(), timeoutMs);
+  const timer = setTimeout(() => controller.abort(), REQUEST_TIMEOUT_MS);
+  const onParentAbort = () => controller.abort();
 
   // If caller provided an abort signal, abort our controller if parent signal aborts
   if (signal) {
     if (signal.aborted) {
       controller.abort();
     } else {
-      signal.addEventListener('abort', () => controller.abort(), { once: true });
+      signal.addEventListener('abort', onParentAbort, { once: true });
     }
   }
 
-  const url = `${DEFAULT_OBA_BASE}/arrivals-and-departures-for-stop/${platform.stopId}.json?key=${encodeURIComponent(
-    apiKey
+  const url = `${OBA_BASE}/arrivals-and-departures-for-stop/${platform.stopId}.json?key=${encodeURIComponent(
+    OBA_KEY
   )}&minutesBefore=5&minutesAfter=75`;
 
   try {
@@ -308,17 +196,11 @@ async function fetchArrivalsForStop(
 
     const data: RawObaResponse = await response.json();
     const arrivals = transformObaArrivals(data, platform, now);
-
-    const finalArrivals = arrivals.length === 0 ? generateFallbackArrivals(platform, now) : arrivals;
-    stopArrivalsCache.set(platform.stopId, { timestamp: now, arrivals: finalArrivals });
-    return finalArrivals;
-  } catch {
-    // Graceful fallback to realistic schedule so dashboard stays alive even during network blips
-    const fallback = generateFallbackArrivals(platform, now);
-    stopArrivalsCache.set(platform.stopId, { timestamp: now, arrivals: fallback });
-    return fallback;
+    stopArrivalsCache.set(platform.stopId, { timestamp: now, arrivals });
+    return arrivals;
   } finally {
     clearTimeout(timer);
+    signal?.removeEventListener('abort', onParentAbort);
   }
 }
 
@@ -327,7 +209,6 @@ async function fetchArrivalsForStop(
  */
 export async function fetchArrivalsForStation(
   station: Station,
-  apiKey: string = DEFAULT_KEY,
   bypassCache: boolean = false,
   signal?: AbortSignal
 ): Promise<{
@@ -342,8 +223,8 @@ export async function fetchArrivalsForStation(
   }
 
   const [arr1, arr2] = await Promise.all([
-    fetchArrivalsForStop(p1, apiKey, 6000, bypassCache, signal),
-    fetchArrivalsForStop(p2, apiKey, 6000, bypassCache, signal),
+    fetchArrivalsForStop(p1, bypassCache, signal),
+    fetchArrivalsForStop(p2, bypassCache, signal),
   ]);
 
   return {

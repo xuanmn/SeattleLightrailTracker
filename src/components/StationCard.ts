@@ -4,7 +4,7 @@ import { formatClockTime, formatCountdownBadge } from '../utils/time';
 import { formatSimpleDestination } from '../utils/format';
 import { StationDirectionFilter } from '../services/storage';
 
-export interface StationCardCallbacks {
+interface StationCardCallbacks {
   onTogglePin: (stationId: string) => void;
   onDirectionFilterChange?: (stationId: string, filter: StationDirectionFilter) => void;
   onBecameVisible?: (stationId: string) => void;
@@ -46,9 +46,6 @@ export class StationCardComponent {
   private currentDir2TripKey: string = '';
   private clockElements: HTMLElement[] = [];
   private statusElements: HTMLElement[] = [];
-  private scheduledTimes: number[] = [];
-  private isRealtimeFlags: boolean[] = [];
-  private delaySecondsArr: number[] = [];
 
   constructor(
     station: Station,
@@ -118,6 +115,22 @@ export class StationCardComponent {
     `;
   }
 
+  public setUnavailable() {
+    this.currentArrivals = undefined;
+    this.currentDir1TripKey = '';
+    this.currentDir2TripKey = '';
+    this.countdownChips = [];
+    this.countdownRows = [];
+    this.arrivalTimes = [];
+    this.clockElements = [];
+    this.statusElements = [];
+
+    const msg = '<div class="departures-empty">Live data unavailable</div>';
+    this.platform1Container.innerHTML = msg;
+    this.platform2Container.innerHTML = msg;
+    this.updateApproachTrack();
+  }
+
   public updateArrivals(data: StationArrivals) {
     this.currentArrivals = data;
 
@@ -142,9 +155,6 @@ export class StationCardComponent {
       this.arrivalTimes = [];
       this.clockElements = [];
       this.statusElements = [];
-      this.scheduledTimes = [];
-      this.isRealtimeFlags = [];
-      this.delaySecondsArr = [];
 
       this.renderPlatformArrivals(
         this.platform1Container,
@@ -179,9 +189,6 @@ export class StationCardComponent {
 
       // Update cached time data
       this.arrivalTimes[i] = targetTime;
-      this.scheduledTimes[i] = arrival.scheduledDepartureTime;
-      this.isRealtimeFlags[i] = arrival.isRealtime;
-      this.delaySecondsArr[i] = arrival.delaySeconds;
 
       // Patch countdown chip
       const badge = formatCountdownBadge(targetTime, now);
@@ -296,10 +303,7 @@ export class StationCardComponent {
       this.approachBar.style.transform = `scaleX(${progress / 100})`;
       this.approachTrain.style.left = `${progress}%`;
 
-      const isLine2 =
-        closestArrival.routeName.includes('2') ||
-        closestArrival.destination.includes('Redmond') ||
-        closestArrival.destination.includes('Bellevue');
+      const isLine2 = closestArrival.routeName === '2 Line';
 
       const isArriving = closestDiffMs <= 45000;
       this.approachBar.className = `station-approach-bar ${isLine2 ? 'line-2-approach' : 'line-1-approach'} ${isArriving ? 'arriving-pulse' : ''}`;
@@ -339,10 +343,7 @@ export class StationCardComponent {
       const info = createElement('div', 'dep-info');
       const dest = createElement('div', 'dep-dest');
 
-      const isLine2Arrival =
-        arrival.routeName.includes('2') ||
-        arrival.destination.includes('Redmond') ||
-        arrival.destination.includes('Bellevue');
+      const isLine2Arrival = arrival.routeName === '2 Line';
 
       const lineBadge = createElement(
         'span',
@@ -389,9 +390,6 @@ export class StationCardComponent {
       this.arrivalTimes.push(targetTime);
       this.clockElements.push(clock);
       this.statusElements.push(status);
-      this.scheduledTimes.push(arrival.scheduledDepartureTime);
-      this.isRealtimeFlags.push(arrival.isRealtime);
-      this.delaySecondsArr.push(arrival.delaySeconds);
 
       row.appendChild(info);
       row.appendChild(chip);

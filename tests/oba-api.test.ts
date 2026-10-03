@@ -1,11 +1,14 @@
-import { describe, it, expect, afterAll } from 'vitest';
-import { transformObaArrivals, stopPruneTimer } from '../src/services/oba-api';
+import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
+import {
+  transformObaArrivals,
+  fetchArrivalsForStation,
+  clearArrivalsCache,
+} from '../src/services/oba-api';
 import { StationPlatform } from '../src/types/transit';
 
 describe('OneBusAway API Transformer', () => {
   const mockPlatform: StationPlatform = {
     stopId: '1_99611',
-    directionName: 'Northbound to Lynnwood City Center',
     cardinalDirection: 'Northbound',
     terminalDestination: 'Lynnwood City Center',
   };
@@ -51,13 +54,11 @@ describe('OneBusAway API Transformer', () => {
     expect(arrivals[0].isRealtime).toBe(true);
     expect(arrivals[0].delaySeconds).toBe(60); // 1 minute late
     expect(arrivals[0].statusType).toBe('delayed');
-    expect(arrivals[0].minutesUntilArrival).toBe(6);
 
     // Second arrival (scheduled)
     expect(arrivals[1].tripId).toBe('40_trip_02');
     expect(arrivals[1].isRealtime).toBe(false);
     expect(arrivals[1].statusType).toBe('scheduled');
-    expect(arrivals[1].minutesUntilArrival).toBe(15);
   });
 
   it('filters out past arrivals and limits result size', () => {
@@ -99,7 +100,6 @@ describe('OneBusAway API Transformer', () => {
   it('transforms 2 Line arrivals with correct route styling and direction', () => {
     const mockLine2Platform: StationPlatform = {
       stopId: '40_E03-T1',
-      directionName: 'Eastbound to Downtown Redmond',
       cardinalDirection: 'Eastbound',
       terminalDestination: 'Downtown Redmond',
     };
@@ -128,7 +128,6 @@ describe('OneBusAway API Transformer', () => {
     const arrivals = transformObaArrivals(rawData, mockLine2Platform, now);
     expect(arrivals.length).toBe(1);
     expect(arrivals[0].routeName).toBe('2 Line');
-    expect(arrivals[0].routeColor).toBe('#0072CE');
     expect(arrivals[0].direction).toBe('Eastbound');
     expect(arrivals[0].destination).toBe('Downtown Redmond');
   });
@@ -136,7 +135,6 @@ describe('OneBusAway API Transformer', () => {
   it('handles terminus arrivals when departureEnabled is false and predictedDepartureTime is midnight sentinel', () => {
     const mockTerminusPlatform: StationPlatform = {
       stopId: '40_N23-T1',
-      directionName: 'Northbound Platform (Terminus)',
       cardinalDirection: 'Northbound',
       terminalDestination: 'Lynnwood City Center',
     };
@@ -184,19 +182,17 @@ describe('OneBusAway API Transformer', () => {
 
     // Trip 1 should use predictedArrivalTime (6 min), NOT the 6-hour sentinel!
     expect(arrivals[0].tripId).toBe('40_terminus_01');
-    expect(arrivals[0].minutesUntilArrival).toBe(6);
     expect(arrivals[0].isRealtime).toBe(true);
     expect(arrivals[0].predictedDepartureTime).toBe(now + 6 * 60 * 1000);
 
     // Trip 2 should use predictedArrivalTime (9 min)
     expect(arrivals[1].tripId).toBe('40_terminus_02');
-    expect(arrivals[1].minutesUntilArrival).toBe(9);
     expect(arrivals[1].isRealtime).toBe(true);
     expect(arrivals[1].routeName).toBe('2 Line');
   });
 });
 
-describe('OneBusAway Stop Arrival Caching & In-Memory TTL', () => {
+describe('OneBusAway Stop Arrival Fetching & In-Memory TTL Cache', () => {
   const testStation = {
     id: 'westlake',
     name: 'Westlake',
@@ -204,94 +200,95 @@ describe('OneBusAway Stop Arrival Caching & In-Memory TTL', () => {
     platforms: {
       northbound: {
         stopId: '40_1121',
-        directionName: 'Northbound',
         cardinalDirection: 'Northbound' as const,
         terminalDestination: 'Lynnwood City Center',
       },
       southbound: {
         stopId: '40_1108',
-        directionName: 'Southbound',
         cardinalDirection: 'Southbound' as const,
         terminalDestination: 'Federal Way Downtown',
       },
     },
   };
 
-  it('populates and reuses in-memory cache for consecutive station arrival requests', async () => {
-    const { clearArrivalsCache, getArrivalsCacheSize, fetchArrivalsForStation } = await import(
-      '../src/services/oba-api'
-    );
-    clearArrivalsCache();
-    expect(getArrivalsCacheSize()).toBe(0);
+  const livePayload = (tripId: string) => ({
+    code: 200,
+    data: {
+      entry: {
+        stopId: 'x',
+        arrivalsAndDepartures: [
+          {
+            tripId,
+            routeId: '40_100479',
+            routeShortName: '1 Line',
+            tripHeadsign: 'Lynnwood City Center',
+            scheduledDepartureTime: Date.now() + 5 * 60 * 1000,
+            predictedDepartureTime: Date.now() + 5 * 60 * 1000,
+            predicted: true,
+          },
+        ],
+      },
+    },
+  });
+
+  /** fetch stub that honours AbortSignal like the real implementation */
+  const stubFetch = (respond: () => unknown) => {
+    const fn = vi.fn(async (_url: string, init?: { signal?: AbortSignal }) => {
+      if (init?.signal?.aborted) throw new DOMException('Aborted', 'AbortError');
+      return { ok: true, status: 200, json: async () => respond() };
+    });
+    vi.stubGlobal('fetch', fn);
+    return fn;
+  };
+
+  beforeEach(() => clearArrivalsCache());
+  afterEach(() => vi.unstubAllGlobals());
+
+  it('reuses cached stop arrivals within the TTL', async () => {
+    const fetchMock = stubFetch(() => livePayload('LIVE_1'));
 
     const first = await fetchArrivalsForStation(testStation);
-    expect(getArrivalsCacheSize()).toBe(2); // 2 platforms cached
-
     const second = await fetchArrivalsForStation(testStation);
-    expect(second.direction1.arrivals.length).toBe(first.direction1.arrivals.length);
-    expect(second.direction2.arrivals.length).toBe(first.direction2.arrivals.length);
 
-    // Trip IDs should match cached results
+    expect(fetchMock).toHaveBeenCalledTimes(2); // one per platform, second call fully cached
     expect(second.direction1.arrivals[0].tripId).toBe(first.direction1.arrivals[0].tripId);
   });
 
-  it('bypasses cache when bypassCache parameter is true', async () => {
-    const { clearArrivalsCache, fetchArrivalsForStation } = await import('../src/services/oba-api');
-    clearArrivalsCache();
-
-    const first = await fetchArrivalsForStation(testStation);
-    const forced = await fetchArrivalsForStation(testStation, undefined, true);
-    expect(forced.direction1.arrivals.length).toBeGreaterThan(0);
-    expect(first.direction1.arrivals.length).toBeGreaterThan(0);
-  });
-
-  it('clears cache entries when clearArrivalsCache is invoked', async () => {
-    const { clearArrivalsCache, getArrivalsCacheSize, fetchArrivalsForStation } = await import(
-      '../src/services/oba-api'
-    );
-    await fetchArrivalsForStation(testStation);
-    expect(getArrivalsCacheSize()).toBeGreaterThan(0);
-
-    clearArrivalsCache();
-    expect(getArrivalsCacheSize()).toBe(0);
-  });
-
-  it('prunes entries older than eviction threshold when pruneStaleCache runs', async () => {
-    const { clearArrivalsCache, getArrivalsCacheSize, fetchArrivalsForStation, pruneStaleCache } =
-      await import('../src/services/oba-api');
-    clearArrivalsCache();
+  it('re-fetches when bypassCache is true', async () => {
+    const fetchMock = stubFetch(() => livePayload('LIVE_1'));
 
     await fetchArrivalsForStation(testStation);
-    expect(getArrivalsCacheSize()).toBe(2);
+    await fetchArrivalsForStation(testStation, true);
 
-    // Right after fetch, entries are fresh, so pruneStaleCache should not evict them
-    pruneStaleCache();
-    expect(getArrivalsCacheSize()).toBe(2);
-
-    // Mock Date.now to advance past the 100s threshold
-    const realNow = Date.now;
-    try {
-      Date.now = () => realNow() + 110_000;
-      pruneStaleCache();
-      expect(getArrivalsCacheSize()).toBe(0);
-    } finally {
-      Date.now = realNow;
-    }
+    expect(fetchMock).toHaveBeenCalledTimes(4);
   });
 
-  it('handles AbortSignal without crashing', async () => {
-    const { fetchArrivalsForStation } = await import('../src/services/oba-api');
+  it('rejects instead of inventing simulated trains when the network fails', async () => {
+    vi.stubGlobal('fetch', vi.fn(async () => { throw new TypeError('Failed to fetch'); }));
+
+    await expect(fetchArrivalsForStation(testStation)).rejects.toThrow();
+  });
+
+  it('returns no arrivals (not simulated ones) when the API reports no upcoming trips', async () => {
+    stubFetch(() => ({ code: 200, data: { entry: { stopId: 'x', arrivalsAndDepartures: [] } } }));
+
+    const res = await fetchArrivalsForStation(testStation);
+
+    expect(res.direction1.arrivals).toEqual([]);
+    expect(res.direction2.arrivals).toEqual([]);
+  });
+
+  it('does not cache anything when a request is aborted', async () => {
+    stubFetch(() => livePayload('LIVE_AFTER_ABORT'));
     const controller = new AbortController();
     controller.abort();
 
-    // With aborted signal, fallback is returned safely
-    const res = await fetchArrivalsForStation(testStation, undefined, true, controller.signal);
-    expect(res.direction1.arrivals.length).toBeGreaterThan(0);
-    expect(res.direction2.arrivals.length).toBeGreaterThan(0);
-  });
+    await expect(
+      fetchArrivalsForStation(testStation, false, controller.signal)
+    ).rejects.toThrow();
 
-  afterAll(() => {
-    stopPruneTimer();
+    const next = await fetchArrivalsForStation(testStation);
+    expect(next.direction1.arrivals[0].tripId).toBe('LIVE_AFTER_ABORT');
   });
 });
 

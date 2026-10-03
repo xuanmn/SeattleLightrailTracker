@@ -142,8 +142,8 @@ describe('Mobile Frontend Design & UX Specifications', () => {
       name: 'Westlake',
       lines: ['line-1'],
       platforms: {
-        northbound: { stopId: '1', directionName: 'Northbound', cardinalDirection: 'Northbound', terminalDestination: 'Lynnwood' },
-        southbound: { stopId: '2', directionName: 'Southbound', cardinalDirection: 'Southbound', terminalDestination: 'Federal Way' },
+        northbound: { stopId: '1', cardinalDirection: 'Northbound', terminalDestination: 'Lynnwood' },
+        southbound: { stopId: '2', cardinalDirection: 'Southbound', terminalDestination: 'Federal Way' },
       },
     };
 
@@ -157,6 +157,43 @@ describe('Mobile Frontend Design & UX Specifications', () => {
 
     const segmentBtns = segmented?.querySelectorAll('.direction-segment-btn');
     expect(segmentBtns?.length).toBe(3); // Both, North, South
+  });
+
+  it('shows the full station list (not stale search results) when the picker is reopened', () => {
+    const picker = new StationPickerModal({
+      onTogglePin: () => {},
+      isStationPinned: () => false,
+    });
+
+    picker.open('line-1');
+    const searchInput = document.querySelector('.picker-search-input') as HTMLInputElement;
+    searchInput.value = 'westlake';
+    searchInput.dispatchEvent(new Event('input'));
+    picker.close();
+
+    picker.open('line-1');
+
+    expect(searchInput.value).toBe('');
+    expect(document.querySelectorAll('.picker-station-row').length).toBeGreaterThan(1);
+  });
+
+  it('replaces the loading skeleton with an explicit message when live data is unavailable', () => {
+    const mockStation: Station = {
+      id: 'westlake',
+      name: 'Westlake',
+      lines: ['line-1'],
+      platforms: {
+        northbound: { stopId: '1', cardinalDirection: 'Northbound', terminalDestination: 'Lynnwood' },
+        southbound: { stopId: '2', cardinalDirection: 'Southbound', terminalDestination: 'Federal Way' },
+      },
+    };
+    const card = new StationCardComponent(mockStation, false, false, { onTogglePin: () => {} });
+
+    card.setUnavailable();
+
+    const el = card.getElement();
+    expect(el.querySelectorAll('.skeleton-row').length).toBe(0);
+    expect(el.textContent).toContain('Live data unavailable');
   });
 
   it('preserves native mobile pull-to-refresh without overscroll-behavior-y: none on root html', async () => {
