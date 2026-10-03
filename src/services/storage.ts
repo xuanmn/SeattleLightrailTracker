@@ -31,7 +31,7 @@ export function clearStorageCache(): void {
 }
 
 // Invalidate in-memory caches if another browser tab modifies localStorage
-if (typeof window !== 'undefined' && typeof window.addEventListener === 'function') {
+if (typeof window.addEventListener === 'function') {
   window.addEventListener('storage', () => {
     clearStorageCache();
   });

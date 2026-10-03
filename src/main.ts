@@ -396,7 +396,7 @@ class TransitTrackerApp {
     const station = getStationById(stationId);
     const stationName = station?.name || 'Station';
 
-    // Dynamically refresh the My Stations pill count
+    // Refresh view mode pill states
     this.renderViewModePills();
 
     if (this.showOnlyPinned) {
@@ -662,7 +662,6 @@ if (document.readyState === 'loading') {
  * Register Service Worker for offline PWA support in underground stations
  */
 if (
-  typeof window !== 'undefined' &&
   'serviceWorker' in navigator &&
   (window.location.protocol === 'https:' ||
     window.location.hostname === 'localhost' ||

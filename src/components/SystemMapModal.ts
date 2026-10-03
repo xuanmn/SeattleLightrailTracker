@@ -145,8 +145,8 @@ export class SystemMapModal {
 
   private updateCachedDimensions() {
     if (!this.bodyEl) return;
-    this.viewportW = this.bodyEl.clientWidth || (typeof window !== 'undefined' ? window.innerWidth : 400) || 400;
-    this.viewportH = this.bodyEl.clientHeight || (typeof window !== 'undefined' ? window.innerHeight * 0.75 : 700) || 700;
+    this.viewportW = this.bodyEl.clientWidth || window.innerWidth || 400;
+    this.viewportH = this.bodyEl.clientHeight || (window.innerHeight * 0.75) || 700;
     if (typeof this.bodyEl.getBoundingClientRect === 'function') {
       const rect = this.bodyEl.getBoundingClientRect();
       this.bodyRectLeft = rect.left;

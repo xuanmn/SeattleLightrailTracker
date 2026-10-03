@@ -536,7 +536,7 @@ export class StationCardComponent {
   }
 
   private setupIntersectionObserver() {
-    if (typeof window !== 'undefined' && 'IntersectionObserver' in window) {
+    if ('IntersectionObserver' in window) {
       this.observer = new window.IntersectionObserver(
         (entries) => {
           for (const entry of entries) {
