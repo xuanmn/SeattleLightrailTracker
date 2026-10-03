@@ -11,20 +11,18 @@ export function calculateMinutesRemaining(targetEpochMs: number, nowEpochMs: num
 export function formatCountdownBadge(
   targetEpochMs: number,
   nowEpochMs: number = Date.now()
-): { text: string; isNow: boolean; rawMinutes: number } {
+): { text: string; isNow: boolean } {
   const diffMs = targetEpochMs - nowEpochMs;
-  const rawMinutes = diffMs / (60 * 1000);
 
   if (diffMs <= 45 * 1000) {
     // Under 45 seconds -> ARRIVING NOW
-    return { text: 'ARRIVING', isNow: true, rawMinutes };
+    return { text: 'ARRIVING', isNow: true };
   }
 
-  const minutes = Math.max(1, Math.round(rawMinutes));
+  const minutes = Math.max(1, Math.round(diffMs / (60 * 1000)));
   return {
     text: `${minutes} MIN`,
     isNow: false,
-    rawMinutes,
   };
 }
 

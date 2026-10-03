@@ -3,12 +3,12 @@ import './styles/layout.css';
 import './styles/board.css';
 import './styles/map.css';
 
-import { FaqModal } from './components/FaqModal';
+import type { FaqModal } from './components/FaqModal';
 import { HeaderComponent } from './components/Header';
 import { SettingsModal } from './components/SettingsModal';
 import { StationCardComponent } from './components/StationCard';
 import { StationPickerModal } from './components/StationPickerModal';
-import { SystemMapModal } from './components/SystemMapModal';
+import type { SystemMapModal } from './components/SystemMapModal';
 import { getStationById, getStationsByLine, LINE_CONFIG } from './data/stations';
 import { fetchArrivalsForStation } from './services/oba-api';
 import {
@@ -30,8 +30,8 @@ class TransitTrackerApp {
   private header!: HeaderComponent;
   private pickerModal!: StationPickerModal;
   private settingsModal!: SettingsModal;
-  private faqModal!: FaqModal;
-  private mapModal!: SystemMapModal;
+  private faqModal?: FaqModal;
+  private mapModal?: SystemMapModal;
 
   private activeLine: TransitLineId = 'line-1';
   private showOnlyPinned: boolean = true; // Default to showing only user's chosen favorite stations
@@ -53,6 +53,7 @@ class TransitTrackerApp {
   private toastTimeout?: number;
   private isFetching: boolean = false;
   private hasPendingFetch: boolean = false;
+  private pendingFetchIsManual: boolean = false;
   private activeFetchId: number = 0;
   private fetchController?: AbortController;
   private myStationsBtn?: HTMLButtonElement;
@@ -87,20 +88,29 @@ class TransitTrackerApp {
       onSettingsSaved: (newSettings) => this.handleSettingsSaved(newSettings),
     });
 
-    this.faqModal = new FaqModal();
-    this.mapModal = new SystemMapModal();
-
     // Toast Container
     this.toastEl = createElement('div', 'app-toast');
     this.toastEl.id = 'app-toast';
     document.body.appendChild(this.toastEl);
 
-    // Header
+    // Header with lazy modal loading
     this.header = new HeaderComponent(this.activeLine, {
       onLineChange: (line) => this.switchLine(line),
       onSettingsClick: () => this.settingsModal.open(),
-      onFaqClick: () => this.faqModal.open(),
-      onMapClick: () => this.mapModal.open(),
+      onFaqClick: async () => {
+        if (!this.faqModal) {
+          const { FaqModal } = await import('./components/FaqModal');
+          this.faqModal = new FaqModal();
+        }
+        this.faqModal.open();
+      },
+      onMapClick: async () => {
+        if (!this.mapModal) {
+          const { SystemMapModal } = await import('./components/SystemMapModal');
+          this.mapModal = new SystemMapModal();
+        }
+        this.mapModal.open();
+      },
     });
     this.appEl.appendChild(this.header.getElement());
 
@@ -458,6 +468,7 @@ class TransitTrackerApp {
   private async fetchVisibleArrivals(isManual: boolean = false) {
     if (this.isFetching) {
       this.hasPendingFetch = true;
+      if (isManual) this.pendingFetchIsManual = true;
       return;
     }
     this.isFetching = true;
@@ -500,7 +511,7 @@ class TransitTrackerApp {
         await Promise.all(
           chunk.map(async (station) => {
             try {
-              const result = await fetchArrivalsForStation(station, undefined, isManual, currentSignal);
+              const result = await fetchArrivalsForStation(station, isManual, currentSignal);
               // If a newer fetch was initiated while this one was running, discard old response
               if (this.activeFetchId !== currentFetchId || currentSignal.aborted) return;
 
@@ -519,6 +530,10 @@ class TransitTrackerApp {
             } catch (err) {
               failedFetches++;
               console.warn(`Failed fetching arrivals for ${station.name}:`, err);
+              const card = this.cardComponents.get(station.id);
+              if (card && !this.arrivalsData.has(station.id)) {
+                card.setUnavailable();
+              }
             }
           })
         );
@@ -528,7 +543,7 @@ class TransitTrackerApp {
         if (failedFetches === stations.length && stations.length > 0) {
           this.staleBannerEl.classList.remove('hidden');
           this.staleBannerEl.textContent =
-            'Network connection interrupted. Showing estimated transit schedules while reconnecting...';
+            'Network connection interrupted. Unable to reach live transit servers while reconnecting...';
         } else {
           this.staleBannerEl.classList.add('hidden');
         }
@@ -537,13 +552,15 @@ class TransitTrackerApp {
       if (isManual && this.activeFetchId === currentFetchId) {
         this.staleBannerEl.classList.remove('hidden');
         this.staleBannerEl.textContent =
-          'Network connection interrupted. Showing estimated transit schedules while reconnecting...';
+          'Network connection interrupted. Unable to reach live transit servers while reconnecting...';
       }
     } finally {
       this.isFetching = false;
       if (this.hasPendingFetch) {
         this.hasPendingFetch = false;
-        this.fetchVisibleArrivals();
+        const manual = this.pendingFetchIsManual;
+        this.pendingFetchIsManual = false;
+        this.fetchVisibleArrivals(manual);
       }
     }
   }
@@ -573,6 +590,10 @@ class TransitTrackerApp {
       }
     } catch (err) {
       console.warn(`Failed fetching arrivals for ${station.name}:`, err);
+      const card = this.cardComponents.get(station.id);
+      if (card && !this.arrivalsData.has(station.id)) {
+        card.setUnavailable();
+      }
     } finally {
       this.inFlightStationFetches.delete(station.id);
     }

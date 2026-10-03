@@ -4,7 +4,7 @@ import { createElement, ICONS } from '../utils/dom';
 import { lockBodyScroll, unlockBodyScroll } from '../utils/scrollLock';
 import { attachBottomSheetSwipe } from '../utils/bottomSheetGesture';
 
-export interface SettingsModalCallbacks {
+interface SettingsModalCallbacks {
   onSettingsSaved: (settings: AppSettings) => void;
 }
 

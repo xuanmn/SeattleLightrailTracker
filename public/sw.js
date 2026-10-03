@@ -101,7 +101,26 @@ self.addEventListener('fetch', (event) => {
     return;
   }
 
-  // 3. App static assets (HTML, CSS, JS, Images, Icons): Stale-While-Revalidate
+  // 3. Navigation requests (HTML): Network-First with Cache fallback for offline transit use
+  if (request.mode === 'navigate') {
+    event.respondWith(
+      fetch(request)
+        .then((networkResponse) => {
+          if (networkResponse && networkResponse.status === 200) {
+            const clone = networkResponse.clone();
+            caches.open(CACHE_NAME).then((cache) => cache.put(request, clone));
+          }
+          return networkResponse;
+        })
+        .catch(async () => {
+          const cache = await caches.open(CACHE_NAME);
+          return (await cache.match('./index.html')) || (await cache.match('./'));
+        })
+    );
+    return;
+  }
+
+  // 4. App static assets (Hashed JS, CSS, Images, Icons): Stale-While-Revalidate
   event.respondWith(
     caches.open(CACHE_NAME).then((cache) =>
       cache.match(request).then((cachedResponse) => {
@@ -112,22 +131,10 @@ self.addEventListener('fetch', (event) => {
             }
             return networkResponse;
           })
-          .catch(() => {
-            // Offline fallback for navigation requests to root index.html
-            if (request.mode === 'navigate') {
-              return cache.match('./index.html') || cache.match('./');
-            }
-          });
+          .catch(() => cachedResponse);
 
         return cachedResponse || fetchPromise;
       })
     )
   );
-});
-
-// 4. Message Event: allow clients to trigger skipWaiting on update
-self.addEventListener('message', (event) => {
-  if (event.data && event.data.type === 'SKIP_WAITING') {
-    self.skipWaiting();
-  }
 });

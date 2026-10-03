@@ -1,6 +1,7 @@
 import { createElement, ICONS } from '../utils/dom';
 import { lockBodyScroll, unlockBodyScroll } from '../utils/scrollLock';
 import { attachBottomSheetSwipe } from '../utils/bottomSheetGesture';
+import { getStationById } from '../data/stations';
 
 export class SystemMapModal {
   private overlay: HTMLElement;
@@ -766,55 +767,55 @@ export class SystemMapModal {
         </g>
 
         <!-- ================= LEFT SPINE: SHARED 1 LINE & 2 LINE STATIONS ================= -->
-        ${this.renderDualCapsuleStation('lynnwood-city-center', 285, 75, 'Lynnwood City Center', 'Park & Ride / Transit Center', 'left', true)}
-        ${this.renderDualCapsuleStation('mountlake-terrace', 285, 117, 'Mountlake Terrace', 'Park & Ride / Freeway Station', 'left')}
-        ${this.renderDualCapsuleStation('shoreline-north-185th', 285, 158, 'Shoreline North', 'Park & Ride / NE 185th St', 'left')}
-        ${this.renderDualCapsuleStation('shoreline-south-148th', 285, 200, 'Shoreline South', 'Park & Ride / NE 148th St', 'left')}
-        ${this.renderDualCapsuleStation('pinehurst', 285, 241, 'Pinehurst', 'NE 130th St / 5th Ave NE', 'left')}
-        ${this.renderDualCapsuleStation('northgate', 285, 283, 'Northgate', 'Park & Ride / Kraken Iceplex', 'left')}
-        ${this.renderDualCapsuleStation('roosevelt', 285, 324, 'Roosevelt', 'Park & Ride / Roosevelt High', 'left')}
-        ${this.renderDualCapsuleStation('u-district', 285, 366, 'U District', 'UW Tower / The Ave', 'left')}
-        ${this.renderDualCapsuleStation('university-of-washington', 285, 407, 'University of Washington', 'Husky Stadium / UW Medical', 'left')}
-        ${this.renderDualCapsuleStation('capitol-hill', 285, 449, 'Capitol Hill', 'Broadway / First Hill Streetcar', 'left')}
+        ${this.renderDualCapsuleStation('lynnwood-city-center', 285, 75, 'left', true)}
+        ${this.renderDualCapsuleStation('mountlake-terrace', 285, 117, 'left')}
+        ${this.renderDualCapsuleStation('shoreline-north-185th', 285, 158, 'left')}
+        ${this.renderDualCapsuleStation('shoreline-south-148th', 285, 200, 'left')}
+        ${this.renderDualCapsuleStation('pinehurst', 285, 241, 'left')}
+        ${this.renderDualCapsuleStation('northgate', 285, 283, 'left')}
+        ${this.renderDualCapsuleStation('roosevelt', 285, 324, 'left')}
+        ${this.renderDualCapsuleStation('u-district', 285, 366, 'left')}
+        ${this.renderDualCapsuleStation('university-of-washington', 285, 407, 'left')}
+        ${this.renderDualCapsuleStation('capitol-hill', 285, 449, 'left')}
 
         <!-- Downtown Seattle Transit Tunnel Stations -->
-        ${this.renderDualCapsuleStation('westlake', 285, 490, 'Westlake', 'Seattle Center Monorail / Pine St', 'left')}
-        ${this.renderDualCapsuleStation('symphony', 285, 532, 'Symphony', 'Benaroya Hall / University St', 'left')}
-        ${this.renderDualCapsuleStation('pioneer-square', 285, 573, 'Pioneer Square', 'WA State Ferries / Streetcar', 'left')}
+        ${this.renderDualCapsuleStation('westlake', 285, 490, 'left')}
+        ${this.renderDualCapsuleStation('symphony', 285, 532, 'left')}
+        ${this.renderDualCapsuleStation('pioneer-square', 285, 573, 'left')}
         
         <!-- Highlighted 1 Line ⇄ 2 Line Transfer Hub -->
-        ${this.renderTransferHubStation('international-district-chinatown', 285, 615, 'Intl. District / Chinatown')}
+        ${this.renderTransferHubStation('international-district-chinatown', 285, 615)}
 
         <!-- ================= LEFT SPINE: 1 LINE SOUTH STATIONS ================= -->
-        ${this.renderLine1Station('stadium', 272, 665, 'Stadium', 'Lumen Field / T-Mobile Park', 'left')}
-        ${this.renderLine1Station('sodo', 272, 710, 'SODO', 'SODO Busway / Industrial District', 'left')}
-        ${this.renderLine1Station('beacon-hill', 272, 755, 'Beacon Hill', 'Tunnel Station / El Centro', 'left')}
-        ${this.renderLine1Station('mount-baker', 272, 800, 'Mount Baker', 'Transit Center / Franklin High', 'left')}
-        ${this.renderLine1Station('columbia-city', 272, 845, 'Columbia City', 'Historic District / Rainier Ave', 'left')}
-        ${this.renderLine1Station('othello', 272, 890, 'Othello', 'Rainier Valley / Othello Park', 'left')}
-        ${this.renderLine1Station('rainier-beach', 272, 935, 'Rainier Beach', 'Rainier Beach / Chief Sealth Trail', 'left')}
-        ${this.renderLine1Station('tukwila-intl-blvd', 272, 980, 'Tukwila Intl. Blvd.', 'Park & Ride / RapidRide A', 'left')}
-        ${this.renderAirportStation('seatac-airport', 272, 1025, 'SeaTac / Airport', "Seattle-Tacoma Int'l Airport", 'left')}
-        ${this.renderLine1Station('angle-lake', 272, 1070, 'Angle Lake', 'Park & Ride / S 200th St', 'left')}
-        ${this.renderLine1Station('kent-des-moines', 272, 1115, 'Kent Des Moines', 'Highline College / Park & Ride', 'left')}
-        ${this.renderLine1Station('star-lake', 272, 1160, 'Star Lake', 'Park & Ride / S 272nd St', 'left')}
-        ${this.renderLine1Station('federal-way-downtown', 272, 1205, 'Federal Way Downtown', 'Park & Ride / Transit Center', 'left', true)}
+        ${this.renderLine1Station('stadium', 272, 665, 'left')}
+        ${this.renderLine1Station('sodo', 272, 710, 'left')}
+        ${this.renderLine1Station('beacon-hill', 272, 755, 'left')}
+        ${this.renderLine1Station('mount-baker', 272, 800, 'left')}
+        ${this.renderLine1Station('columbia-city', 272, 845, 'left')}
+        ${this.renderLine1Station('othello', 272, 890, 'left')}
+        ${this.renderLine1Station('rainier-beach', 272, 935, 'left')}
+        ${this.renderLine1Station('tukwila-intl-blvd', 272, 980, 'left')}
+        ${this.renderAirportStation('seatac-airport', 272, 1025, 'left')}
+        ${this.renderLine1Station('angle-lake', 272, 1070, 'left')}
+        ${this.renderLine1Station('kent-des-moines', 272, 1115, 'left')}
+        ${this.renderLine1Station('star-lake', 272, 1160, 'left')}
+        ${this.renderLine1Station('federal-way-downtown', 272, 1205, 'left', true)}
 
         <!-- ================= CONNECTING SEGMENT (I-90 CORRIDOR) ================= -->
-        ${this.renderLine2Station('judkins-park', 355, 665, 'Judkins Park', 'Rainier Ave S / I-90 Trail', 'bottom')}
-        ${this.renderLine2Station('mercer-island', 480, 665, 'Mercer Island', 'Park & Ride / I-90 Trail', 'bottom')}
+        ${this.renderLine2Station('judkins-park', 355, 665, 'bottom')}
+        ${this.renderLine2Station('mercer-island', 480, 665, 'bottom')}
 
         <!-- ================= RIGHT SPINE: 2 LINE EASTSIDE STATIONS ================= -->
-        ${this.renderLine2Station('south-bellevue', 540, 635, 'South Bellevue', 'Park & Ride / Mercer Slough', 'right', true)}
-        ${this.renderLine2Station('east-main', 540, 571, 'East Main', 'Surrey Downs / 112th Ave SE', 'right')}
-        ${this.renderLine2Station('bellevue-downtown', 540, 509, 'Bellevue Downtown', 'Bellevue Transit Center', 'right', true)}
-        ${this.renderLine2Station('wilburton', 540, 447, 'Wilburton', 'Overlake Medical Center', 'right')}
-        ${this.renderLine2Station('spring-district', 540, 385, 'Spring District', '120th Station / Spring District', 'right')}
-        ${this.renderLine2Station('bel-red', 540, 323, 'BelRed', 'Park & Ride / 130th Station', 'right')}
-        ${this.renderLine2Station('overlake-village', 540, 261, 'Overlake Village', '152nd Ave NE / Overlake Village', 'right')}
-        ${this.renderLine2Station('redmond-technology', 540, 199, 'Redmond Technology', 'Microsoft Campus / Transit Center', 'right', true)}
-        ${this.renderLine2Station('marymoor-village', 540, 137, 'Marymoor Village', 'Park & Ride / Marymoor Park', 'right')}
-        ${this.renderLine2Station('downtown-redmond', 540, 75, 'Downtown Redmond', 'Redmond Town Center', 'right', true)}
+        ${this.renderLine2Station('south-bellevue', 540, 635, 'right', true)}
+        ${this.renderLine2Station('east-main', 540, 571, 'right')}
+        ${this.renderLine2Station('bellevue-downtown', 540, 509, 'right', true)}
+        ${this.renderLine2Station('wilburton', 540, 447, 'right')}
+        ${this.renderLine2Station('spring-district', 540, 385, 'right')}
+        ${this.renderLine2Station('bel-red', 540, 323, 'right')}
+        ${this.renderLine2Station('overlake-village', 540, 261, 'right')}
+        ${this.renderLine2Station('redmond-technology', 540, 199, 'right', true)}
+        ${this.renderLine2Station('marymoor-village', 540, 137, 'right')}
+        ${this.renderLine2Station('downtown-redmond', 540, 75, 'right', true)}
       </svg>
     `;
   }
@@ -822,9 +823,10 @@ export class SystemMapModal {
   private renderTransferHubStation(
     id: string,
     x: number,
-    y: number,
-    name: string
+    y: number
   ): string {
+    const station = getStationById(id);
+    const name = station?.name || 'Intl. District / Chinatown';
     const textX = 252;
 
     return `
@@ -874,11 +876,12 @@ export class SystemMapModal {
     id: string,
     x: number,
     y: number,
-    name: string,
-    sub: string,
     labelPos: 'left' | 'right' = 'left',
     isTerminus: boolean = false
   ): string {
+    const station = getStationById(id);
+    const name = station?.name || id;
+    const sub = station?.shortName || '';
     const textX = labelPos === 'left' ? 252 : x + 26;
     const textAnchor = labelPos === 'left' ? 'end' : 'start';
     const r = isTerminus ? 5.5 : 4.8;
@@ -898,11 +901,12 @@ export class SystemMapModal {
     id: string,
     x: number,
     y: number,
-    name: string,
-    sub: string,
     labelPos: 'left' | 'right' = 'left',
     isTerminus: boolean = false
   ): string {
+    const station = getStationById(id);
+    const name = station?.name || id;
+    const sub = station?.shortName || '';
     const textX = labelPos === 'left' ? 252 : x + 18;
     const textAnchor = labelPos === 'left' ? 'end' : 'start';
     const r = isTerminus ? 7 : 5.5;
@@ -920,11 +924,12 @@ export class SystemMapModal {
     id: string,
     x: number,
     y: number,
-    name: string,
-    sub: string,
     labelPos: 'left' | 'right' | 'bottom' = 'right',
     isMajor: boolean = false
   ): string {
+    const station = getStationById(id);
+    const name = station?.name || id;
+    const sub = station?.shortName || '';
     let textX = x + 18;
     let textY = y + 4.5;
     let textAnchor = 'start';
@@ -954,10 +959,11 @@ export class SystemMapModal {
     id: string,
     x: number,
     y: number,
-    name: string,
-    sub: string,
     labelPos: 'left' | 'right' = 'left'
   ): string {
+    const station = getStationById(id);
+    const name = station?.name || id;
+    const sub = station?.shortName || '';
     const textX = labelPos === 'left' ? 252 : x + 22;
     const textAnchor = labelPos === 'left' ? 'end' : 'start';
 

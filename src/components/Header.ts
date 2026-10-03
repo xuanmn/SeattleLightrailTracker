@@ -1,7 +1,7 @@
 import { TransitLineId } from '../types/transit';
 import { createElement, ICONS } from '../utils/dom';
 
-export interface HeaderCallbacks {
+interface HeaderCallbacks {
   onLineChange: (line: TransitLineId) => void;
   onSettingsClick: () => void;
   onFaqClick: () => void;

@@ -9,7 +9,7 @@
  * - Backdrop touch-scroll suppression.
  */
 
-export interface BottomSheetSwipeOptions {
+interface BottomSheetSwipeOptions {
   overlay: HTMLElement;
   container: HTMLElement;
   handle?: HTMLElement;
