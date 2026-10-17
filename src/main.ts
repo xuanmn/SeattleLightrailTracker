@@ -1,7 +1,7 @@
 import './styles/theme.css';
 import './styles/layout.css';
 import './styles/board.css';
-import './styles/map.css';
+// map.css is imported by the lazily loaded SystemMapModal chunk
 
 import type { FaqModal } from './components/FaqModal';
 import { HeaderComponent } from './components/Header';
