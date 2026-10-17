@@ -146,14 +146,81 @@ const CACHE_TTL_MS = 25 * 1000;
 const REQUEST_TIMEOUT_MS = 6000;
 
 /**
+ * In-flight request registry for de-duplicating concurrent fetches of the same stop
+ * (e.g. the 60s poll overlapping an on-scroll fetch, or 1 Line / 2 Line sharing a platform).
+ * Each entry is ref-counted by subscribers; the network request is aborted only
+ * once every subscriber has aborted.
+ */
+interface InFlightEntry {
+  promise: Promise<TransitArrival[]>;
+  controller: AbortController;
+  subscribers: number;
+}
+
+const inFlightRequests = new Map<string, InFlightEntry>();
+
+/**
  * Clear the in-memory arrivals cache (useful on manual refresh or test resets)
  */
 export function clearArrivalsCache(): void {
   stopArrivalsCache.clear();
+  inFlightRequests.clear();
+}
+
+function createAbortError(): DOMException {
+  return new DOMException('The operation was aborted.', 'AbortError');
 }
 
 /**
- * Fetch live departures for a single stop ID with TTL caching and a request timeout.
+ * Start (or reuse) the shared network request for a stop.
+ */
+function getOrStartStopRequest(platform: StationPlatform): InFlightEntry {
+  const existing = inFlightRequests.get(platform.stopId);
+  // Never join a request that is already being torn down
+  if (existing && !existing.controller.signal.aborted) return existing;
+
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), REQUEST_TIMEOUT_MS);
+  const url = `${OBA_BASE}/arrivals-and-departures-for-stop/${platform.stopId}.json?key=${encodeURIComponent(
+    OBA_KEY
+  )}&minutesBefore=5&minutesAfter=75`;
+
+  const entry: InFlightEntry = {
+    promise: Promise.resolve([]),
+    controller,
+    subscribers: 0,
+  };
+  // Register before starting so the cleanup in `finally` always finds this entry
+  inFlightRequests.set(platform.stopId, entry);
+
+  entry.promise = (async () => {
+    try {
+      const response = await fetch(url, { signal: controller.signal });
+      if (!response.ok) {
+        throw new Error(`API returned HTTP ${response.status}`);
+      }
+      const data: RawObaResponse = await response.json();
+      const now = Date.now();
+      const arrivals = transformObaArrivals(data, platform, now);
+      stopArrivalsCache.set(platform.stopId, { timestamp: now, arrivals });
+      return arrivals;
+    } finally {
+      clearTimeout(timer);
+      if (inFlightRequests.get(platform.stopId) === entry) {
+        inFlightRequests.delete(platform.stopId);
+      }
+    }
+  })();
+  // Subscribers observe failures via their own await; this prevents an unhandled
+  // rejection when every subscriber has already aborted and left.
+  entry.promise.catch(() => undefined);
+
+  return entry;
+}
+
+/**
+ * Fetch live departures for a single stop ID with TTL caching, in-flight
+ * de-duplication and a request timeout.
  * Rejects on network/HTTP errors, timeouts, and aborts.
  */
 async function fetchArrivalsForStop(
@@ -161,46 +228,42 @@ async function fetchArrivalsForStop(
   bypassCache: boolean,
   signal?: AbortSignal
 ): Promise<TransitArrival[]> {
-  const now = Date.now();
+  if (signal?.aborted) throw createAbortError();
 
   if (!bypassCache) {
     const cached = stopArrivalsCache.get(platform.stopId);
-    if (cached && now - cached.timestamp < CACHE_TTL_MS) {
+    if (cached && Date.now() - cached.timestamp < CACHE_TTL_MS) {
       return cached.arrivals;
     }
   }
 
-  const controller = new AbortController();
-  const timer = setTimeout(() => controller.abort(), REQUEST_TIMEOUT_MS);
-  const onParentAbort = () => controller.abort();
+  // An in-flight request is by definition fresh, so even bypassCache callers join it.
+  const entry = getOrStartStopRequest(platform);
+  entry.subscribers++;
 
-  // If caller provided an abort signal, abort our controller if parent signal aborts
-  if (signal) {
-    if (signal.aborted) {
-      controller.abort();
-    } else {
-      signal.addEventListener('abort', onParentAbort, { once: true });
+  if (!signal) {
+    try {
+      return await entry.promise;
+    } finally {
+      entry.subscribers--;
     }
   }
 
-  const url = `${OBA_BASE}/arrivals-and-departures-for-stop/${platform.stopId}.json?key=${encodeURIComponent(
-    OBA_KEY
-  )}&minutesBefore=5&minutesAfter=75`;
+  let onAbort!: () => void;
+  const abortPromise = new Promise<never>((_, reject) => {
+    onAbort = () => reject(createAbortError());
+    signal.addEventListener('abort', onAbort, { once: true });
+  });
 
   try {
-    const response = await fetch(url, { signal: controller.signal });
-
-    if (!response.ok) {
-      throw new Error(`API returned HTTP ${response.status}`);
-    }
-
-    const data: RawObaResponse = await response.json();
-    const arrivals = transformObaArrivals(data, platform, now);
-    stopArrivalsCache.set(platform.stopId, { timestamp: now, arrivals });
-    return arrivals;
+    return await Promise.race([entry.promise, abortPromise]);
   } finally {
-    clearTimeout(timer);
-    signal?.removeEventListener('abort', onParentAbort);
+    signal.removeEventListener('abort', onAbort);
+    entry.subscribers--;
+    // Last subscriber left via abort: cancel the underlying network request
+    if (signal.aborted && entry.subscribers === 0) {
+      entry.controller.abort();
+    }
   }
 }
 

@@ -290,5 +290,58 @@ describe('OneBusAway Stop Arrival Fetching & In-Memory TTL Cache', () => {
     const next = await fetchArrivalsForStation(testStation);
     expect(next.direction1.arrivals[0].tripId).toBe('LIVE_AFTER_ABORT');
   });
+
+  it('shares a single in-flight request between concurrent callers for the same stop', async () => {
+    const fetchMock = stubFetch(() => livePayload('SHARED'));
+
+    const [a, b] = await Promise.all([
+      fetchArrivalsForStation(testStation),
+      fetchArrivalsForStation(testStation, true), // bypassCache still joins the in-flight request
+    ]);
+
+    expect(fetchMock).toHaveBeenCalledTimes(2); // one per platform, not four
+    expect(a.direction1.arrivals[0].tripId).toBe('SHARED');
+    expect(b.direction1.arrivals[0].tripId).toBe('SHARED');
+  });
+
+  it('does not cancel the shared request for other callers when one caller aborts', async () => {
+    let release!: () => void;
+    const gate = new Promise<void>((r) => (release = r));
+    const fetchMock = vi.fn(async (_url: string, init?: { signal?: AbortSignal }) => {
+      await gate;
+      if (init?.signal?.aborted) throw new DOMException('Aborted', 'AbortError');
+      return { ok: true, status: 200, json: async () => livePayload('SURVIVOR') };
+    });
+    vi.stubGlobal('fetch', fetchMock);
+
+    const controller = new AbortController();
+    const aborted = fetchArrivalsForStation(testStation, false, controller.signal);
+    const survivor = fetchArrivalsForStation(testStation);
+    controller.abort();
+    release();
+
+    await expect(aborted).rejects.toThrow();
+    const res = await survivor;
+    expect(res.direction1.arrivals[0].tripId).toBe('SURVIVOR');
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+  });
+
+  it('aborts the underlying request once every caller has aborted', async () => {
+    let seenSignal: AbortSignal | undefined;
+    vi.stubGlobal(
+      'fetch',
+      vi.fn((_url: string, init?: { signal?: AbortSignal }) => {
+        seenSignal = init?.signal;
+        return new Promise(() => {}); // never resolves on its own
+      })
+    );
+
+    const controller = new AbortController();
+    const pending = fetchArrivalsForStation(testStation, false, controller.signal);
+    controller.abort();
+
+    await expect(pending).rejects.toThrow();
+    expect(seenSignal?.aborted).toBe(true);
+  });
 });
 
