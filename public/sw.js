@@ -3,8 +3,11 @@
  * Provides offline caching for underground transit stations and rapid app launch.
  */
 
-const SW_VERSION = '1.2.0';
+const SW_VERSION = '1.3.0';
 const CACHE_NAME = `link-tracker-v${SW_VERSION}`;
+
+// Max time to wait for the network on page navigations before serving the cached shell
+const NAV_TIMEOUT_MS = 3000;
 
 // Core assets required for the app shell to render offline
 const PRECACHE_ASSETS = [
@@ -101,21 +104,41 @@ self.addEventListener('fetch', (event) => {
     return;
   }
 
-  // 3. Navigation requests (HTML): Network-First with Cache fallback for offline transit use
+  // 3. Navigation requests (HTML): Network-First with a timeout + Cache fallback.
+  // Underground "lie-fi" connections can stall indefinitely; after NAV_TIMEOUT_MS we serve
+  // the cached shell instead (the network response still refreshes the cache when it lands).
   if (request.mode === 'navigate') {
-    event.respondWith(
-      fetch(request)
-        .then((networkResponse) => {
+    const getCachedShell = async () => {
+      const cache = await caches.open(CACHE_NAME);
+      return (
+        (await cache.match(request)) ||
+        (await cache.match('./')) ||
+        (await cache.match('./index.html'))
+      );
+    };
+
+    const networkPromise = fetch(request);
+    // Refresh the cached shell in the background without delaying the response;
+    // waitUntil keeps the SW alive even if the timeout already served the cached copy.
+    event.waitUntil(
+      networkPromise
+        .then(async (networkResponse) => {
           if (networkResponse && networkResponse.status === 200) {
-            const clone = networkResponse.clone();
-            caches.open(CACHE_NAME).then((cache) => cache.put(request, clone));
+            const cache = await caches.open(CACHE_NAME);
+            await cache.put(request, networkResponse.clone());
           }
-          return networkResponse;
         })
-        .catch(async () => {
-          const cache = await caches.open(CACHE_NAME);
-          return (await cache.match('./index.html')) || (await cache.match('./'));
-        })
+        .catch(() => undefined)
+    );
+
+    const timeoutPromise = new Promise((resolve) => {
+      setTimeout(async () => resolve((await getCachedShell()) || networkPromise), NAV_TIMEOUT_MS);
+    });
+
+    event.respondWith(
+      Promise.race([networkPromise, timeoutPromise]).catch(
+        async () => (await getCachedShell()) || Response.error()
+      )
     );
     return;
   }
