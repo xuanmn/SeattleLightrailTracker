@@ -80,7 +80,7 @@ describe('Mobile Performance Optimizations', () => {
   });
 
   describe('Fix 2: GPU-Composited Approach Bar via transform: scaleX', () => {
-    it('uses transform scaleX and independent train left positioning instead of animating width', () => {
+    it('uses transform scaleX for the bar and translateX for the train instead of width/left', () => {
       const station = STATIONS[0];
       const card = new StationCardComponent(station, false, false, {
         onTogglePin: () => {},
@@ -126,13 +126,14 @@ describe('Mobile Performance Optimizations', () => {
       expect(trackWrap.classList.contains('active')).toBe(true);
       // scaleX(0.5) is applied for 50% progress
       expect(bar.style.transform).toBe('scaleX(0.5)');
-      // Train dot tracks the progress edge at 50%
-      expect(train.style.left).toBe('50%');
+      // Train dot tracks the progress edge at 50% via a composited transform (no layout)
+      expect(train.style.transform).toBe('translateX(50%)');
+      expect(train.style.left).toBe('');
       // Verify style.width is not used for animation
       expect(bar.style.width).toBe('');
     });
 
-    it('resets transform to scaleX(0) and left to 0% when no train is arriving', () => {
+    it('resets bar to scaleX(0) and train to translateX(0%) when no train is arriving', () => {
       const station = STATIONS[0];
       const card = new StationCardComponent(station, false, false, {
         onTogglePin: () => {},
@@ -174,7 +175,7 @@ describe('Mobile Performance Optimizations', () => {
 
       expect(trackWrap.classList.contains('active')).toBe(false);
       expect(bar.style.transform).toBe('scaleX(0)');
-      expect(train.style.left).toBe('0%');
+      expect(train.style.transform).toBe('translateX(0%)');
     });
   });
 
@@ -196,6 +197,17 @@ describe('Mobile Performance Optimizations', () => {
       expect(cssContent).toContain('transform-origin: left center');
       expect(cssContent).toContain('transform: scaleX(0)');
       expect(cssContent).toContain('transition: transform 0.9s linear');
+    });
+
+    it('never animates layout or paint-heavy properties in infinite keyframes', () => {
+      const cssContent = readFileSync(process.cwd() + '/src/styles/board.css', 'utf-8');
+      const keyframes = cssContent.match(/@keyframes[^{]+\{(?:[^{}]*\{[^{}]*\})*[^{}]*\}/g) ?? [];
+      expect(keyframes.length).toBeGreaterThan(0);
+      for (const block of keyframes) {
+        expect(block).not.toMatch(/box-shadow|background-position|\bleft\s*:|\bwidth\s*:/);
+      }
+      // The train dot must not transition `left`
+      expect(cssContent).not.toMatch(/transition:\s*left/);
     });
   });
 });

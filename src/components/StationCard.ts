@@ -301,7 +301,7 @@ export class StationCardComponent {
         Math.max(0, ((APPROACH_WINDOW_MS - Math.max(0, closestDiffMs)) / APPROACH_WINDOW_MS) * 100)
       );
       this.approachBar.style.transform = `scaleX(${progress / 100})`;
-      this.approachTrain.style.left = `${progress}%`;
+      this.approachTrain.style.transform = `translateX(${progress}%)`;
 
       const isLine2 = closestArrival.routeName === '2 Line';
 
@@ -314,7 +314,7 @@ export class StationCardComponent {
     } else {
       this.approachTrackWrap.classList.remove('active', 'line-1-approach', 'line-2-approach', 'arriving-pulse');
       this.approachBar.style.transform = 'scaleX(0)';
-      this.approachTrain.style.left = '0%';
+      this.approachTrain.style.transform = 'translateX(0%)';
     }
   }
 
