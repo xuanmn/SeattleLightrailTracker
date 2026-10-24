@@ -11,6 +11,7 @@ import { StationPickerModal } from './components/StationPickerModal';
 import type { SystemMapModal } from './components/SystemMapModal';
 import { getStationById, getStationsByLine, LINE_CONFIG } from './data/stations';
 import { fetchArrivalsForStation } from './services/oba-api';
+import { PollScheduler } from './services/pollScheduler';
 import {
   getActiveLine,
   getPinnedStationIds,
@@ -21,9 +22,16 @@ import {
   togglePinnedStation,
 } from './services/storage';
 import { AppSettings, Station, StationArrivals, TransitLineId } from './types/transit';
+import { runWithConcurrency } from './utils/concurrency';
 import { createElement, ICONS } from './utils/dom';
 
 const SYNC_INTERVAL_MS = 60 * 1000; // Fixed 60-second real-time sync cycle
+const MAX_CONCURRENT_STATION_FETCHES = 6; // Each station fetches 2 platforms
+
+const NETWORK_INTERRUPTED_MESSAGE =
+  'Network connection interrupted. Unable to reach live transit servers while reconnecting...';
+const OFFLINE_MESSAGE =
+  "You're offline. Showing last known departures — they'll refresh as soon as you reconnect.";
 
 class TransitTrackerApp {
   private appEl: HTMLElement;
@@ -48,7 +56,7 @@ class TransitTrackerApp {
   private viewModePillWrap!: HTMLElement;
   private toastEl!: HTMLElement;
 
-  private pollIntervalTimer?: number;
+  private pollScheduler!: PollScheduler;
   private countdownTickTimer?: number;
   private toastTimeout?: number;
   private isFetching: boolean = false;
@@ -71,8 +79,17 @@ class TransitTrackerApp {
 
     this.initUI();
     this.setupVisibilityListener();
-    this.startPolling();
     this.startSecondTicker();
+
+    this.pollScheduler = new PollScheduler({
+      intervalMs: SYNC_INTERVAL_MS,
+      // A reconnect bypasses the short-lived arrivals cache so riders leaving a tunnel get fresh data
+      onPoll: (reason) => this.fetchVisibleArrivals(reason === 'reconnect'),
+      onConnectivityChange: (isOnline) => {
+        if (!isOnline) this.showStatusBanner(OFFLINE_MESSAGE);
+      },
+    });
+    this.pollScheduler.start();
   }
 
   private initUI() {
@@ -444,22 +461,23 @@ class TransitTrackerApp {
     this.fetchVisibleArrivals(true);
   }
 
+  private showStatusBanner(message: string) {
+    this.staleBannerEl.textContent = message;
+    this.staleBannerEl.classList.remove('hidden');
+  }
+
   private setupVisibilityListener() {
+    // Network polling pauses/resumes via PollScheduler; this only manages the 1-second countdown ticker.
     document.addEventListener('visibilitychange', () => {
       if (document.hidden) {
-        // Pause 1-second DOM ticks and background network polling to save battery, CPU, and heap
+        // Pause 1-second DOM ticks to save battery and CPU
         if (this.countdownTickTimer) {
           clearInterval(this.countdownTickTimer);
           this.countdownTickTimer = undefined;
         }
-        if (this.pollIntervalTimer) {
-          clearInterval(this.pollIntervalTimer);
-          this.pollIntervalTimer = undefined;
-        }
       } else {
-        // Resume ticker and polling when user refocuses tab
+        // Resume ticker when user refocuses tab
         this.startSecondTicker();
-        this.startPolling();
         this.cardComponents.forEach((card) => card.tickCountdowns());
       }
     });
@@ -500,59 +518,56 @@ class TransitTrackerApp {
       return;
     }
 
-    const CHUNK_SIZE = 6;
     let failedFetches = 0;
+    const isCurrent = () => this.activeFetchId === currentFetchId && !currentSignal.aborted;
 
     try {
-      for (let i = 0; i < stations.length; i += CHUNK_SIZE) {
-        if (this.activeFetchId !== currentFetchId || currentSignal.aborted) break;
-        const chunk = stations.slice(i, i + CHUNK_SIZE);
+      // Sliding-window pool: a slow platform no longer holds back the remaining stations
+      await runWithConcurrency(
+        stations,
+        MAX_CONCURRENT_STATION_FETCHES,
+        async (station) => {
+          try {
+            const result = await fetchArrivalsForStation(station, isManual, currentSignal);
+            // If a newer fetch was initiated while this one was running, discard old response
+            if (!isCurrent()) return;
 
-        await Promise.all(
-          chunk.map(async (station) => {
-            try {
-              const result = await fetchArrivalsForStation(station, isManual, currentSignal);
-              // If a newer fetch was initiated while this one was running, discard old response
-              if (this.activeFetchId !== currentFetchId || currentSignal.aborted) return;
+            const data: StationArrivals = {
+              station,
+              lastUpdated: Date.now(),
+              direction1: result.direction1,
+              direction2: result.direction2,
+            };
+            this.arrivalsData.set(station.id, data);
 
-              const data: StationArrivals = {
-                station,
-                lastUpdated: Date.now(),
-                direction1: result.direction1,
-                direction2: result.direction2,
-              };
-              this.arrivalsData.set(station.id, data);
-
-              const card = this.cardComponents.get(station.id);
-              if (card) {
-                card.updateArrivals(data);
-              }
-            } catch (err) {
-              failedFetches++;
-              console.warn(`Failed fetching arrivals for ${station.name}:`, err);
-              const card = this.cardComponents.get(station.id);
-              if (card && !this.arrivalsData.has(station.id)) {
-                card.setUnavailable();
-              }
+            const card = this.cardComponents.get(station.id);
+            if (card) {
+              card.updateArrivals(data);
             }
-          })
-        );
-      }
+          } catch (err) {
+            failedFetches++;
+            console.warn(`Failed fetching arrivals for ${station.name}:`, err);
+            const card = this.cardComponents.get(station.id);
+            if (card && !this.arrivalsData.has(station.id)) {
+              card.setUnavailable();
+            }
+          }
+        },
+        isCurrent
+      );
 
       if (this.activeFetchId === currentFetchId) {
         if (failedFetches === stations.length && stations.length > 0) {
-          this.staleBannerEl.classList.remove('hidden');
-          this.staleBannerEl.textContent =
-            'Network connection interrupted. Unable to reach live transit servers while reconnecting...';
+          this.showStatusBanner(
+            navigator.onLine === false ? OFFLINE_MESSAGE : NETWORK_INTERRUPTED_MESSAGE
+          );
         } else {
           this.staleBannerEl.classList.add('hidden');
         }
       }
     } catch {
       if (isManual && this.activeFetchId === currentFetchId) {
-        this.staleBannerEl.classList.remove('hidden');
-        this.staleBannerEl.textContent =
-          'Network connection interrupted. Unable to reach live transit servers while reconnecting...';
+        this.showStatusBanner(NETWORK_INTERRUPTED_MESSAGE);
       }
     } finally {
       this.isFetching = false;
@@ -597,18 +612,6 @@ class TransitTrackerApp {
     } finally {
       this.inFlightStationFetches.delete(station.id);
     }
-  }
-
-  private startPolling() {
-    if (this.pollIntervalTimer) {
-      clearInterval(this.pollIntervalTimer);
-    }
-
-    this.fetchVisibleArrivals();
-    // Synchronize every 60 seconds
-    this.pollIntervalTimer = window.setInterval(() => {
-      this.fetchVisibleArrivals();
-    }, SYNC_INTERVAL_MS);
   }
 
   private startSecondTicker() {
