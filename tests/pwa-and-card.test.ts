@@ -1,40 +1,40 @@
-import { describe, it, expect } from 'vitest';
+import { describe, expect, it } from "vitest";
 // @ts-ignore
-import { readFileSync } from 'node:fs';
+import { readFileSync } from "node:fs";
+import manifest from "../public/manifest.json";
+import { StationCardComponent } from "../src/components/StationCard";
+import { Station, StationArrivals } from "../src/types/transit";
 declare const process: any;
-import { StationCardComponent } from '../src/components/StationCard';
-import { Station, StationArrivals } from '../src/types/transit';
-import manifest from '../public/manifest.json';
 
-describe('StationCard Live Approach Track', () => {
+describe("StationCard Live Approach Track", () => {
   const mockStation: Station = {
-    id: 'westlake',
-    name: 'Westlake',
-    shortName: 'Pine St / 4th Ave',
-    lines: ['line-1', 'line-2'],
+    id: "westlake",
+    name: "Westlake",
+    shortName: "Pine St / 4th Ave",
+    lines: ["line-1", "line-2"],
     platforms: {
       northbound: {
-        stopId: '40_1121',
-        cardinalDirection: 'Northbound',
-        terminalDestination: 'Lynnwood City Center',
+        stopId: "40_1121",
+        cardinalDirection: "Northbound",
+        terminalDestination: "Lynnwood City Center",
       },
       southbound: {
-        stopId: '40_1108',
-        cardinalDirection: 'Southbound',
-        terminalDestination: 'Federal Way Downtown',
+        stopId: "40_1108",
+        cardinalDirection: "Southbound",
+        terminalDestination: "Federal Way Downtown",
       },
     },
   };
 
-  it('renders approach track and activates it when a train is within 5 minutes', () => {
+  it("renders approach track and activates it when a train is within 5 minutes", () => {
     const card = new StationCardComponent(mockStation, false, false, {
       onTogglePin: () => {},
     });
 
     const el = card.getElement();
-    const trackWrap = el.querySelector('.station-approach-track-wrap') as HTMLElement;
+    const trackWrap = el.querySelector(".station-approach-track-wrap") as HTMLElement;
     expect(trackWrap).not.toBeNull();
-    expect(trackWrap.classList.contains('active')).toBe(false);
+    expect(trackWrap.classList.contains("active")).toBe(false);
 
     const now = 1700000000000;
     const arrivalsData: StationArrivals = {
@@ -44,16 +44,16 @@ describe('StationCard Live Approach Track', () => {
         platform: mockStation.platforms.northbound!,
         arrivals: [
           {
-            tripId: 'trip_1',
-            routeName: '1 Line',
-            destination: 'Lynnwood City Center',
-            direction: 'Northbound',
+            tripId: "trip_1",
+            routeName: "1 Line",
+            destination: "Lynnwood City Center",
+            direction: "Northbound",
             scheduledDepartureTime: now + 3 * 60 * 1000, // 3 minutes away
             predictedDepartureTime: now + 3 * 60 * 1000,
             delaySeconds: 0,
             isRealtime: true,
-            statusText: 'On Time',
-            statusType: 'ontime',
+            statusText: "On Time",
+            statusType: "ontime",
           },
         ],
       },
@@ -64,20 +64,20 @@ describe('StationCard Live Approach Track', () => {
     };
 
     card.updateArrivals(arrivalsData);
-    expect(trackWrap.classList.contains('active')).toBe(true);
+    expect(trackWrap.classList.contains("active")).toBe(true);
 
-    const bar = trackWrap.querySelector('.station-approach-bar') as HTMLElement;
+    const bar = trackWrap.querySelector(".station-approach-bar") as HTMLElement;
     expect(bar).not.toBeNull();
-    expect(bar.className).toContain('line-1-approach');
+    expect(bar.className).toContain("line-1-approach");
   });
 
-  it('deactivates approach track when no train is within 5 minutes', () => {
+  it("deactivates approach track when no train is within 5 minutes", () => {
     const card = new StationCardComponent(mockStation, false, false, {
       onTogglePin: () => {},
     });
 
     const el = card.getElement();
-    const trackWrap = el.querySelector('.station-approach-track-wrap') as HTMLElement;
+    const trackWrap = el.querySelector(".station-approach-track-wrap") as HTMLElement;
 
     const now = 1700000000000;
     const arrivalsData: StationArrivals = {
@@ -87,16 +87,16 @@ describe('StationCard Live Approach Track', () => {
         platform: mockStation.platforms.northbound!,
         arrivals: [
           {
-            tripId: 'trip_far',
-            routeName: '1 Line',
-            destination: 'Lynnwood City Center',
-            direction: 'Northbound',
+            tripId: "trip_far",
+            routeName: "1 Line",
+            destination: "Lynnwood City Center",
+            direction: "Northbound",
             scheduledDepartureTime: now + 12 * 60 * 1000, // 12 minutes away
             predictedDepartureTime: now + 12 * 60 * 1000,
             delaySeconds: 0,
             isRealtime: true,
-            statusText: 'On Time',
-            statusType: 'ontime',
+            statusText: "On Time",
+            statusType: "ontime",
           },
         ],
       },
@@ -107,80 +107,78 @@ describe('StationCard Live Approach Track', () => {
     };
 
     card.updateArrivals(arrivalsData);
-    expect(trackWrap.classList.contains('active')).toBe(false);
+    expect(trackWrap.classList.contains("active")).toBe(false);
   });
 });
 
-describe('PWA Manifest Configuration', () => {
-  it('contains valid standalone display mode and transit app metadata', () => {
-    expect(manifest.name).toBe('Seattle Light Rail Tracker');
-    expect(manifest.short_name).toBe('Link Tracker');
-    expect(manifest.display).toBe('standalone');
-    expect(manifest.theme_color).toBe('#0b0f17');
-    expect(manifest.background_color).toBe('#070a0f');
+describe("PWA Manifest Configuration", () => {
+  it("contains valid standalone display mode and transit app metadata", () => {
+    expect(manifest.name).toBe("Seattle Light Rail Tracker");
+    expect(manifest.short_name).toBe("Link Tracker");
+    expect(manifest.display).toBe("standalone");
+    expect(manifest.theme_color).toBe("#0b0f17");
+    expect(manifest.background_color).toBe("#070a0f");
     expect(manifest.icons.length).toBeGreaterThanOrEqual(3);
 
-    const hasAny = manifest.icons.some((i: { purpose?: string }) => i.purpose === 'any');
-    const hasMaskable = manifest.icons.some((i: { purpose?: string }) => i.purpose === 'maskable');
+    const hasAny = manifest.icons.some((i: { purpose?: string }) => i.purpose === "any");
+    const hasMaskable = manifest.icons.some((i: { purpose?: string }) => i.purpose === "maskable");
     expect(hasAny).toBe(true);
     expect(hasMaskable).toBe(true);
   });
 });
 
-describe('SEO Configuration & Discoverability', () => {
-  it('contains canonical URL, robots meta, JSON-LD structured data, and noscript crawler fallback in index.html', () => {
-    const html = readFileSync(process.cwd() + '/index.html', 'utf-8');
+describe("SEO Configuration & Discoverability", () => {
+  it("contains canonical URL, robots meta, JSON-LD structured data, and noscript crawler fallback in index.html", () => {
+    const html = readFileSync(process.cwd() + "/index.html", "utf-8");
 
     expect(html).toContain('<link rel="canonical" href="https://xuanmn.github.io/SeattleLightrailTracker/" />');
     expect(html).toContain('<meta name="robots" content="index, follow');
-    expect(html).toContain('application/ld+json');
+    expect(html).toContain("application/ld+json");
     expect(html).toContain('"@type": "WebApplication"');
-    expect(html).toContain('Seattle Light Rail Tracker');
-    expect(html).toContain('<noscript>');
-    expect(html).toContain('1 Line:');
-    expect(html).toContain('2 Line:');
+    expect(html).toContain("Seattle Light Rail Tracker");
+    expect(html).toContain("<noscript>");
+    expect(html).toContain("1 Line:");
+    expect(html).toContain("2 Line:");
   });
 
-  it('provides valid robots.txt and sitemap.xml files', () => {
-    const robots = readFileSync(process.cwd() + '/public/robots.txt', 'utf-8');
-    expect(robots).toContain('User-agent: *');
-    expect(robots).toContain('Allow: /');
-    expect(robots).toContain('Sitemap: https://xuanmn.github.io/SeattleLightrailTracker/sitemap.xml');
+  it("provides valid robots.txt and sitemap.xml files", () => {
+    const robots = readFileSync(process.cwd() + "/public/robots.txt", "utf-8");
+    expect(robots).toContain("User-agent: *");
+    expect(robots).toContain("Allow: /");
+    expect(robots).toContain("Sitemap: https://xuanmn.github.io/SeattleLightrailTracker/sitemap.xml");
 
-    const sitemap = readFileSync(process.cwd() + '/public/sitemap.xml', 'utf-8');
-    expect(sitemap).toContain('https://xuanmn.github.io/SeattleLightrailTracker/');
-    expect(sitemap).toContain('<changefreq>daily</changefreq>');
+    const sitemap = readFileSync(process.cwd() + "/public/sitemap.xml", "utf-8");
+    expect(sitemap).toContain("https://xuanmn.github.io/SeattleLightrailTracker/");
+    expect(sitemap).toContain("<changefreq>daily</changefreq>");
   });
 });
 
-describe('PWA Offline Shell & Service Worker', () => {
-  it('provides public/sw.js with app shell precaching and offline navigation support', () => {
-    const sw = readFileSync(process.cwd() + '/public/sw.js', 'utf-8');
+describe("PWA Offline Shell & Service Worker", () => {
+  it("provides public/sw.js with app shell precaching and offline navigation support", () => {
+    const sw = readFileSync(process.cwd() + "/public/sw.js", "utf-8");
 
     // Precache configuration
-    expect(sw).toContain('CACHE_NAME');
-    expect(sw).toContain('PRECACHE_ASSETS');
-    expect(sw).toContain('./index.html');
-    expect(sw).toContain('./manifest.json');
+    expect(sw).toContain("CACHE_NAME");
+    expect(sw).toContain("PRECACHE_ASSETS");
+    expect(sw).toContain("./index.html");
+    expect(sw).toContain("./manifest.json");
 
     // Event listeners
-    expect(sw).toContain("addEventListener('install'");
-    expect(sw).toContain("addEventListener('activate'");
-    expect(sw).toContain("addEventListener('fetch'");
+    expect(sw).toMatch(/addEventListener\(['"]install['"]/);
+    expect(sw).toMatch(/addEventListener\(['"]activate['"]/);
+    expect(sw).toMatch(/addEventListener\(['"]fetch['"]/);
 
     // Smart caching rules: skip caching dynamic OneBusAway API responses to prevent stale timers
-    expect(sw).toContain('onebusaway.org');
+    expect(sw).toContain("onebusaway.org");
 
     // Offline navigation fallback
-    expect(sw).toContain("request.mode === 'navigate'");
+    expect(sw).toMatch(/request\.mode === ['"]navigate['"]/);
   });
 
-  it('includes service worker registration in src/main.ts', () => {
-    const mainTs = readFileSync(process.cwd() + '/src/main.ts', 'utf-8');
+  it("includes service worker registration in src/main.ts", () => {
+    const mainTs = readFileSync(process.cwd() + "/src/main.ts", "utf-8");
     expect(mainTs).toContain("'serviceWorker' in navigator");
     expect(mainTs).toContain("navigator.serviceWorker.register");
-    expect(mainTs).toContain('./sw.js');
+    expect(mainTs).toContain("./sw.js");
   });
 });
-
-
