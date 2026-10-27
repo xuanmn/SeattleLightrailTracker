@@ -6,8 +6,8 @@ declare const process: {
 };
 
 declare module 'node:fs' {
-  export function readFileSync(path: string, encoding: BufferEncoding): string;
-  export function writeFileSync(path: string, data: string, encoding?: BufferEncoding): void;
+  export function readFileSync(path: string, encoding: 'utf-8' | 'utf8'): string;
+  export function writeFileSync(path: string, data: string, encoding?: 'utf-8' | 'utf8'): void;
 }
 
 declare module 'node:path' {

@@ -1,8 +1,5 @@
 import { describe, expect, it } from "vitest";
-// @ts-ignore - node builtin available in the vitest runtime
 import { readFileSync } from "node:fs";
-
-declare const process: { cwd(): string };
 
 const STYLE_FILES = ["theme.css", "layout.css", "board.css", "map.css", "faq.css"];
 

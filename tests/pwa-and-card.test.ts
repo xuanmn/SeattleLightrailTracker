@@ -1,10 +1,8 @@
 import { describe, expect, it } from "vitest";
-// @ts-ignore
 import { readFileSync } from "node:fs";
 import manifest from "../public/manifest.json";
 import { StationCardComponent } from "../src/components/StationCard";
 import { Station, StationArrivals } from "../src/types/transit";
-declare const process: any;
 
 describe("StationCard Live Approach Track", () => {
   const mockStation: Station = {

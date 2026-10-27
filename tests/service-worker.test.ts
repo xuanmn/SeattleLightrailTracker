@@ -1,9 +1,6 @@
 import { describe, it, expect, vi } from 'vitest';
-// @ts-ignore - node builtin available in the vitest runtime
 import { readFileSync } from 'node:fs';
 import { injectSwManifest } from '../scripts/sw-manifest';
-
-declare const process: { cwd(): string };
 
 const SW_SOURCE: string = readFileSync(process.cwd() + '/public/sw.js', 'utf-8');
 const SW_URL = 'https://example.test/app/sw.js';

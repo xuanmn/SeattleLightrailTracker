@@ -1,7 +1,5 @@
 import { describe, it, expect, beforeEach, vi } from 'vitest';
-// @ts-ignore
 import { readFileSync } from 'node:fs';
-declare const process: any;
 import { StationCardComponent } from '../src/components/StationCard';
 import { STATIONS } from '../src/data/stations';
 import { StationArrivals } from '../src/types/transit';

@@ -1,7 +1,5 @@
 import { describe, it, expect, beforeEach } from 'vitest';
-// @ts-ignore
 import { readFileSync } from 'node:fs';
-declare const process: any;
 import { SystemMapModal } from '../src/components/SystemMapModal';
 
 describe('SystemMapModal Component', () => {

@@ -1,7 +1,5 @@
 import { describe, it, expect, beforeEach } from 'vitest';
-// @ts-ignore
 import { readFileSync } from 'node:fs';
-declare const process: any;
 import { HeaderComponent } from '../src/components/Header';
 import { StationPickerModal } from '../src/components/StationPickerModal';
 import { FaqModal } from '../src/components/FaqModal';
