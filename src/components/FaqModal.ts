@@ -1,3 +1,4 @@
+import '../styles/faq.css';
 import { createElement, ICONS } from '../utils/dom';
 import { lockBodyScroll, unlockBodyScroll } from '../utils/scrollLock';
 import { attachBottomSheetSwipe } from '../utils/bottomSheetGesture';
@@ -58,12 +59,10 @@ export class FaqModal {
     const connectionGuideCard = createElement('div', 'faq-featured-card');
     connectionGuideCard.innerHTML = `
       <div class="faq-featured-header">
-        <div class="faq-tag-group">
-          <div class="faq-tag">Regional Route Guide</div>
-        </div>
+        <div class="faq-tag">Regional Route Guide</div>
         <h4 class="faq-featured-title">Lynnwood / Seattle ⇄ Bellevue / Redmond Connection</h4>
       </div>
-      <div class="faq-featured-body">
+      <div>
         <div class="route-option-card">
           <div class="route-badge direct">Direct 2 Line</div>
           <div class="route-title">Single Train — No Transfer</div>

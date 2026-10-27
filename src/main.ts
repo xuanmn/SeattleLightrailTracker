@@ -5,9 +5,9 @@ import './styles/board.css';
 
 import type { FaqModal } from './components/FaqModal';
 import { HeaderComponent } from './components/Header';
-import { SettingsModal } from './components/SettingsModal';
+import type { SettingsModal } from './components/SettingsModal';
 import { StationCardComponent } from './components/StationCard';
-import { StationPickerModal } from './components/StationPickerModal';
+import type { StationPickerModal } from './components/StationPickerModal';
 import type { SystemMapModal } from './components/SystemMapModal';
 import { getStationById, getStationsByLine, LINE_CONFIG } from './data/stations';
 import { fetchArrivalsForStation } from './services/oba-api';
@@ -36,8 +36,8 @@ const OFFLINE_MESSAGE =
 class TransitTrackerApp {
   private appEl: HTMLElement;
   private header!: HeaderComponent;
-  private pickerModal!: StationPickerModal;
-  private settingsModal!: SettingsModal;
+  private pickerModal?: StationPickerModal;
+  private settingsModal?: SettingsModal;
   private faqModal?: FaqModal;
   private mapModal?: SystemMapModal;
 
@@ -95,16 +95,6 @@ class TransitTrackerApp {
   private initUI() {
     this.appEl.innerHTML = '';
 
-    // Modals
-    this.pickerModal = new StationPickerModal({
-      onTogglePin: (stationId) => this.handleTogglePin(stationId),
-      isStationPinned: (stationId) => this.pinnedIds.has(stationId),
-    });
-
-    this.settingsModal = new SettingsModal({
-      onSettingsSaved: (newSettings) => this.handleSettingsSaved(newSettings),
-    });
-
     // Toast Container
     this.toastEl = createElement('div', 'app-toast');
     this.toastEl.id = 'app-toast';
@@ -113,7 +103,15 @@ class TransitTrackerApp {
     // Header with lazy modal loading
     this.header = new HeaderComponent(this.activeLine, {
       onLineChange: (line) => this.switchLine(line),
-      onSettingsClick: () => this.settingsModal.open(),
+      onSettingsClick: async () => {
+        if (!this.settingsModal) {
+          const { SettingsModal } = await import('./components/SettingsModal');
+          this.settingsModal = new SettingsModal({
+            onSettingsSaved: (newSettings) => this.handleSettingsSaved(newSettings),
+          });
+        }
+        this.settingsModal.open();
+      },
       onFaqClick: async () => {
         if (!this.faqModal) {
           const { FaqModal } = await import('./components/FaqModal');
@@ -234,6 +232,7 @@ class TransitTrackerApp {
   }
 
   private switchLine(line: TransitLineId) {
+    if (this.activeLine === line) return;
     if (this.fetchController) {
       this.fetchController.abort();
       this.fetchController = undefined;
@@ -392,11 +391,20 @@ class TransitTrackerApp {
 
     const lineClass = this.activeLine === 'line-1' ? 'line-1-btn' : 'line-2-btn';
     const btn = createElement(
-        'button',
+      'button',
       `empty-dashboard-btn ${lineClass}`,
       `${ICONS.plus} Add & Remove Stations`
     );
-    btn.onclick = () => this.pickerModal.open(this.activeLine);
+    btn.onclick = async () => {
+      if (!this.pickerModal) {
+        const { StationPickerModal } = await import('./components/StationPickerModal');
+        this.pickerModal = new StationPickerModal({
+          onTogglePin: (stationId) => this.handleTogglePin(stationId),
+          isStationPinned: (stationId) => this.pinnedIds.has(stationId),
+        });
+      }
+      this.pickerModal.open(this.activeLine);
+    };
 
     emptyCard.appendChild(icon);
     emptyCard.appendChild(title);
@@ -408,13 +416,14 @@ class TransitTrackerApp {
 
   private handleTogglePin(stationId: string) {
     const isNowPinned = togglePinnedStation(stationId);
-    this.pinnedIds = new Set(getPinnedStationIds());
+    if (isNowPinned) {
+      this.pinnedIds.add(stationId);
+    } else {
+      this.pinnedIds.delete(stationId);
+    }
 
     const station = getStationById(stationId);
     const stationName = station?.name || 'Station';
-
-    // Refresh view mode pill states
-    this.renderViewModePills();
 
     if (this.showOnlyPinned) {
       // In "My Saved Stations" mode, surgical removal of unpinned card avoids rebuilding the entire grid
@@ -448,17 +457,18 @@ class TransitTrackerApp {
       isNowPinned
     );
 
-    this.pickerModal.refreshPinnedState();
+    this.pickerModal?.refreshPinnedState(stationId);
   }
 
   private handleSettingsSaved(newSettings: AppSettings) {
+    const timeFormatChanged = this.settings.timeFormat24Hour !== newSettings.timeFormat24Hour;
     this.settings = newSettings;
 
-    this.cardComponents.forEach((card) => {
-      card.setTimeFormat(newSettings.timeFormat24Hour);
-    });
-
-    this.fetchVisibleArrivals(true);
+    if (timeFormatChanged) {
+      this.cardComponents.forEach((card) => {
+        card.setTimeFormat(newSettings.timeFormat24Hour);
+      });
+    }
   }
 
   private showStatusBanner(message: string) {
@@ -478,7 +488,11 @@ class TransitTrackerApp {
       } else {
         // Resume ticker when user refocuses tab
         this.startSecondTicker();
-        this.cardComponents.forEach((card) => card.tickCountdowns());
+        this.cardComponents.forEach((card) => {
+          if (card.isVisible) {
+            card.tickCountdowns();
+          }
+        });
       }
     });
   }

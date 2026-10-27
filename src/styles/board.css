@@ -158,19 +158,16 @@
   opacity: 0;
 }
 
-.station-approach-track-wrap.line-2-approach .station-approach-train,
-.station-approach-train.line-2-train {
+.station-approach-track-wrap.line-2-approach .station-approach-train {
   --train-color: var(--st-blue);
   --train-glow: var(--st-blue-light);
 }
 
-.station-approach-track-wrap.arriving-pulse .station-approach-train::before,
-.station-approach-train.arriving-pulse::before {
+.station-approach-track-wrap.arriving-pulse .station-approach-train::before {
   animation: train-bullet-pulse 1.1s cubic-bezier(0.4, 0, 0.6, 1) infinite;
 }
 
-.station-approach-track-wrap.arriving-pulse .station-approach-train::after,
-.station-approach-train.arriving-pulse::after {
+.station-approach-track-wrap.arriving-pulse .station-approach-train::after {
   animation: train-glow-pulse 1.1s cubic-bezier(0.4, 0, 0.6, 1) infinite;
 }
 

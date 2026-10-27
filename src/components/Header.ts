@@ -88,6 +88,7 @@ export class HeaderComponent {
     this.line1Btn.innerHTML = `<span class="line-badge-circle line-1-circle">1</span> 1 Line`;
     this.line1Btn.title = 'Lynnwood City Center ⇄ Federal Way Downtown';
     this.line1Btn.onclick = () => {
+      if (this.activeLine === 'line-1') return;
       this.setActiveLine('line-1');
       this.callbacks.onLineChange('line-1');
     };
@@ -99,6 +100,7 @@ export class HeaderComponent {
     this.line2Btn.innerHTML = `<span class="line-badge-circle line-2-circle">2</span> 2 Line`;
     this.line2Btn.title = 'Lynnwood City Center ⇄ Downtown Redmond';
     this.line2Btn.onclick = () => {
+      if (this.activeLine === 'line-2') return;
       this.setActiveLine('line-2');
       this.callbacks.onLineChange('line-2');
     };
@@ -127,7 +129,7 @@ export class HeaderComponent {
     faqBtn.title = 'How to travel between Lynnwood, Seattle, and Bellevue';
     faqBtn.onclick = () => this.callbacks.onFaqClick();
 
-    const settingsBtn = createElement('button', 'icon-btn header-settings-btn', ICONS.settings) as HTMLButtonElement;
+    const settingsBtn = createElement('button', 'icon-btn', ICONS.settings) as HTMLButtonElement;
     settingsBtn.type = 'button';
     settingsBtn.title = 'Settings & Preferences';
     settingsBtn.setAttribute('aria-label', 'Settings & Preferences');

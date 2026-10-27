@@ -136,14 +136,6 @@ export function attachBottomSheetSwipe(options: BottomSheetSwipeOptions): () => 
   primaryTarget.addEventListener('touchend', onTouchEnd, { passive: true });
   primaryTarget.addEventListener('touchcancel', onTouchCancel, { passive: true });
 
-  // If both handle and header are provided and distinct, register on both
-  if (handle && header && header !== handle) {
-    header.addEventListener('touchstart', onTouchStart, { passive: true });
-    header.addEventListener('touchmove', onTouchMove, { passive: false });
-    header.addEventListener('touchend', onTouchEnd, { passive: true });
-    header.addEventListener('touchcancel', onTouchCancel, { passive: true });
-  }
-
   // Prevent background touch scrolling on overlay backdrop
   overlay.addEventListener('touchmove', onOverlayTouchMove, { passive: false });
 
@@ -154,14 +146,6 @@ export function attachBottomSheetSwipe(options: BottomSheetSwipeOptions): () => 
     primaryTarget.removeEventListener('touchmove', onTouchMove);
     primaryTarget.removeEventListener('touchend', onTouchEnd);
     primaryTarget.removeEventListener('touchcancel', onTouchCancel);
-
-    if (handle && header && header !== handle) {
-      header.removeEventListener('touchstart', onTouchStart);
-      header.removeEventListener('touchmove', onTouchMove);
-      header.removeEventListener('touchend', onTouchEnd);
-      header.removeEventListener('touchcancel', onTouchCancel);
-    }
-
     overlay.removeEventListener('touchmove', onOverlayTouchMove);
   };
 }

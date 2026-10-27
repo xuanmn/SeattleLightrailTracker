@@ -219,4 +219,24 @@ describe('Service worker fetch routing', () => {
     const res = sw.dispatchFetch('https://api.pugetsound.onebusaway.org/api/where/arrivals.json');
     expect(res).toBeUndefined();
   });
+
+  it('clears the navigation fallback timeout once the network navigation succeeds', async () => {
+    vi.useFakeTimers();
+    try {
+      const sw = loadServiceWorker(BUILT_SW, okFetch);
+      await sw.runLifecycle('install');
+
+      const res = await sw.dispatchFetch('./index.html', 'navigate');
+      expect(res?.status).toBe(200);
+
+      // Spy on caches.open AFTER navigation has already resolved
+      const openSpy = vi.spyOn(sw.caches.api, 'open');
+      await vi.advanceTimersByTimeAsync(5000);
+
+      // The 3s fallback timer should have been cleared and must not open the cache later
+      expect(openSpy).not.toHaveBeenCalled();
+    } finally {
+      vi.useRealTimers();
+    }
+  });
 });

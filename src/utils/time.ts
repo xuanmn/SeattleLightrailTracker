@@ -2,12 +2,6 @@
  * Time and Countdown Utilities for Live Transit Departures
  */
 
-export function calculateMinutesRemaining(targetEpochMs: number, nowEpochMs: number = Date.now()): number {
-  const diffMs = targetEpochMs - nowEpochMs;
-  if (diffMs <= 0) return 0;
-  return Math.floor(diffMs / (60 * 1000));
-}
-
 export function formatCountdownBadge(
   targetEpochMs: number,
   nowEpochMs: number = Date.now()

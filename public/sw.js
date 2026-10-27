@@ -150,12 +150,16 @@ self.addEventListener("fetch", (event) => {
         .catch(() => undefined),
     );
 
+    let timeoutId;
     const timeoutPromise = new Promise((resolve) => {
-      setTimeout(async () => resolve((await getCachedShell()) || networkPromise), NAV_TIMEOUT_MS);
+      timeoutId = setTimeout(async () => resolve((await getCachedShell()) || networkPromise), NAV_TIMEOUT_MS);
     });
 
     event.respondWith(
-      Promise.race([networkPromise, timeoutPromise]).catch(async () => (await getCachedShell()) || Response.error()),
+      Promise.race([
+        networkPromise.finally(() => clearTimeout(timeoutId)),
+        timeoutPromise,
+      ]).catch(async () => (await getCachedShell()) || Response.error()),
     );
     return;
   }

@@ -636,11 +636,9 @@ export class SystemMapModal {
     const headerTop = createElement('div', 'system-map-header-top');
     const titleGroup = createElement('div', 'system-map-title-group');
     const iconBadge = createElement('div', 'system-map-icon-badge', ICONS.train);
-    const textGroup = createElement('div', 'system-map-text');
     const title = createElement('h3', 'system-map-title', 'Sound Transit Link Map');
-    textGroup.appendChild(title);
     titleGroup.appendChild(iconBadge);
-    titleGroup.appendChild(textGroup);
+    titleGroup.appendChild(title);
 
     const actions = createElement('div', 'system-map-header-actions');
     const closeBtn = createElement('button', 'icon-btn modal-close-btn', ICONS.close);
@@ -724,28 +722,22 @@ export class SystemMapModal {
         <!-- ================= TRACK LINES ================= -->
 
         <!-- 1 Line Track (Green #008542) - Multi-Layer Vector Glow -->
-        <path class="map-track-path line-1-aura map-elem-line-1"
-          d="M 272,75 L 272,1210" stroke="#008542" stroke-width="16" opacity="0.12" stroke-linecap="round" />
-        <path class="map-track-path line-1-glow map-elem-line-1"
-          d="M 272,75 L 272,1210" stroke="#008542" stroke-width="11" opacity="0.32" stroke-linecap="round" />
-        <path class="map-track-path line-1-main map-elem-line-1"
-          d="M 272,75 L 272,1210" stroke="#008542" stroke-width="7" stroke-linecap="round" fill="none" />
+        <path class="map-track-path line-1-aura" d="M 272,75 L 272,1210" />
+        <path class="map-track-path line-1-glow" d="M 272,75 L 272,1210" />
+        <path class="map-track-path line-1-main" d="M 272,75 L 272,1210" />
 
         <!-- 2 Line Track (Blue #0072CE) - Shared in North/Tunnel + Eastside Corridor - Multi-Layer Vector Glow -->
-        <path class="map-track-path line-2-aura map-elem-line-2 map-elem-shared"
-          d="M 298,75 L 298,615 Q 298,665 338,665 L 500,665 Q 540,665 540,635 L 540,75"
-          stroke="#0072CE" stroke-width="16" opacity="0.12" stroke-linecap="round" stroke-linejoin="round" />
-        <path class="map-track-path line-2-glow map-elem-line-2 map-elem-shared"
-          d="M 298,75 L 298,615 Q 298,665 338,665 L 500,665 Q 540,665 540,635 L 540,75"
-          stroke="#0072CE" stroke-width="11" opacity="0.32" stroke-linecap="round" stroke-linejoin="round" />
-        <path class="map-track-path line-2-main map-elem-line-2 map-elem-shared"
-          d="M 298,75 L 298,615 Q 298,665 338,665 L 500,665 Q 540,665 540,635 L 540,75"
-          stroke="#0072CE" stroke-width="7" stroke-linecap="round" stroke-linejoin="round" fill="none" />
+        <path class="map-track-path line-2-aura"
+          d="M 298,75 L 298,615 Q 298,665 338,665 L 500,665 Q 540,665 540,635 L 540,75" />
+        <path class="map-track-path line-2-glow"
+          d="M 298,75 L 298,615 Q 298,665 338,665 L 500,665 Q 540,665 540,635 L 540,75" />
+        <path class="map-track-path line-2-main"
+          d="M 298,75 L 298,615 Q 298,665 338,665 L 500,665 Q 540,665 540,635 L 540,75" />
 
         <!-- ================= TERMINUS HEADERS & BULLETS ================= -->
 
         <!-- North Terminus (Lynnwood City Center) -->
-        <g class="map-terminus-badge map-elem-line-1 map-elem-line-2" transform="translate(285, 42)">
+        <g transform="translate(285, 42)">
           <rect x="-42" y="-16" width="84" height="26" rx="13" fill="#0f172a" stroke="rgba(255,255,255,0.35)" stroke-width="1.5" />
           <circle cx="-13" cy="-3" r="9" fill="#008542" />
           <text x="-13" y="0.5" fill="#ffffff" font-size="11" font-weight="800" text-anchor="middle">1</text>
@@ -754,53 +746,53 @@ export class SystemMapModal {
         </g>
 
         <!-- 2 Line East Terminus (Downtown Redmond) -->
-        <g class="map-terminus-badge map-elem-line-2" transform="translate(540, 42)">
+        <g transform="translate(540, 42)">
           <rect x="-24" y="-16" width="48" height="26" rx="13" fill="#0f172a" stroke="rgba(0,114,206,0.6)" stroke-width="1.5" />
           <circle cx="0" cy="-3" r="9" fill="#0072CE" />
           <text x="0" y="0.5" fill="#ffffff" font-size="11" font-weight="800" text-anchor="middle">2</text>
         </g>
 
         <!-- 1 Line South Terminus (Federal Way Downtown) -->
-        <g class="map-terminus-badge map-elem-line-1" transform="translate(272, 1242)">
+        <g transform="translate(272, 1242)">
           <rect x="-24" y="-16" width="48" height="26" rx="13" fill="#0f172a" stroke="rgba(0,133,66,0.6)" stroke-width="1.5" />
           <circle cx="0" cy="-3" r="9" fill="#008542" />
           <text x="0" y="0.5" fill="#ffffff" font-size="11" font-weight="800" text-anchor="middle">1</text>
         </g>
 
         <!-- ================= LEFT SPINE: SHARED 1 LINE & 2 LINE STATIONS ================= -->
-        ${this.renderDualCapsuleStation('lynnwood-city-center', 285, 75, 'left', true)}
-        ${this.renderDualCapsuleStation('mountlake-terrace', 285, 117, 'left')}
-        ${this.renderDualCapsuleStation('shoreline-north-185th', 285, 158, 'left')}
-        ${this.renderDualCapsuleStation('shoreline-south-148th', 285, 200, 'left')}
-        ${this.renderDualCapsuleStation('pinehurst', 285, 241, 'left')}
-        ${this.renderDualCapsuleStation('northgate', 285, 283, 'left')}
-        ${this.renderDualCapsuleStation('roosevelt', 285, 324, 'left')}
-        ${this.renderDualCapsuleStation('u-district', 285, 366, 'left')}
-        ${this.renderDualCapsuleStation('university-of-washington', 285, 407, 'left')}
-        ${this.renderDualCapsuleStation('capitol-hill', 285, 449, 'left')}
+        ${this.renderDualCapsuleStation('lynnwood-city-center', 285, 75, true)}
+        ${this.renderDualCapsuleStation('mountlake-terrace', 285, 117)}
+        ${this.renderDualCapsuleStation('shoreline-north-185th', 285, 158)}
+        ${this.renderDualCapsuleStation('shoreline-south-148th', 285, 200)}
+        ${this.renderDualCapsuleStation('pinehurst', 285, 241)}
+        ${this.renderDualCapsuleStation('northgate', 285, 283)}
+        ${this.renderDualCapsuleStation('roosevelt', 285, 324)}
+        ${this.renderDualCapsuleStation('u-district', 285, 366)}
+        ${this.renderDualCapsuleStation('university-of-washington', 285, 407)}
+        ${this.renderDualCapsuleStation('capitol-hill', 285, 449)}
 
         <!-- Downtown Seattle Transit Tunnel Stations -->
-        ${this.renderDualCapsuleStation('westlake', 285, 490, 'left')}
-        ${this.renderDualCapsuleStation('symphony', 285, 532, 'left')}
-        ${this.renderDualCapsuleStation('pioneer-square', 285, 573, 'left')}
+        ${this.renderDualCapsuleStation('westlake', 285, 490)}
+        ${this.renderDualCapsuleStation('symphony', 285, 532)}
+        ${this.renderDualCapsuleStation('pioneer-square', 285, 573)}
         
         <!-- Highlighted 1 Line ⇄ 2 Line Transfer Hub -->
         ${this.renderTransferHubStation('international-district-chinatown', 285, 615)}
 
         <!-- ================= LEFT SPINE: 1 LINE SOUTH STATIONS ================= -->
-        ${this.renderLine1Station('stadium', 272, 665, 'left')}
-        ${this.renderLine1Station('sodo', 272, 710, 'left')}
-        ${this.renderLine1Station('beacon-hill', 272, 755, 'left')}
-        ${this.renderLine1Station('mount-baker', 272, 800, 'left')}
-        ${this.renderLine1Station('columbia-city', 272, 845, 'left')}
-        ${this.renderLine1Station('othello', 272, 890, 'left')}
-        ${this.renderLine1Station('rainier-beach', 272, 935, 'left')}
-        ${this.renderLine1Station('tukwila-intl-blvd', 272, 980, 'left')}
-        ${this.renderAirportStation('seatac-airport', 272, 1025, 'left')}
-        ${this.renderLine1Station('angle-lake', 272, 1070, 'left')}
-        ${this.renderLine1Station('kent-des-moines', 272, 1115, 'left')}
-        ${this.renderLine1Station('star-lake', 272, 1160, 'left')}
-        ${this.renderLine1Station('federal-way-downtown', 272, 1205, 'left', true)}
+        ${this.renderLine1Station('stadium', 272, 665)}
+        ${this.renderLine1Station('sodo', 272, 710)}
+        ${this.renderLine1Station('beacon-hill', 272, 755)}
+        ${this.renderLine1Station('mount-baker', 272, 800)}
+        ${this.renderLine1Station('columbia-city', 272, 845)}
+        ${this.renderLine1Station('othello', 272, 890)}
+        ${this.renderLine1Station('rainier-beach', 272, 935)}
+        ${this.renderLine1Station('tukwila-intl-blvd', 272, 980)}
+        ${this.renderAirportStation('seatac-airport', 272, 1025)}
+        ${this.renderLine1Station('angle-lake', 272, 1070)}
+        ${this.renderLine1Station('kent-des-moines', 272, 1115)}
+        ${this.renderLine1Station('star-lake', 272, 1160)}
+        ${this.renderLine1Station('federal-way-downtown', 272, 1205, true)}
 
         <!-- ================= CONNECTING SEGMENT (I-90 CORRIDOR) ================= -->
         ${this.renderLine2Station('judkins-park', 355, 665, 'bottom')}
@@ -832,7 +824,7 @@ export class SystemMapModal {
 
     return `
       <!-- ================= KEY 1 LINE & 2 LINE TRANSFER HUB ================= -->
-      <g class="map-station-node map-transfer-hub-node map-elem-line-1 map-elem-line-2 map-elem-shared" id="map-node-${id}">
+      <g class="map-station-node map-transfer-hub-node" id="map-node-${id}">
         <!-- Outer Glowing Capsule -->
         <rect x="${x - 26}" y="${y - 13}" width="52" height="26" rx="13" fill="none" stroke="#38bdf8" stroke-width="3" opacity="0.25" />
         <rect x="${x - 24}" y="${y - 11}" width="48" height="22" rx="11" fill="#091122" stroke="url(#transfer-border-grad)" stroke-width="2" />
@@ -849,7 +841,7 @@ export class SystemMapModal {
         <circle cx="${x + 13}" cy="${y}" r="2" fill="#0072CE" />
 
         <!-- Station Name -->
-        <text class="map-station-label map-transfer-station-title" x="${textX}" y="${y + 2.5}" text-anchor="end" font-weight="800" font-size="12px" fill="#ffffff">${name}</text>
+        <text class="map-station-label map-transfer-station-title" x="${textX}" y="${y + 2.5}" text-anchor="end">${name}</text>
 
         <!-- Snug Transfer Pill Badge: (1) ⇄ (2) TRANSFER -->
         <g transform="translate(${textX}, ${y + 8})">
@@ -877,23 +869,21 @@ export class SystemMapModal {
     id: string,
     x: number,
     y: number,
-    labelPos: 'left' | 'right' = 'left',
     isTerminus: boolean = false
   ): string {
     const station = getStationById(id);
     const name = station?.name || id;
     const sub = station?.shortName || '';
-    const textX = labelPos === 'left' ? 252 : x + 26;
-    const textAnchor = labelPos === 'left' ? 'end' : 'start';
+    const textX = 252;
     const r = isTerminus ? 5.5 : 4.8;
 
     return `
-      <g class="map-station-node map-elem-line-1 map-elem-line-2 map-elem-shared" id="map-node-${id}">
+      <g class="map-station-node" id="map-node-${id}">
         <!-- Two distinct circles centered on each parallel line with ample separation -->
         <circle class="map-station-circle" cx="${x - 13}" cy="${y}" r="${r}" fill="#ffffff" stroke="#008542" stroke-width="2.5" />
         <circle class="map-station-circle" cx="${x + 13}" cy="${y}" r="${r}" fill="#ffffff" stroke="#0072CE" stroke-width="2.5" />
-        <text class="map-station-label" x="${textX}" y="${y + 4.5}" text-anchor="${textAnchor}">${name}</text>
-        ${sub ? `<text class="map-station-sublabel" x="${textX}" y="${y + 16.5}" text-anchor="${textAnchor}">${sub}</text>` : ''}
+        <text class="map-station-label" x="${textX}" y="${y + 4.5}" text-anchor="end">${name}</text>
+        ${sub ? `<text class="map-station-sublabel" x="${textX}" y="${y + 16.5}" text-anchor="end">${sub}</text>` : ''}
       </g>
     `;
   }
@@ -902,21 +892,19 @@ export class SystemMapModal {
     id: string,
     x: number,
     y: number,
-    labelPos: 'left' | 'right' = 'left',
     isTerminus: boolean = false
   ): string {
     const station = getStationById(id);
     const name = station?.name || id;
     const sub = station?.shortName || '';
-    const textX = labelPos === 'left' ? 252 : x + 18;
-    const textAnchor = labelPos === 'left' ? 'end' : 'start';
+    const textX = 252;
     const r = isTerminus ? 7 : 5.5;
 
     return `
-      <g class="map-station-node map-elem-line-1" id="map-node-${id}">
+      <g class="map-station-node" id="map-node-${id}">
         <circle class="map-station-circle" cx="${x}" cy="${y}" r="${r}" fill="#ffffff" stroke="#008542" stroke-width="3" />
-        <text class="map-station-label" x="${textX}" y="${y + 4.5}" text-anchor="${textAnchor}">${name}</text>
-        ${sub ? `<text class="map-station-sublabel" x="${textX}" y="${y + 16.5}" text-anchor="${textAnchor}">${sub}</text>` : ''}
+        <text class="map-station-label" x="${textX}" y="${y + 4.5}" text-anchor="end">${name}</text>
+        ${sub ? `<text class="map-station-sublabel" x="${textX}" y="${y + 16.5}" text-anchor="end">${sub}</text>` : ''}
       </g>
     `;
   }
@@ -925,30 +913,19 @@ export class SystemMapModal {
     id: string,
     x: number,
     y: number,
-    labelPos: 'left' | 'right' | 'bottom' = 'right',
+    labelPos: 'right' | 'bottom' = 'right',
     isMajor: boolean = false
   ): string {
     const station = getStationById(id);
     const name = station?.name || id;
     const sub = station?.shortName || '';
-    let textX = x + 18;
-    let textY = y + 4.5;
-    let textAnchor = 'start';
-
-    if (labelPos === 'bottom') {
-      textX = x;
-      textY = y + 22;
-      textAnchor = 'middle';
-    } else if (labelPos === 'left') {
-      textX = 252;
-      textY = y + 4.5;
-      textAnchor = 'end';
-    }
-
+    const textX = labelPos === 'bottom' ? x : x + 18;
+    const textY = labelPos === 'bottom' ? y + 22 : y + 4.5;
+    const textAnchor = labelPos === 'bottom' ? 'middle' : 'start';
     const r = isMajor ? 7 : 5.5;
 
     return `
-      <g class="map-station-node map-elem-line-2" id="map-node-${id}">
+      <g class="map-station-node" id="map-node-${id}">
         <circle class="map-station-circle" cx="${x}" cy="${y}" r="${r}" fill="#ffffff" stroke="#0072CE" stroke-width="3" />
         <text class="map-station-label" x="${textX}" y="${textY}" text-anchor="${textAnchor}">${name}</text>
         ${sub ? `<text class="map-station-sublabel" x="${textX}" y="${textY + 12}" text-anchor="${textAnchor}">${sub}</text>` : ''}
@@ -959,22 +936,20 @@ export class SystemMapModal {
   private renderAirportStation(
     id: string,
     x: number,
-    y: number,
-    labelPos: 'left' | 'right' = 'left'
+    y: number
   ): string {
     const station = getStationById(id);
     const name = station?.name || id;
     const sub = station?.shortName || '';
-    const textX = labelPos === 'left' ? 252 : x + 22;
-    const textAnchor = labelPos === 'left' ? 'end' : 'start';
+    const textX = 252;
 
     return `
-      <g class="map-station-node map-elem-line-1" id="map-node-${id}">
+      <g class="map-station-node" id="map-node-${id}">
         <circle class="map-station-circle" cx="${x}" cy="${y}" r="6" fill="#ffffff" stroke="#008542" stroke-width="3" />
         <rect x="${x - 7}" y="${y - 7}" width="14" height="14" rx="3" fill="#f59e0b" />
         <text x="${x}" y="${y + 3.5}" fill="#0f172a" font-size="9" font-weight="900" text-anchor="middle">✈</text>
-        <text class="map-station-label" x="${textX}" y="${y + 4.5}" text-anchor="${textAnchor}">${name}</text>
-        ${sub ? `<text class="map-station-sublabel" x="${textX}" y="${y + 16.5}" text-anchor="${textAnchor}">${sub}</text>` : ''}
+        <text class="map-station-label" x="${textX}" y="${y + 4.5}" text-anchor="end">${name}</text>
+        ${sub ? `<text class="map-station-sublabel" x="${textX}" y="${y + 16.5}" text-anchor="end">${sub}</text>` : ''}
       </g>
     `;
   }

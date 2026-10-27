@@ -57,8 +57,35 @@ export class StationPickerModal {
     window.removeEventListener('keydown', this.handleKeyDown);
   }
 
-  public refreshPinnedState() {
-    this.renderStationsList();
+  public refreshPinnedState(stationId?: string) {
+    if (stationId) {
+      const row = this.listContainer?.querySelector<HTMLElement>(`[data-station-id="${stationId}"]`);
+      if (row) {
+        this.applyPinStateToRow(row, this.callbacks.isStationPinned(stationId));
+      }
+      return;
+    }
+
+    const rows = this.listContainer?.querySelectorAll<HTMLElement>('.picker-station-row');
+    if (rows && rows.length > 0) {
+      rows.forEach((row) => {
+        const id = row.dataset.stationId;
+        if (id) {
+          this.applyPinStateToRow(row, this.callbacks.isStationPinned(id));
+        }
+      });
+    }
+  }
+
+  private applyPinStateToRow(row: HTMLElement, isPinned: boolean) {
+    const actionBtn = row.querySelector<HTMLButtonElement>('.picker-add-btn');
+    if (!actionBtn || actionBtn.classList.contains('pinned') === isPinned) return;
+    actionBtn.classList.toggle('pinned', isPinned);
+    if (isPinned) {
+      actionBtn.innerHTML = `<span class="btn-text-default">✓ Added</span><span class="btn-text-hover">✕ Remove</span>`;
+    } else {
+      actionBtn.textContent = '+ Add Station';
+    }
   }
 
   private setFilter(line: TransitLineId) {
@@ -193,14 +220,14 @@ export class StationPickerModal {
     this.tab1Btn = createElement(
       'button',
       'filter-pill active line-1',
-      `<span class="filter-pill-label">1 Line</span><span class="filter-pill-route">Lynnwood ⇄ Federal Way</span>`
+      `<span>1 Line</span><span class="filter-pill-route">Lynnwood ⇄ Federal Way</span>`
     ) as HTMLButtonElement;
     this.tab1Btn.onclick = () => this.setFilter('line-1');
 
     this.tab2Btn = createElement(
       'button',
       'filter-pill',
-      `<span class="filter-pill-label">2 Line</span><span class="filter-pill-route">Lynnwood ⇄ Redmond</span>`
+      `<span>2 Line</span><span class="filter-pill-route">Lynnwood ⇄ Redmond</span>`
     ) as HTMLButtonElement;
     this.tab2Btn.onclick = () => this.setFilter('line-2');
 
@@ -215,7 +242,7 @@ export class StationPickerModal {
       const stationId = target.dataset.stationId;
       if (!stationId) return;
       this.callbacks.onTogglePin(stationId);
-      this.refreshPinnedState();
+      this.applyPinStateToRow(target, this.callbacks.isStationPinned(stationId));
     };
 
     body.appendChild(searchWrap);

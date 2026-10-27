@@ -32,8 +32,6 @@
   --bg-surface-elevated: #131c2e;
   --bg-surface-subtle: #0c1220;
   --bg-card: rgba(16, 24, 38, 0.75);
-  --bg-card-hover: rgba(22, 33, 52, 0.9);
-  --bg-glass: rgba(15, 23, 38, 0.65);
   --bg-glass-heavy: rgba(10, 16, 26, 0.85);
   --bg-pill: rgba(255, 255, 255, 0.07);
   --bg-pill-hover: rgba(255, 255, 255, 0.12);
@@ -62,20 +60,13 @@
   --shadow-glow-blue: 0 0 20px var(--st-blue-glow);
   --glow-card: 0 0 20px rgba(0, 0, 0, 0.3);
 
-  /* Layout Constants & Mobile Safe Areas */
+  /* Layout Constants */
   --header-height: 72px;
   --max-width: 1320px;
-  --radius-sm: 8px;
   --radius-md: 14px;
   --radius-lg: 20px;
   --radius-xl: 24px;
   --radius-pill: 9999px;
-
-  --safe-top: env(safe-area-inset-top, 0px);
-  --safe-bottom: env(safe-area-inset-bottom, 0px);
-
-  /* Touch Targets */
-  --touch-target-min: 44px;
 
   /* Transitions */
   --transition-fast: 0.15s cubic-bezier(0.4, 0, 0.2, 1);
@@ -203,7 +194,7 @@ button:focus-visible {
   outline-offset: 2px;
 }
 
-input, select {
+input {
   font-family: inherit;
   font-size: inherit;
   color: inherit;

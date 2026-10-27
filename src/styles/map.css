@@ -105,13 +105,6 @@
   stroke: #ffffff;
 }
 
-.system-map-text {
-  display: flex;
-  flex-direction: column;
-  gap: 0.25rem;
-  min-width: 0;
-}
-
 .system-map-title {
   font-family: var(--font-display);
   font-size: 1.12rem;
@@ -275,10 +268,6 @@
 }
 
 /* Station Nodes in SVG */
-.map-station-circle {
-  stroke-width: 2.5;
-}
-
 .map-station-label {
   fill: #f8fafc;
   font-size: 11.5px;

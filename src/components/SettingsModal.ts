@@ -76,10 +76,8 @@ export class SettingsModal {
 
     // 24 Hour Clock
     const timeGroup = createElement('div', 'form-group form-group-row settings-row');
-    const timeLabelWrap = createElement('div', 'settings-label-wrap');
     const timeLabel = createElement('label', 'form-label form-label-inline', '24-Hour Clock Format');
     timeLabel.setAttribute('for', 'toggle-24h-format');
-    timeLabelWrap.appendChild(timeLabel);
 
     const switchLabel = createElement('label', 'toggle-switch');
     this.timeFormatCheckbox = createElement('input') as HTMLInputElement;
@@ -90,7 +88,7 @@ export class SettingsModal {
     switchLabel.appendChild(this.timeFormatCheckbox);
     switchLabel.appendChild(slider);
 
-    timeGroup.appendChild(timeLabelWrap);
+    timeGroup.appendChild(timeLabel);
     timeGroup.appendChild(switchLabel);
     body.appendChild(timeGroup);
 

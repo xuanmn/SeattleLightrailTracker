@@ -176,6 +176,11 @@ describe('Mobile Performance Optimizations', () => {
       expect(trackWrap.classList.contains('active')).toBe(false);
       expect(bar.style.transform).toBe('scaleX(0)');
       expect(train.style.transform).toBe('translateX(0%)');
+
+      // Subsequent 1-second ticks while inactive should not re-mutate transform styles
+      const barStyleSpy = vi.spyOn(bar.style, 'transform', 'set');
+      card.tickCountdowns();
+      expect(barStyleSpy).not.toHaveBeenCalled();
     });
   });
 
