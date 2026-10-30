@@ -134,8 +134,11 @@ export class StationCardComponent {
   public updateArrivals(data: StationArrivals) {
     this.currentArrivals = data;
 
-    const dir1Key = data.direction1.arrivals.map(a => a.tripId).join(',');
-    const dir2Key = data.direction2.arrivals.map(a => a.tripId).join(',');
+    const dir1Arrivals = data.direction1?.arrivals || [];
+    const dir2Arrivals = data.direction2?.arrivals || [];
+
+    const dir1Key = dir1Arrivals.map(a => a.tripId).join(',');
+    const dir2Key = dir2Arrivals.map(a => a.tripId).join(',');
 
     const sameTrips =
       dir1Key === this.currentDir1TripKey &&
@@ -158,13 +161,13 @@ export class StationCardComponent {
 
       this.renderPlatformArrivals(
         this.platform1Container,
-        data.direction1.arrivals,
-        data.direction1.platform.terminalDestination
+        dir1Arrivals,
+        data.direction1?.platform?.terminalDestination || ''
       );
       this.renderPlatformArrivals(
         this.platform2Container,
-        data.direction2.arrivals,
-        data.direction2.platform.terminalDestination
+        dir2Arrivals,
+        data.direction2?.platform?.terminalDestination || ''
       );
     }
 
@@ -177,8 +180,8 @@ export class StationCardComponent {
    */
   private patchArrivalsInPlace(data: StationArrivals) {
     const allArrivals = [
-      ...data.direction1.arrivals,
-      ...data.direction2.arrivals,
+      ...(data.direction1?.arrivals || []),
+      ...(data.direction2?.arrivals || []),
     ];
 
     const now = Date.now();
@@ -270,7 +273,8 @@ export class StationCardComponent {
     let closestDiffMs = Infinity;
     let closestArrival: TransitArrival | null = null;
 
-    const scanArrivals = (arrivals: TransitArrival[]) => {
+    const scanArrivals = (arrivals?: TransitArrival[]) => {
+      if (!arrivals) return;
       for (let i = 0; i < arrivals.length; i++) {
         const arr = arrivals[i];
         const targetTime = arr.predictedDepartureTime || arr.scheduledDepartureTime;
@@ -283,10 +287,10 @@ export class StationCardComponent {
     };
 
     if (this.directionFilter === 'both' || this.directionFilter === 'dir1') {
-      scanArrivals(this.currentArrivals.direction1.arrivals);
+      scanArrivals(this.currentArrivals.direction1?.arrivals);
     }
     if (this.directionFilter === 'both' || this.directionFilter === 'dir2') {
-      scanArrivals(this.currentArrivals.direction2.arrivals);
+      scanArrivals(this.currentArrivals.direction2?.arrivals);
     }
 
     const APPROACH_WINDOW_MS = 5 * 60 * 1000; // 5 minutes

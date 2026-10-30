@@ -78,7 +78,9 @@ export class StationPickerModal {
   }
 
   private applyPinStateToRow(row: HTMLElement, isPinned: boolean) {
-    const actionBtn = row.querySelector<HTMLButtonElement>('.picker-add-btn');
+    const actionBtn = row.classList.contains('picker-add-btn')
+      ? (row as HTMLButtonElement)
+      : row.querySelector<HTMLButtonElement>('.picker-add-btn');
     if (!actionBtn || actionBtn.classList.contains('pinned') === isPinned) return;
     actionBtn.classList.toggle('pinned', isPinned);
     if (isPinned) {
@@ -242,7 +244,6 @@ export class StationPickerModal {
       const stationId = target.dataset.stationId;
       if (!stationId) return;
       this.callbacks.onTogglePin(stationId);
-      this.applyPinStateToRow(target, this.callbacks.isStationPinned(stationId));
     };
 
     body.appendChild(searchWrap);

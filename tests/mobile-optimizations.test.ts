@@ -180,6 +180,29 @@ describe('Mobile Performance Optimizations', () => {
       card.tickCountdowns();
       expect(barStyleSpy).not.toHaveBeenCalled();
     });
+
+    it('handles missing or undefined arrivals arrays defensively without throwing', () => {
+      const station = STATIONS[0];
+      const card = new StationCardComponent(station, false, false, {
+        onTogglePin: () => {},
+      });
+
+      const malformedData = {
+        station,
+        lastUpdated: Date.now(),
+        direction1: {
+          platform: station.platforms.northbound!,
+          arrivals: undefined as unknown as [],
+        },
+        direction2: {
+          platform: station.platforms.southbound!,
+          arrivals: undefined as unknown as [],
+        },
+      };
+
+      expect(() => card.updateArrivals(malformedData as unknown as StationArrivals)).not.toThrow();
+      expect(() => card.tickCountdowns()).not.toThrow();
+    });
   });
 
   describe('Fix 3: Mobile Backdrop-Filter & CSS Compositing Rules', () => {

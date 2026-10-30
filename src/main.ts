@@ -41,6 +41,11 @@ class TransitTrackerApp {
   private faqModal?: FaqModal;
   private mapModal?: SystemMapModal;
 
+  private pickerModalPromise?: Promise<StationPickerModal>;
+  private settingsModalPromise?: Promise<SettingsModal>;
+  private faqModalPromise?: Promise<FaqModal>;
+  private mapModalPromise?: Promise<SystemMapModal>;
+
   private activeLine: TransitLineId = 'line-1';
   private showOnlyPinned: boolean = true; // Default to showing only user's chosen favorite stations
   private settings: AppSettings;
@@ -104,27 +109,16 @@ class TransitTrackerApp {
     this.header = new HeaderComponent(this.activeLine, {
       onLineChange: (line) => this.switchLine(line),
       onSettingsClick: async () => {
-        if (!this.settingsModal) {
-          const { SettingsModal } = await import('./components/SettingsModal');
-          this.settingsModal = new SettingsModal({
-            onSettingsSaved: (newSettings) => this.handleSettingsSaved(newSettings),
-          });
-        }
-        this.settingsModal.open();
+        const modal = await this.getSettingsModal();
+        modal.open();
       },
       onFaqClick: async () => {
-        if (!this.faqModal) {
-          const { FaqModal } = await import('./components/FaqModal');
-          this.faqModal = new FaqModal();
-        }
-        this.faqModal.open();
+        const modal = await this.getFaqModal();
+        modal.open();
       },
       onMapClick: async () => {
-        if (!this.mapModal) {
-          const { SystemMapModal } = await import('./components/SystemMapModal');
-          this.mapModal = new SystemMapModal();
-        }
-        this.mapModal.open();
+        const modal = await this.getMapModal();
+        modal.open();
       },
     });
     this.appEl.appendChild(this.header.getElement());
@@ -396,14 +390,8 @@ class TransitTrackerApp {
       `${ICONS.plus} Add & Remove Stations`
     );
     btn.onclick = async () => {
-      if (!this.pickerModal) {
-        const { StationPickerModal } = await import('./components/StationPickerModal');
-        this.pickerModal = new StationPickerModal({
-          onTogglePin: (stationId) => this.handleTogglePin(stationId),
-          isStationPinned: (stationId) => this.pinnedIds.has(stationId),
-        });
-      }
-      this.pickerModal.open(this.activeLine);
+      const modal = await this.getPickerModal();
+      modal.open(this.activeLine);
     };
 
     emptyCard.appendChild(icon);
@@ -469,6 +457,63 @@ class TransitTrackerApp {
         card.setTimeFormat(newSettings.timeFormat24Hour);
       });
     }
+  }
+
+  private async getSettingsModal(): Promise<SettingsModal> {
+    if (this.settingsModal) return this.settingsModal;
+    if (!this.settingsModalPromise) {
+      this.settingsModalPromise = import('./components/SettingsModal').then(
+        ({ SettingsModal }) => {
+          this.settingsModal = new SettingsModal({
+            onSettingsSaved: (newSettings) => this.handleSettingsSaved(newSettings),
+          });
+          return this.settingsModal;
+        }
+      );
+    }
+    return this.settingsModalPromise;
+  }
+
+  private async getFaqModal(): Promise<FaqModal> {
+    if (this.faqModal) return this.faqModal;
+    if (!this.faqModalPromise) {
+      this.faqModalPromise = import('./components/FaqModal').then(
+        ({ FaqModal }) => {
+          this.faqModal = new FaqModal();
+          return this.faqModal;
+        }
+      );
+    }
+    return this.faqModalPromise;
+  }
+
+  private async getMapModal(): Promise<SystemMapModal> {
+    if (this.mapModal) return this.mapModal;
+    if (!this.mapModalPromise) {
+      this.mapModalPromise = import('./components/SystemMapModal').then(
+        ({ SystemMapModal }) => {
+          this.mapModal = new SystemMapModal();
+          return this.mapModal;
+        }
+      );
+    }
+    return this.mapModalPromise;
+  }
+
+  private async getPickerModal(): Promise<StationPickerModal> {
+    if (this.pickerModal) return this.pickerModal;
+    if (!this.pickerModalPromise) {
+      this.pickerModalPromise = import('./components/StationPickerModal').then(
+        ({ StationPickerModal }) => {
+          this.pickerModal = new StationPickerModal({
+            onTogglePin: (stationId) => this.handleTogglePin(stationId),
+            isStationPinned: (stationId) => this.pinnedIds.has(stationId),
+          });
+          return this.pickerModal;
+        }
+      );
+    }
+    return this.pickerModalPromise;
   }
 
   private showStatusBanner(message: string) {

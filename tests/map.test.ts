@@ -394,7 +394,7 @@ describe('SystemMapModal Component', () => {
     expect(themeCss).toMatch(/@media\s*\([^)]*max-width:\s*768px[^)]*\)[\s\S]*?background-attachment:\s*scroll/);
   });
 
-  it('extends background pattern beyond the 830x1280 canvas to prevent cutoffs when zooming out', () => {
+  it('extends background pattern beyond the 830x1292 canvas to prevent cutoffs when zooming out', () => {
     const svg = document.querySelector('svg.system-map-svg');
     const bgRect = svg?.querySelector('rect[fill="url(#grid)"]');
     expect(bgRect).not.toBeNull();

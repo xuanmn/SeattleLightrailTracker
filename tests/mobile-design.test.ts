@@ -219,6 +219,21 @@ describe('Mobile Frontend Design & UX Specifications', () => {
     expect(text).toContain('206-398-5268');
   });
 
+  it('displays verified Sound Transit pet and service animal policy in FaqModal', () => {
+    const faq = new FaqModal();
+    faq.open();
+
+    const text = document.body.textContent || '';
+    expect(text).toContain('Pets & Service Animals');
+    expect(text).toContain('Americans with Disabilities Act');
+    expect(text).toContain('leashed, well-behaved');
+    expect(text).toContain('Aggressive animals are never allowed');
+    expect(text).toContain('carrier');
+    expect(text).toContain('cleaning up after your pet');
+    expect(text).toContain('block seating or passenger movement');
+    expect(text).toContain('Pet travel is not guaranteed');
+  });
+
   it('renders FaqModal with dedicated full-screen mobile classes', () => {
     const faq = new FaqModal();
     faq.open();

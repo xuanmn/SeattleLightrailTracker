@@ -145,6 +145,21 @@ export class FaqModal {
 
       <details class="faq-item" open>
         <summary class="faq-q">
+          <span>🐾 Pets & Service Animals</span>
+          <span class="faq-chevron" aria-hidden="true">▾</span>
+        </summary>
+        <div class="faq-a">
+          • <strong>Service Animals:</strong> Permitted in compliance with the Americans with Disabilities Act.<br/>
+          • <strong>Dogs:</strong> Permitted if leashed, well-behaved, and under the handler's control. Aggressive animals are never allowed.<br/>
+          • <strong>Other Pets:</strong> Allowed but must always remain in a carrier.<br/>
+          • <strong>Handlers:</strong> You are responsible for controlling and cleaning up after your pet.<br/>
+          • <strong>Seating & Aisles:</strong> Pets may not block seating or passenger movement.<br/>
+          • <span class="faq-tip-badge warning">Important Note</span> <strong>Pet Travel:</strong> Pet travel is not guaranteed. Sound Transit staff may restrict pet travel when safety, sanitation, or overcrowding concerns exist.
+        </div>
+      </details>
+
+      <details class="faq-item" open>
+        <summary class="faq-q">
           <span>🛡️ Security & Lost and Found</span>
           <span class="faq-chevron" aria-hidden="true">▾</span>
         </summary>

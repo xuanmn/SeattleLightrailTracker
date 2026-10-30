@@ -27,6 +27,11 @@ describe("HeaderComponent", () => {
     expect(faqBtn).not.toBeNull();
     faqBtn.click();
     expect(onFaqClick).toHaveBeenCalledTimes(1);
+
+    const settingsBtn = el.querySelector('button[title*="Settings"]') as HTMLButtonElement;
+    expect(settingsBtn).not.toBeNull();
+    settingsBtn.click();
+    expect(onSettingsClick).toHaveBeenCalledTimes(1);
   });
 
   it("provides a clickable brand logo with reload capability", () => {
