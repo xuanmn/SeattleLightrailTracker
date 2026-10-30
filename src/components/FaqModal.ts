@@ -192,8 +192,8 @@ export class FaqModal {
           <span class="faq-chevron" aria-hidden="true">▾</span>
         </summary>
         <div class="faq-links-list">
-          <a href="https://www.soundtransit.org/ride-with-us/routes-schedules" target="_blank" rel="noopener noreferrer" class="faq-link-row">
-            <span>Sound Transit Schedules & Alerts</span>
+          <a href="https://www.soundtransit.org/ride-with-us/service-alerts" target="_blank" rel="noopener noreferrer" class="faq-link-row">
+            <span>Sound Transit Service Alerts</span>
             <span>↗</span>
           </a>
           <a href="https://www.soundtransit.org/ride-with-us/know-before-you-go/rules-etiquette" target="_blank" rel="noopener noreferrer" class="faq-link-row">

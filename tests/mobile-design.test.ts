@@ -268,6 +268,10 @@ describe('Mobile Frontend Design & UX Specifications', () => {
     expect(emergency911Link).toBeNull();
     expect(lostFoundLink?.closest('.faq-action-btns')).not.toBeNull();
 
+    // Direct official service alerts link
+    const alertsLink = document.querySelector('a[href="https://www.soundtransit.org/ride-with-us/service-alerts"]');
+    expect(alertsLink).not.toBeNull();
+
     // Semantic accordion details and summary
     const accordions = document.querySelectorAll('details.faq-item');
     expect(accordions.length).toBeGreaterThan(0);
