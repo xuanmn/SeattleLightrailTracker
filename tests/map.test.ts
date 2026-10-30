@@ -408,6 +408,61 @@ describe('SystemMapModal Component', () => {
     expect(mapCss).toMatch(/\.system-map-svg\s*\{[^}]*overflow:\s*visible/);
   });
 
+  it('maintains symmetric top and bottom terminus padding and clearance on the SVG schematic', () => {
+    const svg = document.querySelector('svg.system-map-svg') as SVGSVGElement;
+    expect(svg).not.toBeNull();
+
+    const viewBoxParts = (svg.getAttribute('viewBox') || '').trim().split(/\s+/).map(Number);
+    const svgHeight = viewBoxParts[3];
+
+    const parseTranslateY = (el: Element | null): number => {
+      const match = el?.getAttribute('transform')?.match(/translate\(\s*[\d.-]+\s*,\s*([\d.-]+)\s*\)/);
+      return match ? Number(match[1]) : NaN;
+    };
+
+    const northBadgeGroup = svg.querySelector('g[transform^="translate(285,"]');
+    const northRect = northBadgeGroup?.querySelector('rect');
+    const northTy = parseTranslateY(northBadgeGroup);
+    const northBadgeTop = northTy + Number(northRect?.getAttribute('y'));
+    const northBadgeBottom = northBadgeTop + Number(northRect?.getAttribute('height'));
+
+    const southBadgeGroup = svg.querySelector('g[transform^="translate(272,"]');
+    const southRect = southBadgeGroup?.querySelector('rect');
+    const southTy = parseTranslateY(southBadgeGroup);
+    const southBadgeTop = southTy + Number(southRect?.getAttribute('y'));
+    const southBadgeBottom = southBadgeTop + Number(southRect?.getAttribute('height'));
+
+    // Outer padding from SVG canvas boundary to terminus badge edge must match top and bottom
+    const topOuterPadding = northBadgeTop;
+    const bottomOuterPadding = svgHeight - southBadgeBottom;
+    expect(bottomOuterPadding).toBe(topOuterPadding);
+
+    // Inner clearance below Federal Way Downtown's sublabel must match the breathing room above Lynnwood
+    const lynnwoodCircle = svg.querySelector('#map-node-lynnwood-city-center circle');
+    const lynnwoodTopEdge =
+      Number(lynnwoodCircle?.getAttribute('cy')) - Number(lynnwoodCircle?.getAttribute('r'));
+    const northClearance = lynnwoodTopEdge - northBadgeBottom;
+
+    const federalWaySublabel = svg.querySelector(
+      '#map-node-federal-way-downtown .map-station-sublabel'
+    );
+    const federalWayCircle = svg.querySelector('#map-node-federal-way-downtown circle');
+    const federalWaySublabelY = Number(federalWaySublabel?.getAttribute('y'));
+    const southClearance = southBadgeTop - federalWaySublabelY;
+
+    expect(southClearance).toBeGreaterThanOrEqual(northClearance);
+
+    // Line 1 track should terminate cleanly at Federal Way Downtown's center, just as it starts at Lynnwood's center
+    const line1Track = svg.querySelector('.map-track-path.line-1-main');
+    const federalWayCy = federalWayCircle?.getAttribute('cy');
+    expect(line1Track?.getAttribute('d')).toContain(`L 272,${federalWayCy}`);
+
+    // CSS canvas dimensions must stay synchronized with SVG viewBox height
+    const mapCss = readFileSync(process.cwd() + '/src/styles/map.css', 'utf-8');
+    expect(mapCss).toMatch(new RegExp(`\\.map-svg-canvas\\s*\\{[^}]*height:\\s*${svgHeight}px`));
+    expect(mapCss).toMatch(new RegExp(`\\.system-map-svg\\s*\\{[^}]*height:\\s*${svgHeight}px`));
+  });
+
   it('caps zoom-out scale and applies damping when zooming out beyond fitScale', () => {
     modal.open();
     const mapBody = document.querySelector('.system-map-body') as HTMLElement;

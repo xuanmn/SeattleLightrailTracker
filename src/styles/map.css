@@ -198,7 +198,7 @@
 
 .map-svg-canvas {
   width: 830px;
-  height: 1280px;
+  height: 1292px;
   position: absolute;
   top: 0;
   left: 0;
@@ -214,7 +214,7 @@
 
 .system-map-svg {
   width: 830px;
-  height: 1280px;
+  height: 1292px;
   display: block;
   shape-rendering: geometricPrecision;
   text-rendering: optimizeLegibility;

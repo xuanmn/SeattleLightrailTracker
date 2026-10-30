@@ -4,6 +4,9 @@ import { lockBodyScroll, unlockBodyScroll } from '../utils/scrollLock';
 import { attachBottomSheetSwipe } from '../utils/bottomSheetGesture';
 import { getStationById } from '../data/stations';
 
+const MAP_WIDTH = 830;
+const MAP_HEIGHT = 1292;
+
 export class SystemMapModal {
   private overlay: HTMLElement;
   private bodyEl!: HTMLElement;
@@ -177,15 +180,15 @@ export class SystemMapModal {
 
     const padding = 16;
 
-    const scaleX = (w - padding * 2) / 830;
-    const scaleY = (h - padding * 2) / 1280;
+    const scaleX = (w - padding * 2) / MAP_WIDTH;
+    const scaleY = (h - padding * 2) / MAP_HEIGHT;
     this.fitScale = Math.min(scaleX, scaleY);
     this.minScale = this.fitScale * 0.88;
     this.maxScale = Math.max(3.0, this.fitScale * 4.5);
 
     this.currentScale = this.fitScale;
-    this.currentX = (w - 830 * this.fitScale) / 2;
-    this.currentY = (h - 1280 * this.fitScale) / 2;
+    this.currentX = (w - MAP_WIDTH * this.fitScale) / 2;
+    this.currentY = (h - MAP_HEIGHT * this.fitScale) / 2;
 
     if (this.canvasEl) {
       this.canvasEl.style.transition = 'none';
@@ -202,8 +205,8 @@ export class SystemMapModal {
   private clampOffsets(tx: number, ty: number, s: number, allowElastic: boolean = false): { x: number; y: number } {
     const w = this.viewportW || 400;
     const h = this.viewportH || 700;
-    const mapW = 830 * s;
-    const mapH = 1280 * s;
+    const mapW = MAP_WIDTH * s;
+    const mapH = MAP_HEIGHT * s;
     const margin = allowElastic ? 60 : 16;
 
     let minX: number;
@@ -383,8 +386,8 @@ export class SystemMapModal {
       // Zoom out to fit
       this.animateTo(
         this.fitScale,
-        (this.viewportW - 830 * this.fitScale) / 2,
-        (this.viewportH - 1280 * this.fitScale) / 2
+        (this.viewportW - MAP_WIDTH * this.fitScale) / 2,
+        (this.viewportH - MAP_HEIGHT * this.fitScale) / 2
       );
     } else {
       // Zoom in 2.4x
@@ -704,7 +707,7 @@ export class SystemMapModal {
 
   private generateOfficialSchematicSvg(): string {
     return `
-      <svg class="system-map-svg" viewBox="0 0 830 1280" width="830" height="1280" xmlns="http://www.w3.org/2000/svg">
+      <svg class="system-map-svg" viewBox="0 0 ${MAP_WIDTH} ${MAP_HEIGHT}" width="${MAP_WIDTH}" height="${MAP_HEIGHT}" xmlns="http://www.w3.org/2000/svg">
         <defs>
           <linearGradient id="transfer-border-grad" x1="0%" y1="0%" x2="100%" y2="0%">
             <stop offset="0%" stop-color="#008542" />
@@ -717,14 +720,14 @@ export class SystemMapModal {
         <pattern id="grid" width="48" height="48" patternUnits="userSpaceOnUse">
           <path d="M 24 20.5 L 24 27.5 M 20.5 24 L 27.5 24" fill="none" stroke="rgba(255, 255, 255, 0.075)" stroke-width="1.2" stroke-linecap="round"/>
         </pattern>
-        <rect x="-12000" y="-12000" width="24830" height="25280" fill="url(#grid)" />
+        <rect x="-12000" y="-12000" width="${24000 + MAP_WIDTH}" height="${24000 + MAP_HEIGHT}" fill="url(#grid)" />
 
         <!-- ================= TRACK LINES ================= -->
 
         <!-- 1 Line Track (Green #008542) - Multi-Layer Vector Glow -->
-        <path class="map-track-path line-1-aura" d="M 272,75 L 272,1210" />
-        <path class="map-track-path line-1-glow" d="M 272,75 L 272,1210" />
-        <path class="map-track-path line-1-main" d="M 272,75 L 272,1210" />
+        <path class="map-track-path line-1-aura" d="M 272,75 L 272,1205" />
+        <path class="map-track-path line-1-glow" d="M 272,75 L 272,1205" />
+        <path class="map-track-path line-1-main" d="M 272,75 L 272,1205" />
 
         <!-- 2 Line Track (Blue #0072CE) - Shared in North/Tunnel + Eastside Corridor - Multi-Layer Vector Glow -->
         <path class="map-track-path line-2-aura"
@@ -753,7 +756,7 @@ export class SystemMapModal {
         </g>
 
         <!-- 1 Line South Terminus (Federal Way Downtown) -->
-        <g transform="translate(272, 1242)">
+        <g transform="translate(272, 1256)">
           <rect x="-24" y="-16" width="48" height="26" rx="13" fill="#0f172a" stroke="rgba(0,133,66,0.6)" stroke-width="1.5" />
           <circle cx="0" cy="-3" r="9" fill="#008542" />
           <text x="0" y="0.5" fill="#ffffff" font-size="11" font-weight="800" text-anchor="middle">1</text>
