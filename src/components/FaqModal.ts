@@ -78,7 +78,7 @@ export class FaqModal {
             • <strong>Bellevue ⇄ Westlake (Seattle):</strong> ~25 min<br/>
             • <strong>Bellevue ⇄ Capitol Hill:</strong> ~35 min (direct)<br/>
             • <strong>Downtown Redmond ⇄ Lynnwood:</strong> ~55 min (direct)<br/>
-            • <strong>Bellevue ⇄ UW & Northgate:</strong> Direct on 2 Line<br/>
+            • <strong>Bellevue ⇄ UW & Northgate:</strong> ~40–45 min (direct on 2 Line)<br/>
             • <strong>Shared Core (Lynnwood ⇄ Chinatown-ID):</strong> Trains arrive every <strong>4–5 min</strong> during peak hours.<br/>
             • <span class="faq-tip-badge tip">Transfer Tip</span> <strong>To SeaTac Airport:</strong> Take 2 Line to Chinatown-ID, then cross-platform transfer to 1 Line Southbound (~55 min total from Bellevue).
           </p>
@@ -149,7 +149,7 @@ export class FaqModal {
           <span class="faq-chevron" aria-hidden="true">▾</span>
         </summary>
         <div class="faq-a">
-          • <strong>Service Animals:</strong> Permitted in compliance with the Americans with Disabilities Act.<br/>
+          • <strong>Service Animals:</strong> Fully permitted on all trains and stations in compliance with the Americans with Disabilities Act (ADA).<br/>
           • <strong>Dogs:</strong> Permitted if leashed, well-behaved, and under the handler's control. Aggressive animals are never allowed.<br/>
           • <strong>Other Pets:</strong> Allowed but must always remain in a carrier.<br/>
           • <strong>Handlers:</strong> You are responsible for controlling and cleaning up after your pet.<br/>
@@ -194,6 +194,10 @@ export class FaqModal {
         <div class="faq-links-list">
           <a href="https://www.soundtransit.org/ride-with-us/routes-schedules" target="_blank" rel="noopener noreferrer" class="faq-link-row">
             <span>Sound Transit Schedules & Alerts</span>
+            <span>↗</span>
+          </a>
+          <a href="https://www.soundtransit.org/ride-with-us/know-before-you-go/rules-etiquette" target="_blank" rel="noopener noreferrer" class="faq-link-row">
+            <span>Sound Transit Rules & Etiquette (Pets, Bikes & Conduct)</span>
             <span>↗</span>
           </a>
           <a href="https://www.soundtransit.org/ride-with-us/stations/link-light-rail-stations" target="_blank" rel="noopener noreferrer" class="faq-link-row">
