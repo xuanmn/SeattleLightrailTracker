@@ -1,8 +1,8 @@
-import { STATIONS } from '../data/stations';
-import { Station, TransitLineId } from '../types/transit';
-import { createElement, ICONS } from '../utils/dom';
-import { lockBodyScroll, unlockBodyScroll } from '../utils/scrollLock';
-import { attachBottomSheetSwipe } from '../utils/bottomSheetGesture';
+import { STATIONS } from "../data/stations";
+import { Station, TransitLineId } from "../types/transit";
+import { attachBottomSheetSwipe } from "../utils/bottomSheetGesture";
+import { createElement, ICONS } from "../utils/dom";
+import { lockBodyScroll, unlockBodyScroll } from "../utils/scrollLock";
 
 interface StationPickerCallbacks {
   onTogglePin: (stationId: string) => void;
@@ -12,15 +12,15 @@ interface StationPickerCallbacks {
 export class StationPickerModal {
   private overlay: HTMLElement;
   private listContainer!: HTMLElement;
-  private activeFilterLine: TransitLineId = 'line-1';
-  private searchQuery: string = '';
+  private activeFilterLine: TransitLineId = "line-1";
+  private searchQuery: string = "";
   private searchInput!: HTMLInputElement;
   private callbacks: StationPickerCallbacks;
   private tab1Btn!: HTMLButtonElement;
   private tab2Btn!: HTMLButtonElement;
 
   private handleKeyDown = (e: KeyboardEvent) => {
-    if (e.key === 'Escape' && this.overlay.classList.contains('open')) {
+    if (e.key === "Escape" && this.overlay.classList.contains("open")) {
       this.close();
     }
   };
@@ -32,10 +32,10 @@ export class StationPickerModal {
   }
 
   public open(initialLine?: TransitLineId) {
-    if (this.overlay.classList.contains('open')) return;
+    if (this.overlay.classList.contains("open")) return;
     if (this.searchInput) {
-      this.searchInput.value = '';
-      this.searchQuery = '';
+      this.searchInput.value = "";
+      this.searchQuery = "";
     }
     if (initialLine) {
       this.setFilter(initialLine);
@@ -45,16 +45,16 @@ export class StationPickerModal {
     if (this.listContainer) {
       this.listContainer.scrollTop = 0;
     }
-    this.overlay.classList.add('open');
+    this.overlay.classList.add("open");
     lockBodyScroll();
-    window.addEventListener('keydown', this.handleKeyDown);
+    window.addEventListener("keydown", this.handleKeyDown);
   }
 
   public close() {
-    if (!this.overlay.classList.contains('open')) return;
-    this.overlay.classList.remove('open');
+    if (!this.overlay.classList.contains("open")) return;
+    this.overlay.classList.remove("open");
     unlockBodyScroll();
-    window.removeEventListener('keydown', this.handleKeyDown);
+    window.removeEventListener("keydown", this.handleKeyDown);
   }
 
   public refreshPinnedState(stationId?: string) {
@@ -66,7 +66,7 @@ export class StationPickerModal {
       return;
     }
 
-    const rows = this.listContainer?.querySelectorAll<HTMLElement>('.picker-station-row');
+    const rows = this.listContainer?.querySelectorAll<HTMLElement>(".picker-station-row");
     if (rows && rows.length > 0) {
       rows.forEach((row) => {
         const id = row.dataset.stationId;
@@ -78,27 +78,27 @@ export class StationPickerModal {
   }
 
   private applyPinStateToRow(row: HTMLElement, isPinned: boolean) {
-    const actionBtn = row.classList.contains('picker-add-btn')
+    const actionBtn = row.classList.contains("picker-add-btn")
       ? (row as HTMLButtonElement)
-      : row.querySelector<HTMLButtonElement>('.picker-add-btn');
-    if (!actionBtn || actionBtn.classList.contains('pinned') === isPinned) return;
-    actionBtn.classList.toggle('pinned', isPinned);
+      : row.querySelector<HTMLButtonElement>(".picker-add-btn");
+    if (!actionBtn || actionBtn.classList.contains("pinned") === isPinned) return;
+    actionBtn.classList.toggle("pinned", isPinned);
     if (isPinned) {
       actionBtn.innerHTML = `<span class="btn-text-default">✓ Added</span><span class="btn-text-hover">✕ Remove</span>`;
     } else {
-      actionBtn.textContent = '+ Add Station';
+      actionBtn.textContent = "+ Add Station";
     }
   }
 
   private setFilter(line: TransitLineId) {
     this.activeFilterLine = line;
-    this.tab1Btn.className = `filter-pill ${line === 'line-1' ? 'active line-1' : ''}`;
-    this.tab2Btn.className = `filter-pill ${line === 'line-2' ? 'active line-2' : ''}`;
+    this.tab1Btn.className = `filter-pill ${line === "line-1" ? "active line-1" : ""}`;
+    this.tab2Btn.className = `filter-pill ${line === "line-2" ? "active line-2" : ""}`;
     this.renderStationsList();
   }
 
   private renderStationsList() {
-    this.listContainer.innerHTML = '';
+    this.listContainer.innerHTML = "";
 
     const query = this.searchQuery.trim().toLowerCase();
 
@@ -114,10 +114,10 @@ export class StationPickerModal {
     });
 
     if (filtered.length === 0) {
-      const empty = createElement('div', 'departures-empty');
+      const empty = createElement("div", "departures-empty");
       empty.textContent = query
-        ? `No stations matching "${query}" on ${this.activeFilterLine === 'line-1' ? '1 Line' : '2 Line'}`
-        : 'No stations found';
+        ? `No stations matching "${query}" on ${this.activeFilterLine === "line-1" ? "1 Line" : "2 Line"}`
+        : "No stations found";
       this.listContainer.appendChild(empty);
       return;
     }
@@ -129,26 +129,26 @@ export class StationPickerModal {
   }
 
   private createStationRow(station: Station): HTMLElement {
-    const isLine1 = station.lines.includes('line-1');
+    const isLine1 = station.lines.includes("line-1");
     const isPinned = this.callbacks.isStationPinned(station.id);
 
-    const row = createElement('div', 'picker-station-row');
+    const row = createElement("div", "picker-station-row");
 
-    const info = createElement('div', 'brand-section');
+    const info = createElement("div", "brand-section");
 
     const linePill = createElement(
-      'span',
-      `station-line-pill ${isLine1 ? 'line-1-circle' : 'line-2-circle'}`,
-      isLine1 ? '1' : '2'
+      "span",
+      `station-line-pill ${isLine1 ? "line-1-circle" : "line-2-circle"}`,
+      isLine1 ? "1" : "2",
     );
 
-    const textGroup = createElement('div', 'station-name-wrap');
-    const name = createElement('div', 'station-name');
+    const textGroup = createElement("div", "station-name-wrap");
+    const name = createElement("div", "station-name");
 
     name.textContent = station.name;
 
     if (station.shortName) {
-      const sub = createElement('div', 'station-subname', station.shortName);
+      const sub = createElement("div", "station-subname", station.shortName);
       textGroup.appendChild(name);
       textGroup.appendChild(sub);
     } else {
@@ -159,16 +159,13 @@ export class StationPickerModal {
     info.appendChild(textGroup);
 
     // Action button
-    const actionBtn = createElement(
-      'button',
-      `picker-add-btn ${isPinned ? 'pinned' : ''}`
-    ) as HTMLButtonElement;
-    actionBtn.type = 'button';
+    const actionBtn = createElement("button", `picker-add-btn ${isPinned ? "pinned" : ""}`) as HTMLButtonElement;
+    actionBtn.type = "button";
 
     if (isPinned) {
       actionBtn.innerHTML = `<span class="btn-text-default">✓ Added</span><span class="btn-text-hover">✕ Remove</span>`;
     } else {
-      actionBtn.textContent = '+ Add Station';
+      actionBtn.textContent = "+ Add Station";
     }
 
     row.dataset.stationId = station.id;
@@ -178,15 +175,15 @@ export class StationPickerModal {
   }
 
   private render(): HTMLElement {
-    const overlay = createElement('div', 'modal-overlay');
-    const modal = createElement('div', 'modal-container');
+    const overlay = createElement("div", "modal-overlay");
+    const modal = createElement("div", "modal-container");
 
     // Header
-    const header = createElement('div', 'modal-header');
-    const title = createElement('h3', 'modal-title', 'Add & Remove Stations');
-    const closeBtn = createElement('button', 'icon-btn modal-close-btn', ICONS.close);
-    closeBtn.setAttribute('aria-label', 'Close Add & Remove Stations');
-    closeBtn.title = 'Close';
+    const header = createElement("div", "modal-header");
+    const title = createElement("h3", "modal-title", "Add & Remove Stations");
+    const closeBtn = createElement("button", "icon-btn modal-close-btn", ICONS.close);
+    closeBtn.setAttribute("aria-label", "Close Add & Remove Stations");
+    closeBtn.title = "Close";
     closeBtn.onclick = () => this.close();
     header.appendChild(title);
     header.appendChild(closeBtn);
@@ -200,15 +197,15 @@ export class StationPickerModal {
     });
 
     // Body
-    const body = createElement('div', 'modal-body');
+    const body = createElement("div", "modal-body");
 
     // Search bar for fast mobile filtering
-    const searchWrap = createElement('div', 'picker-search-wrap');
-    const searchIcon = createElement('span', 'picker-search-icon', ICONS.search);
-    this.searchInput = createElement('input', 'picker-search-input') as HTMLInputElement;
-    this.searchInput.type = 'search';
-    this.searchInput.placeholder = 'Search stations (e.g. Westlake, UW, Bellevue)...';
-    this.searchInput.setAttribute('aria-label', 'Search stations');
+    const searchWrap = createElement("div", "picker-search-wrap");
+    const searchIcon = createElement("span", "picker-search-icon", ICONS.search);
+    this.searchInput = createElement("input", "picker-search-input") as HTMLInputElement;
+    this.searchInput.type = "search";
+    this.searchInput.placeholder = "Search stations (e.g. Westlake, UW, Bellevue)...";
+    this.searchInput.setAttribute("aria-label", "Search stations");
     this.searchInput.oninput = () => {
       this.searchQuery = this.searchInput.value;
       this.renderStationsList();
@@ -218,28 +215,28 @@ export class StationPickerModal {
     searchWrap.appendChild(this.searchInput);
 
     // Line Filter Pills
-    const filtersWrap = createElement('div', 'picker-filter-pills');
+    const filtersWrap = createElement("div", "picker-filter-pills");
     this.tab1Btn = createElement(
-      'button',
-      'filter-pill active line-1',
-      `<span>1 Line</span><span class="filter-pill-route">Lynnwood ⇄ Federal Way</span>`
+      "button",
+      "filter-pill active line-1",
+      `<span>1 Line</span><span class="filter-pill-route">Lynnwood ⇄ Federal Way</span>`,
     ) as HTMLButtonElement;
-    this.tab1Btn.onclick = () => this.setFilter('line-1');
+    this.tab1Btn.onclick = () => this.setFilter("line-1");
 
     this.tab2Btn = createElement(
-      'button',
-      'filter-pill',
-      `<span>2 Line</span><span class="filter-pill-route">Lynnwood ⇄ Redmond</span>`
+      "button",
+      "filter-pill",
+      `<span>2 Line</span><span class="filter-pill-route">Lynnwood ⇄ Redmond</span>`,
     ) as HTMLButtonElement;
-    this.tab2Btn.onclick = () => this.setFilter('line-2');
+    this.tab2Btn.onclick = () => this.setFilter("line-2");
 
     filtersWrap.appendChild(this.tab1Btn);
     filtersWrap.appendChild(this.tab2Btn);
 
     // List with single delegated click handler (avoids per-row closure allocations)
-    this.listContainer = createElement('div', 'departures-list');
+    this.listContainer = createElement("div", "departures-list");
     this.listContainer.onclick = (e) => {
-      const target = (e.target as HTMLElement).closest('[data-station-id]') as HTMLElement | null;
+      const target = (e.target as HTMLElement).closest("[data-station-id]") as HTMLElement | null;
       if (!target) return;
       const stationId = target.dataset.stationId;
       if (!stationId) return;
