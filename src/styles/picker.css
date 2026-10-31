@@ -244,3 +244,10 @@
     display: none;
   }
 }
+
+@media (max-width: 650px) {
+  /* Picker rows need more tap area */
+  .picker-station-row {
+    padding: 0.85rem 1rem;
+  }
+}

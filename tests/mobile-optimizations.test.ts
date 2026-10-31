@@ -77,12 +77,22 @@ describe('Mobile Performance Optimizations', () => {
     });
 
     it('shares a single IntersectionObserver instance across multiple StationCardComponents', () => {
+      const sharedObserver = StationCardComponent.createSharedObserver();
       const cards = STATIONS.slice(0, 6).map(
-        (s) => new StationCardComponent(s, false, false, { onTogglePin: () => {} })
+        (s) =>
+          new StationCardComponent(
+            s,
+            false,
+            false,
+            { onTogglePin: () => {} },
+            'both',
+            sharedObserver
+          )
       );
 
       const firstObserver = (cards[0] as unknown as { observer?: { targets: Set<Element>; trigger: (entries: Partial<IntersectionObserverEntry>[]) => void } }).observer;
       expect(firstObserver).toBeDefined();
+      expect(firstObserver).toBe(sharedObserver);
 
       for (const card of cards) {
         const obs = (card as unknown as { observer?: unknown }).observer;
@@ -90,9 +100,11 @@ describe('Mobile Performance Optimizations', () => {
       }
       expect(firstObserver?.targets.size).toBe(6);
 
-      // Trigger intersection specifically for cards[3]
+      // Trigger intersection specifically for cards[3] without affecting cards[2]
+      cards[2].isVisible = false;
       cards[3].isVisible = false;
       firstObserver?.trigger([{ target: cards[3].getElement(), isIntersecting: true }]);
+      expect(cards[2].isVisible).toBe(false);
       expect(cards[3].isVisible).toBe(true);
 
       cards.forEach((c) => c.destroy());
@@ -185,7 +197,7 @@ describe('Mobile Performance Optimizations', () => {
       const setIntervalSpy = vi.spyOn(window, 'setInterval');
       const clearIntervalSpy = vi.spyOn(window, 'clearInterval');
 
-      const fetchMock = vi.fn(async () => ({
+      const fetchMock = vi.fn(async (_url: string) => ({
         ok: true,
         status: 200,
         json: async () => ({

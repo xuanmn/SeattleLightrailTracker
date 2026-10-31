@@ -11,6 +11,28 @@ interface StationCardCallbacks {
 }
 
 export class StationCardComponent {
+  private static observedCards = new WeakMap<Element, StationCardComponent>();
+
+  /**
+   * Create a single shared IntersectionObserver that can observe all StationCardComponents
+   * in a dashboard grid instead of allocating one observer per card.
+   */
+  public static createSharedObserver(): IntersectionObserver | undefined {
+    if (typeof window === 'undefined' || !('IntersectionObserver' in window)) {
+      return undefined;
+    }
+    return new window.IntersectionObserver(
+      (entries) => {
+        for (const entry of entries) {
+          StationCardComponent.observedCards.get(entry.target)?.handleIntersection(
+            entry.isIntersecting
+          );
+        }
+      },
+      { rootMargin: '200px 0px' }
+    );
+  }
+
   private element: HTMLElement;
   private station: Station;
   private isPinned: boolean;
@@ -27,6 +49,7 @@ export class StationCardComponent {
   private approachTrain!: HTMLElement;
 
   private observer?: IntersectionObserver;
+  private usesSharedObserver: boolean = false;
   public isVisible: boolean = true;
 
   private directionFilter: StationDirectionFilter = 'both';
@@ -52,7 +75,8 @@ export class StationCardComponent {
     isPinned: boolean,
     is24Hour: boolean,
     callbacks: StationCardCallbacks,
-    initialDirectionFilter: StationDirectionFilter = 'both'
+    initialDirectionFilter: StationDirectionFilter = 'both',
+    sharedObserver?: IntersectionObserver
   ) {
     this.station = station;
     this.isPinned = isPinned;
@@ -60,7 +84,7 @@ export class StationCardComponent {
     this.callbacks = callbacks;
     this.directionFilter = initialDirectionFilter;
     this.element = this.render();
-    this.setupIntersectionObserver();
+    this.setupIntersectionObserver(sharedObserver);
   }
 
   public getElement(): HTMLElement {
@@ -76,10 +100,22 @@ export class StationCardComponent {
   }
 
   public setTimeFormat(is24Hour: boolean) {
+    if (this.is24Hour === is24Hour) return;
     this.is24Hour = is24Hour;
-    if (this.currentArrivals) {
-      this.updateArrivals(this.currentArrivals);
+    for (let i = 0; i < this.clockElements.length; i++) {
+      const clockEl = this.clockElements[i];
+      const targetTime = this.arrivalTimes[i];
+      if (clockEl && targetTime !== undefined) {
+        const clockText = formatClockTime(targetTime, this.is24Hour);
+        if (clockEl.textContent !== clockText) {
+          clockEl.textContent = clockText;
+        }
+      }
     }
+  }
+
+  public getDirectionFilter(): StationDirectionFilter {
+    return this.directionFilter;
   }
 
   private setDirectionFilter(filter: StationDirectionFilter) {
@@ -104,15 +140,16 @@ export class StationCardComponent {
     }
   }
 
+  private renderPlatformSkeleton(container: HTMLElement) {
+    container.innerHTML = `
+      <div class="skeleton-row"></div>
+      <div class="skeleton-row"></div>
+    `;
+  }
+
   private setLoading() {
-    this.platform1Container.innerHTML = `
-      <div class="skeleton-row"></div>
-      <div class="skeleton-row"></div>
-    `;
-    this.platform2Container.innerHTML = `
-      <div class="skeleton-row"></div>
-      <div class="skeleton-row"></div>
-    `;
+    this.renderPlatformSkeleton(this.platform1Container);
+    this.renderPlatformSkeleton(this.platform2Container);
   }
 
   public setUnavailable() {
@@ -134,11 +171,13 @@ export class StationCardComponent {
   public updateArrivals(data: StationArrivals) {
     this.currentArrivals = data;
 
+    const dir1Fetched = data.dir1Fetched !== false;
+    const dir2Fetched = data.dir2Fetched !== false;
     const dir1Arrivals = data.direction1?.arrivals || [];
     const dir2Arrivals = data.direction2?.arrivals || [];
 
-    const dir1Key = dir1Arrivals.map(a => a.tripId).join(',');
-    const dir2Key = dir2Arrivals.map(a => a.tripId).join(',');
+    const dir1Key = dir1Fetched ? dir1Arrivals.map(a => a.tripId).join(',') : '__unfetched__';
+    const dir2Key = dir2Fetched ? dir2Arrivals.map(a => a.tripId).join(',') : '__unfetched__';
 
     const sameTrips =
       dir1Key === this.currentDir1TripKey &&
@@ -159,16 +198,25 @@ export class StationCardComponent {
       this.clockElements = [];
       this.statusElements = [];
 
-      this.renderPlatformArrivals(
-        this.platform1Container,
-        dir1Arrivals,
-        data.direction1?.platform?.terminalDestination || ''
-      );
-      this.renderPlatformArrivals(
-        this.platform2Container,
-        dir2Arrivals,
-        data.direction2?.platform?.terminalDestination || ''
-      );
+      if (dir1Fetched) {
+        this.renderPlatformArrivals(
+          this.platform1Container,
+          dir1Arrivals,
+          data.direction1?.platform?.terminalDestination || ''
+        );
+      } else {
+        this.renderPlatformSkeleton(this.platform1Container);
+      }
+
+      if (dir2Fetched) {
+        this.renderPlatformArrivals(
+          this.platform2Container,
+          dir2Arrivals,
+          data.direction2?.platform?.terminalDestination || ''
+        );
+      } else {
+        this.renderPlatformSkeleton(this.platform2Container);
+      }
     }
 
     this.updateApproachTrack();
@@ -179,9 +227,11 @@ export class StationCardComponent {
    * Updates countdown, clock, status text, and timing data without DOM destruction.
    */
   private patchArrivalsInPlace(data: StationArrivals) {
+    const dir1Fetched = data.dir1Fetched !== false;
+    const dir2Fetched = data.dir2Fetched !== false;
     const allArrivals = [
-      ...(data.direction1?.arrivals || []),
-      ...(data.direction2?.arrivals || []),
+      ...(dir1Fetched ? (data.direction1?.arrivals || []) : []),
+      ...(dir2Fetched ? (data.direction2?.arrivals || []) : []),
     ];
 
     const now = Date.now();
@@ -235,10 +285,8 @@ export class StationCardComponent {
    * Lightweight tick: only updates countdown text and arriving-soon classes.
    * No DOM destruction or creation — just textContent and className patches.
    */
-  public tickCountdowns() {
+  public tickCountdowns(now: number = Date.now()) {
     if (!this.currentArrivals) return;
-
-    const now = Date.now();
 
     // Update each cached countdown chip only when values change to avoid DOM churn
     for (let i = 0; i < this.countdownChips.length; i++) {
@@ -544,17 +592,29 @@ export class StationCardComponent {
     return card;
   }
 
-  private setupIntersectionObserver() {
+  private handleIntersection(isIntersecting: boolean) {
+    const wasVisible = this.isVisible;
+    this.isVisible = isIntersecting;
+    if (this.isVisible && !wasVisible) {
+      this.tickCountdowns();
+      this.callbacks.onBecameVisible?.(this.station.id);
+    }
+  }
+
+  private setupIntersectionObserver(sharedObserver?: IntersectionObserver) {
+    if (sharedObserver) {
+      this.usesSharedObserver = true;
+      this.observer = sharedObserver;
+      StationCardComponent.observedCards.set(this.element, this);
+      this.observer.observe(this.element);
+      return;
+    }
+
     if ('IntersectionObserver' in window) {
       this.observer = new window.IntersectionObserver(
         (entries) => {
           for (const entry of entries) {
-            const wasVisible = this.isVisible;
-            this.isVisible = entry.isIntersecting;
-            if (this.isVisible && !wasVisible) {
-              this.tickCountdowns();
-              this.callbacks.onBecameVisible?.(this.station.id);
-            }
+            this.handleIntersection(entry.isIntersecting);
           }
         },
         { rootMargin: '200px 0px' }
@@ -564,8 +624,13 @@ export class StationCardComponent {
   }
 
   public destroy() {
+    StationCardComponent.observedCards.delete(this.element);
     if (this.observer) {
-      this.observer.disconnect();
+      if (this.usesSharedObserver) {
+        this.observer.unobserve(this.element);
+      } else {
+        this.observer.disconnect();
+      }
       this.observer = undefined;
     }
   }

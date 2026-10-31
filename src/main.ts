@@ -19,10 +19,11 @@ import {
   getStationDirectionFilters,
   setActiveLine,
   setStationDirectionFilter,
+  StationDirectionFilter,
   togglePinnedStation,
 } from './services/storage';
 import { AppSettings, Station, StationArrivals, TransitLineId } from './types/transit';
-import { runWithConcurrency } from './utils/concurrency';
+import { createLazySingleton, runWithConcurrency } from './utils/concurrency';
 import { createElement, ICONS } from './utils/dom';
 
 const SYNC_INTERVAL_MS = 60 * 1000; // Fixed 60-second real-time sync cycle
@@ -33,25 +34,45 @@ const NETWORK_INTERRUPTED_MESSAGE =
 const OFFLINE_MESSAGE =
   "You're offline. Showing last known departures — they'll refresh as soon as you reconnect.";
 
-class TransitTrackerApp {
+export class TransitTrackerApp {
   private appEl: HTMLElement;
   private header!: HeaderComponent;
   private pickerModal?: StationPickerModal;
-  private settingsModal?: SettingsModal;
-  private faqModal?: FaqModal;
-  private mapModal?: SystemMapModal;
 
-  private pickerModalPromise?: Promise<StationPickerModal>;
-  private settingsModalPromise?: Promise<SettingsModal>;
-  private faqModalPromise?: Promise<FaqModal>;
-  private mapModalPromise?: Promise<SystemMapModal>;
+  private getSettingsModal = createLazySingleton(async (): Promise<SettingsModal> => {
+    const { SettingsModal } = await import('./components/SettingsModal');
+    return new SettingsModal({
+      onSettingsSaved: (newSettings) => this.handleSettingsSaved(newSettings),
+    });
+  });
+
+  private getFaqModal = createLazySingleton(async (): Promise<FaqModal> => {
+    const { FaqModal } = await import('./components/FaqModal');
+    return new FaqModal();
+  });
+
+  private getMapModal = createLazySingleton(async (): Promise<SystemMapModal> => {
+    const { SystemMapModal } = await import('./components/SystemMapModal');
+    return new SystemMapModal();
+  });
+
+  private getPickerModal = createLazySingleton(async (): Promise<StationPickerModal> => {
+    const { StationPickerModal } = await import('./components/StationPickerModal');
+    this.pickerModal = new StationPickerModal({
+      onTogglePin: (stationId) => this.handleTogglePin(stationId),
+      isStationPinned: (stationId) => this.pinnedIds.has(stationId),
+    });
+    return this.pickerModal;
+  });
 
   private activeLine: TransitLineId = 'line-1';
   private showOnlyPinned: boolean = true; // Default to showing only user's chosen favorite stations
   private settings: AppSettings;
   private pinnedIds: Set<string> = new Set();
   private cardComponents: Map<string, StationCardComponent> = new Map();
+  private cardObserver?: IntersectionObserver = StationCardComponent.createSharedObserver();
   private arrivalsData: Map<string, StationArrivals> = new Map();
+  private dirFetchTimestamps: Map<string, { dir1At: number; dir2At: number }> = new Map();
   private inFlightStationFetches: Set<string> = new Set();
 
   private stationsGridEl!: HTMLElement;
@@ -84,7 +105,7 @@ class TransitTrackerApp {
 
     this.initUI();
     this.setupVisibilityListener();
-    this.startSecondTicker();
+    this.syncSecondTicker();
 
     this.pollScheduler = new PollScheduler({
       intervalMs: SYNC_INTERVAL_MS,
@@ -297,6 +318,7 @@ class TransitTrackerApp {
       // Tear down all existing cards and show empty state
       this.cardComponents.forEach((card) => card.destroy());
       this.cardComponents.clear();
+      this.stopSecondTicker();
       this.stationsGridEl.innerHTML = '';
       this.renderEmptyDashboard();
       return;
@@ -329,12 +351,11 @@ class TransitTrackerApp {
           this.settings.timeFormat24Hour,
           {
             onTogglePin: (id) => this.handleTogglePin(id),
-            onDirectionFilterChange: (id, filter) => {
-              setStationDirectionFilter(id, filter);
-            },
+            onDirectionFilterChange: (id, filter) => this.handleDirectionFilterChange(id, filter),
             onBecameVisible: (id) => this.handleStationBecameVisible(id),
           },
-          initialFilter
+          initialFilter,
+          this.cardObserver
         );
 
         this.cardComponents.set(station.id, cardComp);
@@ -353,16 +374,37 @@ class TransitTrackerApp {
     // 3. Remove the empty-dashboard-card if it was previously rendered
     const emptyCard = this.stationsGridEl.querySelector('.empty-dashboard-card');
     if (emptyCard) emptyCard.remove();
+
+    this.syncSecondTicker();
+  }
+
+  private handleDirectionFilterChange(stationId: string, filter: StationDirectionFilter) {
+    setStationDirectionFilter(stationId, filter);
+    this.ensureStationDirectionsFresh(stationId, filter);
   }
 
   private handleStationBecameVisible(stationId: string) {
-    const cached = this.arrivalsData.get(stationId);
-    const isStale = !cached || Date.now() - cached.lastUpdated > SYNC_INTERVAL_MS;
-    if (isStale) {
-      const station = getStationById(stationId);
-      if (station) {
-        this.fetchSingleStation(station);
-      }
+    const filter = this.cardComponents.get(stationId)?.getDirectionFilter() ?? 'both';
+    this.ensureStationDirectionsFresh(stationId, filter);
+  }
+
+  private ensureStationDirectionsFresh(stationId: string, filter: StationDirectionFilter) {
+    const station = getStationById(stationId);
+    if (!station) return;
+
+    const timestamps = this.dirFetchTimestamps.get(stationId);
+    const now = Date.now();
+    const needDir1 =
+      (filter === 'both' || filter === 'dir1') &&
+      (!timestamps?.dir1At || now - timestamps.dir1At > SYNC_INTERVAL_MS);
+    const needDir2 =
+      (filter === 'both' || filter === 'dir2') &&
+      (!timestamps?.dir2At || now - timestamps.dir2At > SYNC_INTERVAL_MS);
+
+    if (needDir1 || needDir2) {
+      const fetchFilter: StationDirectionFilter =
+        needDir1 && needDir2 ? 'both' : needDir1 ? 'dir1' : 'dir2';
+      this.fetchSingleStation(station, fetchFilter);
     }
   }
 
@@ -423,6 +465,7 @@ class TransitTrackerApp {
           this.cardComponents.delete(stationId);
         }
         if (this.cardComponents.size === 0) {
+          this.stopSecondTicker();
           this.renderEmptyDashboard();
         }
       } else {
@@ -459,87 +502,58 @@ class TransitTrackerApp {
     }
   }
 
-  private async getSettingsModal(): Promise<SettingsModal> {
-    if (this.settingsModal) return this.settingsModal;
-    if (!this.settingsModalPromise) {
-      this.settingsModalPromise = import('./components/SettingsModal').then(
-        ({ SettingsModal }) => {
-          this.settingsModal = new SettingsModal({
-            onSettingsSaved: (newSettings) => this.handleSettingsSaved(newSettings),
-          });
-          return this.settingsModal;
-        }
-      );
-    }
-    return this.settingsModalPromise;
-  }
-
-  private async getFaqModal(): Promise<FaqModal> {
-    if (this.faqModal) return this.faqModal;
-    if (!this.faqModalPromise) {
-      this.faqModalPromise = import('./components/FaqModal').then(
-        ({ FaqModal }) => {
-          this.faqModal = new FaqModal();
-          return this.faqModal;
-        }
-      );
-    }
-    return this.faqModalPromise;
-  }
-
-  private async getMapModal(): Promise<SystemMapModal> {
-    if (this.mapModal) return this.mapModal;
-    if (!this.mapModalPromise) {
-      this.mapModalPromise = import('./components/SystemMapModal').then(
-        ({ SystemMapModal }) => {
-          this.mapModal = new SystemMapModal();
-          return this.mapModal;
-        }
-      );
-    }
-    return this.mapModalPromise;
-  }
-
-  private async getPickerModal(): Promise<StationPickerModal> {
-    if (this.pickerModal) return this.pickerModal;
-    if (!this.pickerModalPromise) {
-      this.pickerModalPromise = import('./components/StationPickerModal').then(
-        ({ StationPickerModal }) => {
-          this.pickerModal = new StationPickerModal({
-            onTogglePin: (stationId) => this.handleTogglePin(stationId),
-            isStationPinned: (stationId) => this.pinnedIds.has(stationId),
-          });
-          return this.pickerModal;
-        }
-      );
-    }
-    return this.pickerModalPromise;
-  }
-
   private showStatusBanner(message: string) {
     this.staleBannerEl.textContent = message;
     this.staleBannerEl.classList.remove('hidden');
   }
 
+  private readonly handleVisibilityChange = () => {
+    if (document.hidden) {
+      // Pause 1-second DOM ticks to save battery and CPU
+      this.stopSecondTicker();
+    } else {
+      // Resume ticker when user refocuses tab
+      this.syncSecondTicker();
+      const now = Date.now();
+      this.cardComponents.forEach((card) => {
+        if (card.isVisible) {
+          card.tickCountdowns(now);
+        }
+      });
+    }
+  };
+
   private setupVisibilityListener() {
     // Network polling pauses/resumes via PollScheduler; this only manages the 1-second countdown ticker.
-    document.addEventListener('visibilitychange', () => {
-      if (document.hidden) {
-        // Pause 1-second DOM ticks to save battery and CPU
-        if (this.countdownTickTimer) {
-          clearInterval(this.countdownTickTimer);
-          this.countdownTickTimer = undefined;
-        }
-      } else {
-        // Resume ticker when user refocuses tab
-        this.startSecondTicker();
-        this.cardComponents.forEach((card) => {
-          if (card.isVisible) {
-            card.tickCountdowns();
-          }
-        });
-      }
+    document.addEventListener('visibilitychange', this.handleVisibilityChange);
+  }
+
+  private mergeStationArrivals(
+    station: Station,
+    filter: StationDirectionFilter,
+    result: Awaited<ReturnType<typeof fetchArrivalsForStation>>
+  ): StationArrivals {
+    const now = Date.now();
+    const prev = this.arrivalsData.get(station.id);
+    const prevTs = this.dirFetchTimestamps.get(station.id);
+    const fetched1 = filter === 'both' || filter === 'dir1';
+    const fetched2 = filter === 'both' || filter === 'dir2';
+
+    this.dirFetchTimestamps.set(station.id, {
+      dir1At: fetched1 ? now : (prevTs?.dir1At ?? 0),
+      dir2At: fetched2 ? now : (prevTs?.dir2At ?? 0),
     });
+
+    const data: StationArrivals = {
+      station,
+      lastUpdated: now,
+      dir1Fetched: fetched1 || Boolean(prev?.dir1Fetched),
+      dir2Fetched: fetched2 || Boolean(prev?.dir2Fetched),
+      direction1: fetched1 || !prev?.dir1Fetched ? result.direction1 : prev.direction1,
+      direction2: fetched2 || !prev?.dir2Fetched ? result.direction2 : prev.direction2,
+    };
+    this.arrivalsData.set(station.id, data);
+    return data;
   }
 
   private async fetchVisibleArrivals(isManual: boolean = false) {
@@ -587,17 +601,12 @@ class TransitTrackerApp {
         MAX_CONCURRENT_STATION_FETCHES,
         async (station) => {
           try {
-            const result = await fetchArrivalsForStation(station, isManual, currentSignal);
+            const filter = this.cardComponents.get(station.id)?.getDirectionFilter() ?? 'both';
+            const result = await fetchArrivalsForStation(station, isManual, currentSignal, filter);
             // If a newer fetch was initiated while this one was running, discard old response
             if (!isCurrent()) return;
 
-            const data: StationArrivals = {
-              station,
-              lastUpdated: Date.now(),
-              direction1: result.direction1,
-              direction2: result.direction2,
-            };
-            this.arrivalsData.set(station.id, data);
+            const data = this.mergeStationArrivals(station, filter, result);
 
             const card = this.cardComponents.get(station.id);
             if (card) {
@@ -641,22 +650,19 @@ class TransitTrackerApp {
 
   /**
    * Fetch arrivals for a single station and update its card.
-   * Used for surgical updates (e.g. when a new station is pinned or scrolled into view)
-   * to avoid re-fetching all visible stations.
+   * Used for surgical updates (e.g. when a new station is pinned, scrolled into view,
+   * or switched to a previously unfetched direction) to avoid re-fetching all visible stations.
    */
-  private async fetchSingleStation(station: Station) {
-    if (this.inFlightStationFetches.has(station.id)) return;
-    this.inFlightStationFetches.add(station.id);
+  private async fetchSingleStation(station: Station, explicitFilter?: StationDirectionFilter) {
+    const fetchKey = `${station.id}:${explicitFilter ?? 'active'}`;
+    if (this.inFlightStationFetches.has(fetchKey)) return;
+    this.inFlightStationFetches.add(fetchKey);
 
     try {
-      const result = await fetchArrivalsForStation(station);
-      const data: StationArrivals = {
-        station,
-        lastUpdated: Date.now(),
-        direction1: result.direction1,
-        direction2: result.direction2,
-      };
-      this.arrivalsData.set(station.id, data);
+      const filter =
+        explicitFilter ?? this.cardComponents.get(station.id)?.getDirectionFilter() ?? 'both';
+      const result = await fetchArrivalsForStation(station, false, undefined, filter);
+      const data = this.mergeStationArrivals(station, filter, result);
 
       const card = this.cardComponents.get(station.id);
       if (card) {
@@ -669,24 +675,52 @@ class TransitTrackerApp {
         card.setUnavailable();
       }
     } finally {
-      this.inFlightStationFetches.delete(station.id);
+      this.inFlightStationFetches.delete(fetchKey);
     }
   }
 
-  private startSecondTicker() {
-    if (this.countdownTickTimer) {
+  private stopSecondTicker() {
+    if (this.countdownTickTimer !== undefined) {
       clearInterval(this.countdownTickTimer);
+      this.countdownTickTimer = undefined;
     }
+  }
 
-    // Ticks every second to smoothly update countdown values and clock
-    // Fix #5: Only tick cards that are visible in the viewport
+  private syncSecondTicker() {
+    if (this.cardComponents.size === 0 || document.hidden) {
+      this.stopSecondTicker();
+      return;
+    }
+    if (this.countdownTickTimer !== undefined) return;
+
+    // Ticks every second to smoothly update countdown values and approach bar
+    // Only runs when at least one station card is mounted and the tab is visible
     this.countdownTickTimer = window.setInterval(() => {
+      const now = Date.now();
       this.cardComponents.forEach((card) => {
         if (card.isVisible) {
-          card.tickCountdowns();
+          card.tickCountdowns(now);
         }
       });
     }, 1000);
+  }
+
+  public destroy() {
+    this.pollScheduler.stop();
+    this.stopSecondTicker();
+    if (this.toastTimeout) {
+      clearTimeout(this.toastTimeout);
+      this.toastTimeout = undefined;
+    }
+    if (this.fetchController) {
+      this.fetchController.abort();
+      this.fetchController = undefined;
+    }
+    document.removeEventListener('visibilitychange', this.handleVisibilityChange);
+    this.cardComponents.forEach((card) => card.destroy());
+    this.cardComponents.clear();
+    this.cardObserver?.disconnect();
+    this.toastEl.remove();
   }
 }
 
@@ -712,12 +746,14 @@ function initApp(): void {
   }
 }
 
-if (document.readyState === 'loading') {
-  document.addEventListener('DOMContentLoaded', () => {
+if (!import.meta.env.VITEST) {
+  if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', () => {
+      initApp();
+    });
+  } else {
     initApp();
-  });
-} else {
-  initApp();
+  }
 }
 
 /**
