@@ -213,8 +213,9 @@ describe('Mobile Frontend Design & UX Specifications', () => {
     expect(text).toContain('do NOT need to tap off');
     // Verified Free Youth
     expect(text).toContain('Youth (18 & under): Free');
-    // Verified 2 Line Crosslake Guide
+    // Verified 2 Line Crosslake Guide & standardized travel time
     expect(text).toContain('Downtown Redmond');
+    expect(text).toContain('~40–45 min');
     // Verified Security Contact
     expect(text).toContain('206-398-5268');
   });
@@ -248,8 +249,9 @@ describe('Mobile Frontend Design & UX Specifications', () => {
   it('prevents mobile background flicker when opening Transit Guide FaqModal', () => {
     const faqCss = readFileSync(process.cwd() + '/src/styles/faq.css', 'utf-8');
 
-    // Mobile media query must disable backdrop-filter on .faq-modal-overlay to prevent GPU blur pass flicker
-    expect(faqCss).toMatch(/@media\s*\([^)]*max-width:\s*768px[^)]*\)[\s\S]*?\.faq-modal-overlay[\s\S]*?backdrop-filter:\s*none/);
+    // Mobile media query must disable backdrop-filter on .modal-overlay.faq-modal-overlay with compound specificity
+    expect(faqCss).toMatch(/@media\s*\([^)]*max-width:\s*768px[^)]*\)[\s\S]*?\.modal-overlay\.faq-modal-overlay[\s\S]*?backdrop-filter:\s*none/);
+    expect(faqCss).toContain('.modal-container.faq-modal-container');
   });
 
   it('renders actionable phone/SMS links, semantic accordion details, and tip badges', () => {
@@ -268,9 +270,11 @@ describe('Mobile Frontend Design & UX Specifications', () => {
     expect(emergency911Link).toBeNull();
     expect(lostFoundLink?.closest('.faq-action-btns')).not.toBeNull();
 
-    // Direct official service alerts link
+    // Direct official service alerts and rules & etiquette links
     const alertsLink = document.querySelector('a[href="https://www.soundtransit.org/ride-with-us/service-alerts"]');
     expect(alertsLink).not.toBeNull();
+    const rulesLink = document.querySelector('a[href="https://www.soundtransit.org/ride-with-us/know-before-you-go/rules-etiquette"]');
+    expect(rulesLink).not.toBeNull();
 
     // Semantic accordion details and summary
     const accordions = document.querySelectorAll('details.faq-item');

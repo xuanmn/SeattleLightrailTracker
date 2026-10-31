@@ -22,7 +22,13 @@ import {
   StationDirectionFilter,
   togglePinnedStation,
 } from './services/storage';
-import { AppSettings, Station, StationArrivals, TransitLineId } from './types/transit';
+import {
+  AppSettings,
+  Station,
+  StationArrivals,
+  TransitArrival,
+  TransitLineId,
+} from './types/transit';
 import { createLazySingleton, runWithConcurrency } from './utils/concurrency';
 import { createElement, ICONS } from './utils/dom';
 
@@ -129,18 +135,12 @@ export class TransitTrackerApp {
     // Header with lazy modal loading
     this.header = new HeaderComponent(this.activeLine, {
       onLineChange: (line) => this.switchLine(line),
-      onSettingsClick: async () => {
-        const modal = await this.getSettingsModal();
-        modal.open();
-      },
-      onFaqClick: async () => {
-        const modal = await this.getFaqModal();
-        modal.open();
-      },
-      onMapClick: async () => {
-        const modal = await this.getMapModal();
-        modal.open();
-      },
+      onSettingsClick: () =>
+        this.openLazyModal(() => this.getSettingsModal(), (modal) => modal.open()),
+      onFaqClick: () =>
+        this.openLazyModal(() => this.getFaqModal(), (modal) => modal.open()),
+      onMapClick: () =>
+        this.openLazyModal(() => this.getMapModal(), (modal) => modal.open()),
     });
     this.appEl.appendChild(this.header.getElement());
 
@@ -388,6 +388,12 @@ export class TransitTrackerApp {
     this.ensureStationDirectionsFresh(stationId, filter);
   }
 
+  private pruneExpiredArrivals(arrivals: TransitArrival[], now: number): TransitArrival[] {
+    return arrivals.filter(
+      (a) => (a.predictedDepartureTime || a.scheduledDepartureTime) >= now - 60 * 1000
+    );
+  }
+
   private ensureStationDirectionsFresh(stationId: string, filter: StationDirectionFilter) {
     const station = getStationById(stationId);
     if (!station) return;
@@ -402,6 +408,69 @@ export class TransitTrackerApp {
       (!timestamps?.dir2At || now - timestamps.dir2At > SYNC_INTERVAL_MS);
 
     if (needDir1 || needDir2) {
+      // Immediately prune expired departures on stale unpolled directions so departed trains
+      // never flash as ARRIVING while the refresh is in flight (or if offline in a tunnel).
+      const prev = this.arrivalsData.get(stationId);
+      if (prev) {
+        let nextDir1 = prev.direction1;
+        let nextDir2 = prev.direction2;
+        let nextDir1Fetched = prev.dir1Fetched !== false;
+        let nextDir2Fetched = prev.dir2Fetched !== false;
+        let nextDir1Unavailable = prev.dir1Unavailable;
+        let nextDir2Unavailable = prev.dir2Unavailable;
+        let changed = false;
+
+        if (needDir1) {
+          if (nextDir1Unavailable) {
+            nextDir1Unavailable = false;
+            nextDir1Fetched = false;
+            changed = true;
+          } else if (nextDir1Fetched) {
+            const pruned1 = this.pruneExpiredArrivals(prev.direction1.arrivals, now);
+            if (pruned1.length !== prev.direction1.arrivals.length) {
+              nextDir1 = { ...prev.direction1, arrivals: pruned1 };
+              changed = true;
+            }
+            if (pruned1.length === 0) {
+              nextDir1Fetched = false;
+              changed = true;
+            }
+          }
+        }
+
+        if (needDir2) {
+          if (nextDir2Unavailable) {
+            nextDir2Unavailable = false;
+            nextDir2Fetched = false;
+            changed = true;
+          } else if (nextDir2Fetched) {
+            const pruned2 = this.pruneExpiredArrivals(prev.direction2.arrivals, now);
+            if (pruned2.length !== prev.direction2.arrivals.length) {
+              nextDir2 = { ...prev.direction2, arrivals: pruned2 };
+              changed = true;
+            }
+            if (pruned2.length === 0) {
+              nextDir2Fetched = false;
+              changed = true;
+            }
+          }
+        }
+
+        if (changed) {
+          const updated: StationArrivals = {
+            ...prev,
+            dir1Fetched: nextDir1Fetched,
+            dir2Fetched: nextDir2Fetched,
+            dir1Unavailable: nextDir1Unavailable,
+            dir2Unavailable: nextDir2Unavailable,
+            direction1: nextDir1,
+            direction2: nextDir2,
+          };
+          this.arrivalsData.set(stationId, updated);
+          this.cardComponents.get(stationId)?.updateArrivals(updated);
+        }
+      }
+
       const fetchFilter: StationDirectionFilter =
         needDir1 && needDir2 ? 'both' : needDir1 ? 'dir1' : 'dir2';
       this.fetchSingleStation(station, fetchFilter);
@@ -431,10 +500,8 @@ export class TransitTrackerApp {
       `empty-dashboard-btn ${lineClass}`,
       `${ICONS.plus} Add & Remove Stations`
     );
-    btn.onclick = async () => {
-      const modal = await this.getPickerModal();
-      modal.open(this.activeLine);
-    };
+    btn.onclick = () =>
+      this.openLazyModal(() => this.getPickerModal(), (modal) => modal.open(this.activeLine));
 
     emptyCard.appendChild(icon);
     emptyCard.appendChild(title);
@@ -470,8 +537,8 @@ export class TransitTrackerApp {
         }
       } else {
         this.renderStationCards();
-        // Only fetch for the newly pinned station instead of re-fetching all visible stations
-        if (station) {
+        // Only fetch for the newly pinned station if its card is mounted on the active line
+        if (station && this.cardComponents.has(station.id)) {
           this.fetchSingleStation(station);
         }
       }
@@ -505,6 +572,21 @@ export class TransitTrackerApp {
   private showStatusBanner(message: string) {
     this.staleBannerEl.textContent = message;
     this.staleBannerEl.classList.remove('hidden');
+  }
+
+  private async openLazyModal<T>(
+    loader: () => Promise<T>,
+    openFn: (modal: T) => void
+  ): Promise<void> {
+    try {
+      const modal = await loader();
+      openFn(modal);
+    } catch (err) {
+      console.warn('Failed loading modal chunk:', err);
+      this.showStatusBanner(
+        navigator.onLine === false ? OFFLINE_MESSAGE : NETWORK_INTERRUPTED_MESSAGE
+      );
+    }
   }
 
   private readonly handleVisibilityChange = () => {
@@ -544,16 +626,49 @@ export class TransitTrackerApp {
       dir2At: fetched2 ? now : (prevTs?.dir2At ?? 0),
     });
 
+    const preservedDir1 =
+      !fetched1 && prev?.dir1Fetched
+        ? { ...prev.direction1, arrivals: this.pruneExpiredArrivals(prev.direction1.arrivals, now) }
+        : result.direction1;
+    const preservedDir2 =
+      !fetched2 && prev?.dir2Fetched
+        ? { ...prev.direction2, arrivals: this.pruneExpiredArrivals(prev.direction2.arrivals, now) }
+        : result.direction2;
+
     const data: StationArrivals = {
       station,
       lastUpdated: now,
       dir1Fetched: fetched1 || Boolean(prev?.dir1Fetched),
       dir2Fetched: fetched2 || Boolean(prev?.dir2Fetched),
-      direction1: fetched1 || !prev?.dir1Fetched ? result.direction1 : prev.direction1,
-      direction2: fetched2 || !prev?.dir2Fetched ? result.direction2 : prev.direction2,
+      dir1Unavailable: fetched1 ? false : prev?.dir1Unavailable,
+      dir2Unavailable: fetched2 ? false : prev?.dir2Unavailable,
+      direction1: fetched1 ? result.direction1 : preservedDir1,
+      direction2: fetched2 ? result.direction2 : preservedDir2,
     };
     this.arrivalsData.set(station.id, data);
     return data;
+  }
+
+  private handleStationFetchFailure(station: Station, failedFilter: StationDirectionFilter) {
+    const card = this.cardComponents.get(station.id);
+    const prev = this.arrivalsData.get(station.id);
+
+    if (!prev) {
+      card?.setUnavailable();
+      return;
+    }
+
+    const fail1 = (failedFilter === 'both' || failedFilter === 'dir1') && !prev.dir1Fetched;
+    const fail2 = (failedFilter === 'both' || failedFilter === 'dir2') && !prev.dir2Fetched;
+    if (fail1 || fail2) {
+      const updated: StationArrivals = {
+        ...prev,
+        dir1Unavailable: fail1 ? true : prev.dir1Unavailable,
+        dir2Unavailable: fail2 ? true : prev.dir2Unavailable,
+      };
+      this.arrivalsData.set(station.id, updated);
+      card?.updateArrivals(updated);
+    }
   }
 
   private async fetchVisibleArrivals(isManual: boolean = false) {
@@ -615,10 +730,8 @@ export class TransitTrackerApp {
           } catch (err) {
             failedFetches++;
             console.warn(`Failed fetching arrivals for ${station.name}:`, err);
-            const card = this.cardComponents.get(station.id);
-            if (card && !this.arrivalsData.has(station.id)) {
-              card.setUnavailable();
-            }
+            const filter = this.cardComponents.get(station.id)?.getDirectionFilter() ?? 'both';
+            this.handleStationFetchFailure(station, filter);
           }
         },
         isCurrent
@@ -654,13 +767,16 @@ export class TransitTrackerApp {
    * or switched to a previously unfetched direction) to avoid re-fetching all visible stations.
    */
   private async fetchSingleStation(station: Station, explicitFilter?: StationDirectionFilter) {
-    const fetchKey = `${station.id}:${explicitFilter ?? 'active'}`;
+    const filter =
+      explicitFilter ??
+      this.cardComponents.get(station.id)?.getDirectionFilter() ??
+      getStationDirectionFilters()[station.id] ??
+      'both';
+    const fetchKey = `${station.id}:${filter}`;
     if (this.inFlightStationFetches.has(fetchKey)) return;
     this.inFlightStationFetches.add(fetchKey);
 
     try {
-      const filter =
-        explicitFilter ?? this.cardComponents.get(station.id)?.getDirectionFilter() ?? 'both';
       const result = await fetchArrivalsForStation(station, false, undefined, filter);
       const data = this.mergeStationArrivals(station, filter, result);
 
@@ -670,10 +786,7 @@ export class TransitTrackerApp {
       }
     } catch (err) {
       console.warn(`Failed fetching arrivals for ${station.name}:`, err);
-      const card = this.cardComponents.get(station.id);
-      if (card && !this.arrivalsData.has(station.id)) {
-        card.setUnavailable();
-      }
+      this.handleStationFetchFailure(station, filter);
     } finally {
       this.inFlightStationFetches.delete(fetchKey);
     }

@@ -252,6 +252,163 @@ describe('Mobile Performance Optimizations', () => {
       clearIntervalSpy.mockRestore();
       vi.unstubAllGlobals();
     });
+
+    it('replaces unfetched platform skeleton with "Live data unavailable" while preserving fetched platform when lazy direction fetch fails', async () => {
+      const now = Date.now();
+      let shouldFail = false;
+      const fetchMock = vi.fn(async (_url: string) => {
+        if (shouldFail) throw new TypeError('Failed to fetch');
+        return {
+          ok: true,
+          status: 200,
+          json: async () => ({
+            code: 200,
+            data: {
+              entry: {
+                stopId: '40_1121',
+                arrivalsAndDepartures: [
+                  {
+                    tripId: 'NORTH_LIVE_1',
+                    routeId: '40_100479',
+                    routeShortName: '1 Line',
+                    tripHeadsign: 'Lynnwood City Center',
+                    scheduledDepartureTime: now + 6 * 60 * 1000,
+                    predictedDepartureTime: now + 6 * 60 * 1000,
+                    predicted: true,
+                  },
+                ],
+              },
+            },
+          }),
+        };
+      });
+      vi.stubGlobal('fetch', fetchMock);
+
+      const { clearStorageCache } = await import('../src/services/storage');
+      const { clearArrivalsCache } = await import('../src/services/oba-api');
+      document.body.innerHTML = '<div id="app"></div>';
+      localStorage.setItem('seattle_transit_pinned_stations', JSON.stringify(['westlake']));
+      localStorage.setItem('seattle_transit_direction_filters', JSON.stringify({ westlake: 'dir1' }));
+      clearStorageCache();
+      clearArrivalsCache();
+
+      const { TransitTrackerApp } = await import('../src/main');
+      const app = new TransitTrackerApp();
+      await new Promise((r) => setTimeout(r, 20));
+
+      // Simulate entering a tunnel (offline) and switching to 'Both'
+      shouldFail = true;
+      const dirBtns = document.querySelectorAll<HTMLButtonElement>('#station-westlake .direction-segment-btn');
+      dirBtns[0].click(); // 'Both'
+      await new Promise((r) => setTimeout(r, 20));
+
+      const columns = document.querySelectorAll('#station-westlake .platform-column');
+      // Platform 1 preserves its valid Northbound train
+      expect(columns[0].textContent).toContain('Lynnwood City Center');
+      // Platform 2 replaces skeleton shimmer with "Live data unavailable"
+      expect(columns[1].querySelectorAll('.skeleton-row').length).toBe(0);
+      expect(columns[1].textContent).toContain('Live data unavailable');
+
+      app.destroy();
+      vi.unstubAllGlobals();
+    });
+
+    it('prunes expired departures when switching back to a stale unpolled direction so departed trains never pulse as ARRIVING', async () => {
+      let fakeNow = 1700000000000;
+      const nowSpy = vi.spyOn(Date, 'now').mockImplementation(() => fakeNow);
+
+      let shouldFail = false;
+      const fetchMock = vi.fn(async (_url: string) => {
+        if (shouldFail) throw new TypeError('Tunnel offline');
+        return {
+          ok: true,
+          status: 200,
+          json: async () => ({
+            code: 200,
+            data: {
+              entry: {
+                stopId: 'x',
+                arrivalsAndDepartures: [
+                  {
+                    tripId: 'SOON_TRAIN',
+                    routeId: '40_100479',
+                    routeShortName: '1 Line',
+                    tripHeadsign: 'Lynnwood City Center',
+                    scheduledDepartureTime: fakeNow + 30 * 1000, // departs in 30s
+                    predictedDepartureTime: fakeNow + 30 * 1000,
+                    predicted: true,
+                  },
+                ],
+              },
+            },
+          }),
+        };
+      });
+      vi.stubGlobal('fetch', fetchMock);
+
+      const { clearStorageCache } = await import('../src/services/storage');
+      const { clearArrivalsCache } = await import('../src/services/oba-api');
+      document.body.innerHTML = '<div id="app"></div>';
+      localStorage.setItem('seattle_transit_pinned_stations', JSON.stringify(['westlake']));
+      localStorage.setItem('seattle_transit_direction_filters', JSON.stringify({ westlake: 'dir1' }));
+      clearStorageCache();
+      clearArrivalsCache();
+
+      const { TransitTrackerApp } = await import('../src/main');
+      const app = new TransitTrackerApp();
+      await new Promise((r) => setTimeout(r, 20));
+
+      const dirBtns = document.querySelectorAll<HTMLButtonElement>('#station-westlake .direction-segment-btn');
+      // Switch to dir2 at t = 0
+      dirBtns[2].click();
+      await new Promise((r) => setTimeout(r, 20));
+
+      // Advance clock by 5 minutes (SOON_TRAIN departed 4m30s ago) and enter a tunnel
+      fakeNow += 5 * 60 * 1000;
+      shouldFail = true;
+
+      // Switch back to dir1 while offline in tunnel
+      dirBtns[1].click();
+      await new Promise((r) => setTimeout(r, 20));
+
+      const col1 = document.querySelectorAll('#station-westlake .platform-column')[0];
+      // Must NOT display the departed train from 4.5 minutes ago as ARRIVING!
+      expect(col1.textContent).not.toContain('ARRIVING');
+
+      app.destroy();
+      nowSpy.mockRestore();
+      vi.unstubAllGlobals();
+    });
+
+    it('catches rejected lazy modal loaders and surfaces the status banner instead of an unhandled rejection', async () => {
+      document.body.innerHTML = '<div id="app"></div>';
+      localStorage.setItem('seattle_transit_pinned_stations', JSON.stringify([]));
+      const { clearStorageCache } = await import('../src/services/storage');
+      clearStorageCache();
+
+      const { TransitTrackerApp } = await import('../src/main');
+      const app = new TransitTrackerApp();
+
+      // Simulate transient dynamic import rejection on getPickerModal
+      (app as unknown as { getPickerModal: () => Promise<never> }).getPickerModal = () =>
+        Promise.reject(new TypeError('Failed to fetch dynamically imported module'));
+
+      const unhandled = vi.fn();
+      window.addEventListener('unhandledrejection', unhandled);
+
+      const addBtn = document.querySelector('.empty-dashboard-btn') as HTMLButtonElement;
+      expect(addBtn).not.toBeNull();
+      addBtn.click();
+      await new Promise((r) => setTimeout(r, 20));
+
+      window.removeEventListener('unhandledrejection', unhandled);
+      expect(unhandled).not.toHaveBeenCalled();
+
+      const banner = document.querySelector('.status-banner') as HTMLElement;
+      expect(banner.classList.contains('hidden')).toBe(false);
+
+      app.destroy();
+    });
   });
 
   describe('Fix 2: GPU-Composited Approach Bar via transform: scaleX', () => {
@@ -379,6 +536,54 @@ describe('Mobile Performance Optimizations', () => {
 
       expect(() => card.updateArrivals(malformedData as unknown as StationArrivals)).not.toThrow();
       expect(() => card.tickCountdowns()).not.toThrow();
+    });
+
+    it('uses live Date.now() instead of stale lastUpdated when updating approach track on direction filter toggle', () => {
+      const station = STATIONS[0];
+      const card = new StationCardComponent(station, false, false, {
+        onTogglePin: () => {},
+      });
+
+      const base = 1700000000000;
+      let fakeNow = base;
+      const nowSpy = vi.spyOn(Date, 'now').mockImplementation(() => fakeNow);
+
+      card.updateArrivals({
+        station,
+        lastUpdated: base,
+        direction1: {
+          platform: station.platforms.northbound!,
+          arrivals: [
+            {
+              tripId: 'trip_live_dir1',
+              routeName: '1 Line',
+              destination: 'Lynnwood City Center',
+              direction: 'Northbound',
+              scheduledDepartureTime: base + 5 * 60 * 1000, // 0% progress at base
+              predictedDepartureTime: base + 5 * 60 * 1000,
+              delaySeconds: 0,
+              isRealtime: true,
+              statusText: 'On Time',
+              statusType: 'ontime',
+            },
+          ],
+        },
+        direction2: {
+          platform: station.platforms.southbound!,
+          arrivals: [],
+        },
+      });
+
+      const bar = card.getElement().querySelector('.station-approach-bar') as HTMLElement;
+      expect(bar.style.transform).toBe('scaleX(0)');
+
+      // Advance 2.5 minutes (50% progress) and click the dir1 filter button without polling
+      fakeNow = base + 2.5 * 60 * 1000;
+      const dirBtns = card.getElement().querySelectorAll<HTMLButtonElement>('.direction-segment-btn');
+      dirBtns[1].click();
+
+      expect(bar.style.transform).toBe('scaleX(0.5)');
+      nowSpy.mockRestore();
     });
   });
 

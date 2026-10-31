@@ -38,6 +38,8 @@ export interface StationArrivals {
   lastUpdated: number;
   dir1Fetched?: boolean;
   dir2Fetched?: boolean;
+  dir1Unavailable?: boolean;
+  dir2Unavailable?: boolean;
   direction1: {
     platform: StationPlatform;
     arrivals: TransitArrival[];

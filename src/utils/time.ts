@@ -8,6 +8,10 @@ export function formatCountdownBadge(
 ): { text: string; isNow: boolean } {
   const diffMs = targetEpochMs - nowEpochMs;
 
+  if (diffMs < -60 * 1000) {
+    return { text: 'DEPARTED', isNow: false };
+  }
+
   if (diffMs <= 45 * 1000) {
     // Under 45 seconds -> ARRIVING NOW
     return { text: 'ARRIVING', isNow: true };

@@ -19,6 +19,16 @@ describe("Time and Countdown Utilities", () => {
     // 5 mins remaining -> 5 MIN
     const fiveMin = formatCountdownBadge(baseTime + 5 * 60 * 1000, baseTime);
     expect(fiveMin.text).toBe("5 MIN");
+
+    // 20s past departure (still at platform) -> ARRIVING
+    const dwell = formatCountdownBadge(baseTime - 20 * 1000, baseTime);
+    expect(dwell.text).toBe("ARRIVING");
+    expect(dwell.isNow).toBe(true);
+
+    // >60s past departure -> DEPARTED (never stuck pulsing green as ARRIVING)
+    const expired = formatCountdownBadge(baseTime - 90 * 1000, baseTime);
+    expect(expired.text).toBe("DEPARTED");
+    expect(expired.isNow).toBe(false);
   });
 
   it("formats delay status properly", () => {

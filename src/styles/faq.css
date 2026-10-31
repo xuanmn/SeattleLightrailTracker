@@ -275,7 +275,7 @@ details.faq-item[open] .faq-chevron {
 
 /* FAQ Modal - Immersive Full-Screen Presentation on Mobile */
 @media (max-width: 768px) {
-  .faq-modal-overlay {
+  .modal-overlay.faq-modal-overlay {
     padding: 0;
     margin: 0;
     inset: 0;
@@ -289,7 +289,7 @@ details.faq-item[open] .faq-chevron {
     background: #080e1a;
   }
 
-  .faq-modal-container {
+  .modal-container.faq-modal-container {
     width: 100vw;
     height: 100vh;
     height: 100dvh;

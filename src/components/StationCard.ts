@@ -121,7 +121,7 @@ export class StationCardComponent {
   private setDirectionFilter(filter: StationDirectionFilter) {
     this.directionFilter = filter;
     this.updateDirectionFilterUI();
-    this.updateApproachTrack();
+    this.updateApproachTrack(Date.now());
     this.callbacks.onDirectionFilterChange?.(this.station.id, filter);
   }
 
@@ -152,6 +152,10 @@ export class StationCardComponent {
     this.renderPlatformSkeleton(this.platform2Container);
   }
 
+  private renderPlatformUnavailable(container: HTMLElement) {
+    container.innerHTML = '<div class="departures-empty">Live data unavailable</div>';
+  }
+
   public setUnavailable() {
     this.currentArrivals = undefined;
     this.currentDir1TripKey = '';
@@ -162,22 +166,31 @@ export class StationCardComponent {
     this.clockElements = [];
     this.statusElements = [];
 
-    const msg = '<div class="departures-empty">Live data unavailable</div>';
-    this.platform1Container.innerHTML = msg;
-    this.platform2Container.innerHTML = msg;
+    this.renderPlatformUnavailable(this.platform1Container);
+    this.renderPlatformUnavailable(this.platform2Container);
     this.updateApproachTrack();
   }
 
   public updateArrivals(data: StationArrivals) {
     this.currentArrivals = data;
 
-    const dir1Fetched = data.dir1Fetched !== false;
-    const dir2Fetched = data.dir2Fetched !== false;
+    const dir1Unavailable = Boolean(data.dir1Unavailable);
+    const dir2Unavailable = Boolean(data.dir2Unavailable);
+    const dir1Fetched = !dir1Unavailable && data.dir1Fetched !== false;
+    const dir2Fetched = !dir2Unavailable && data.dir2Fetched !== false;
     const dir1Arrivals = data.direction1?.arrivals || [];
     const dir2Arrivals = data.direction2?.arrivals || [];
 
-    const dir1Key = dir1Fetched ? dir1Arrivals.map(a => a.tripId).join(',') : '__unfetched__';
-    const dir2Key = dir2Fetched ? dir2Arrivals.map(a => a.tripId).join(',') : '__unfetched__';
+    const dir1Key = dir1Unavailable
+      ? '__unavailable__'
+      : dir1Fetched
+        ? dir1Arrivals.map(a => a.tripId).join(',')
+        : '__unfetched__';
+    const dir2Key = dir2Unavailable
+      ? '__unavailable__'
+      : dir2Fetched
+        ? dir2Arrivals.map(a => a.tripId).join(',')
+        : '__unfetched__';
 
     const sameTrips =
       dir1Key === this.currentDir1TripKey &&
@@ -198,7 +211,9 @@ export class StationCardComponent {
       this.clockElements = [];
       this.statusElements = [];
 
-      if (dir1Fetched) {
+      if (dir1Unavailable) {
+        this.renderPlatformUnavailable(this.platform1Container);
+      } else if (dir1Fetched) {
         this.renderPlatformArrivals(
           this.platform1Container,
           dir1Arrivals,
@@ -208,7 +223,9 @@ export class StationCardComponent {
         this.renderPlatformSkeleton(this.platform1Container);
       }
 
-      if (dir2Fetched) {
+      if (dir2Unavailable) {
+        this.renderPlatformUnavailable(this.platform2Container);
+      } else if (dir2Fetched) {
         this.renderPlatformArrivals(
           this.platform2Container,
           dir2Arrivals,
@@ -219,7 +236,7 @@ export class StationCardComponent {
       }
     }
 
-    this.updateApproachTrack();
+    this.updateApproachTrack(data.lastUpdated);
   }
 
   /**
@@ -227,8 +244,8 @@ export class StationCardComponent {
    * Updates countdown, clock, status text, and timing data without DOM destruction.
    */
   private patchArrivalsInPlace(data: StationArrivals) {
-    const dir1Fetched = data.dir1Fetched !== false;
-    const dir2Fetched = data.dir2Fetched !== false;
+    const dir1Fetched = !data.dir1Unavailable && data.dir1Fetched !== false;
+    const dir2Fetched = !data.dir2Unavailable && data.dir2Fetched !== false;
     const allArrivals = [
       ...(dir1Fetched ? (data.direction1?.arrivals || []) : []),
       ...(dir2Fetched ? (data.direction2?.arrivals || []) : []),
