@@ -273,3 +273,38 @@ details.faq-item[open] .faq-chevron {
   color: var(--text-accent);
 }
 
+/* FAQ Modal - Immersive Full-Screen Presentation on Mobile */
+@media (max-width: 768px) {
+  .faq-modal-overlay {
+    padding: 0;
+    margin: 0;
+    inset: 0;
+    width: 100vw;
+    height: 100vh;
+    height: 100dvh;
+    align-items: stretch;
+    justify-content: stretch;
+    backdrop-filter: none;
+    -webkit-backdrop-filter: none;
+    background: #080e1a;
+  }
+
+  .faq-modal-container {
+    width: 100vw;
+    height: 100vh;
+    height: 100dvh;
+    max-height: 100dvh;
+    border-radius: 0;
+    border: none;
+    margin: 0;
+  }
+
+  .faq-modal-container .modal-header {
+    padding: max(0.85rem, env(safe-area-inset-top)) 1.25rem 0.85rem;
+  }
+
+  .faq-modal-container .modal-body {
+    padding-bottom: max(1.5rem, env(safe-area-inset-bottom));
+  }
+}
+

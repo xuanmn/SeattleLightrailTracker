@@ -1,3 +1,5 @@
+import '../styles/modal.css';
+import '../styles/settings.css';
 import { getSettings, updateSettings } from '../services/storage';
 import { AppSettings } from '../types/transit';
 import { createElement, ICONS } from '../utils/dom';

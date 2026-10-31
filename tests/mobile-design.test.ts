@@ -246,10 +246,10 @@ describe('Mobile Frontend Design & UX Specifications', () => {
   });
 
   it('prevents mobile background flicker when opening Transit Guide FaqModal', () => {
-    const layoutCss = readFileSync(process.cwd() + '/src/styles/layout.css', 'utf-8');
+    const faqCss = readFileSync(process.cwd() + '/src/styles/faq.css', 'utf-8');
 
     // Mobile media query must disable backdrop-filter on .faq-modal-overlay to prevent GPU blur pass flicker
-    expect(layoutCss).toMatch(/@media\s*\([^)]*max-width:\s*768px[^)]*\)[\s\S]*?\.faq-modal-overlay[\s\S]*?backdrop-filter:\s*none/);
+    expect(faqCss).toMatch(/@media\s*\([^)]*max-width:\s*768px[^)]*\)[\s\S]*?\.faq-modal-overlay[\s\S]*?backdrop-filter:\s*none/);
   });
 
   it('renders actionable phone/SMS links, semantic accordion details, and tip badges', () => {
@@ -284,13 +284,13 @@ describe('Mobile Frontend Design & UX Specifications', () => {
   });
 
   it('ensures modal footer has seamless background and mobile safe-area padding without box color cutoffs', () => {
-    const layoutCss = readFileSync(process.cwd() + '/src/styles/layout.css', 'utf-8');
+    const modalCss = readFileSync(process.cwd() + '/src/styles/modal.css', 'utf-8');
 
     // Ensure .modal-footer does not have dark rgba(0, 0, 0, 0.2) background creating a jarring box cut off
-    expect(layoutCss).not.toMatch(/\.modal-footer\s*\{[^}]*background:\s*rgba\(0,\s*0,\s*0,\s*0\.2\)/);
+    expect(modalCss).not.toMatch(/\.modal-footer\s*\{[^}]*background:\s*rgba\(0,\s*0,\s*0,\s*0\.2\)/);
 
     // Ensure mobile .modal-footer includes env(safe-area-inset-bottom) padding
-    expect(layoutCss).toMatch(/\.modal-footer\s*\{[^}]*env\(safe-area-inset-bottom\)/);
+    expect(modalCss).toMatch(/\.modal-footer\s*\{[^}]*env\(safe-area-inset-bottom\)/);
   });
 });
 

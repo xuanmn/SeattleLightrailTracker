@@ -1,5 +1,5 @@
-import { describe, it, expect } from 'vitest';
-import { runWithConcurrency } from '../src/utils/concurrency';
+import { describe, it, expect, vi } from 'vitest';
+import { runWithConcurrency, createLazySingleton } from '../src/utils/concurrency';
 
 function deferred() {
   let resolve!: () => void;
@@ -77,5 +77,49 @@ describe('runWithConcurrency', () => {
       calls++;
     });
     expect(calls).toBe(0);
+  });
+});
+
+describe('createLazySingleton', () => {
+  it('deduplicates concurrent calls and caches the resolved instance', async () => {
+    const gate = deferred();
+    const instance = { id: 'modal-1' };
+    const factory = vi.fn(async () => {
+      await gate.promise;
+      return instance;
+    });
+
+    const load = createLazySingleton(factory);
+    const p1 = load();
+    const p2 = load();
+
+    expect(factory).toHaveBeenCalledTimes(1);
+    gate.resolve();
+
+    const [r1, r2] = await Promise.all([p1, p2]);
+    expect(r1).toBe(instance);
+    expect(r2).toBe(instance);
+
+    const r3 = await load();
+    expect(r3).toBe(instance);
+    expect(factory).toHaveBeenCalledTimes(1);
+  });
+
+  it('clears the cached promise on rejection so transient network failures can retry', async () => {
+    let attempts = 0;
+    const load = createLazySingleton(async () => {
+      attempts++;
+      if (attempts === 1) {
+        throw new Error('Failed to fetch dynamically imported module');
+      }
+      return 'recovered-modal';
+    });
+
+    await expect(load()).rejects.toThrow('Failed to fetch dynamically imported module');
+    expect(attempts).toBe(1);
+
+    const recovered = await load();
+    expect(recovered).toBe('recovered-modal');
+    expect(attempts).toBe(2);
   });
 });

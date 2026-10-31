@@ -75,6 +75,171 @@ describe('Mobile Performance Optimizations', () => {
       expect(observer?.targets.size).toBe(0);
       expect((card as unknown as { observer?: unknown }).observer).toBeUndefined();
     });
+
+    it('shares a single IntersectionObserver instance across multiple StationCardComponents', () => {
+      const cards = STATIONS.slice(0, 6).map(
+        (s) => new StationCardComponent(s, false, false, { onTogglePin: () => {} })
+      );
+
+      const firstObserver = (cards[0] as unknown as { observer?: { targets: Set<Element>; trigger: (entries: Partial<IntersectionObserverEntry>[]) => void } }).observer;
+      expect(firstObserver).toBeDefined();
+
+      for (const card of cards) {
+        const obs = (card as unknown as { observer?: unknown }).observer;
+        expect(obs).toBe(firstObserver);
+      }
+      expect(firstObserver?.targets.size).toBe(6);
+
+      // Trigger intersection specifically for cards[3]
+      cards[3].isVisible = false;
+      firstObserver?.trigger([{ target: cards[3].getElement(), isIntersecting: true }]);
+      expect(cards[3].isVisible).toBe(true);
+
+      cards.forEach((c) => c.destroy());
+      expect(firstObserver?.targets.size).toBe(0);
+    });
+  });
+
+  describe('Fix 4: Clock-Only Time Format Toggle & Unfetched Direction Skeleton', () => {
+    it('updates clock elements in-place on setTimeFormat without running full updateArrivals', () => {
+      const station = STATIONS[0];
+      const card = new StationCardComponent(station, false, false, { onTogglePin: () => {} });
+      const target = new Date('2026-10-31T15:05:00').getTime();
+
+      card.updateArrivals({
+        station,
+        lastUpdated: target - 60000,
+        direction1: {
+          platform: station.platforms.northbound!,
+          arrivals: [
+            {
+              tripId: 'trip_clock',
+              routeName: '1 Line',
+              destination: 'Lynnwood City Center',
+              direction: 'Northbound',
+              scheduledDepartureTime: target,
+              predictedDepartureTime: target,
+              delaySeconds: 0,
+              isRealtime: true,
+              statusText: 'On Time',
+              statusType: 'ontime',
+            },
+          ],
+        },
+        direction2: {
+          platform: station.platforms.southbound!,
+          arrivals: [],
+        },
+      });
+
+      const updateSpy = vi.spyOn(card, 'updateArrivals');
+      const clockEl = card.getElement().querySelector('.dep-clock') as HTMLElement;
+      expect(clockEl.textContent).toMatch(/PM/i);
+
+      card.setTimeFormat(true);
+
+      expect(updateSpy).not.toHaveBeenCalled();
+      expect(clockEl.textContent).toBe('15:05');
+    });
+
+    it('preserves loading skeleton on unfetched platform when dir2Fetched is false', () => {
+      const station = STATIONS[0];
+      const card = new StationCardComponent(
+        station,
+        false,
+        false,
+        { onTogglePin: () => {} },
+        'dir1'
+      );
+
+      expect(card.getDirectionFilter()).toBe('dir1');
+
+      const now = Date.now();
+      card.updateArrivals({
+        station,
+        lastUpdated: now,
+        dir1Fetched: true,
+        dir2Fetched: false,
+        direction1: {
+          platform: station.platforms.northbound!,
+          arrivals: [],
+        },
+        direction2: {
+          platform: station.platforms.southbound!,
+          arrivals: [],
+        },
+      });
+
+      const columns = card.getElement().querySelectorAll('.platform-column');
+      // Fetched platform 1 shows "No upcoming trains"
+      expect(columns[0].textContent).toContain('No upcoming trains');
+      // Unfetched platform 2 keeps skeleton rows instead of flashing "No upcoming trains"
+      expect(columns[1].querySelectorAll('.skeleton-row').length).toBeGreaterThan(0);
+      expect(columns[1].textContent).not.toContain('No upcoming trains');
+    });
+  });
+
+  describe('Fix 5: TransitTrackerApp Empty-Dashboard Ticker Pause & Lazy Direction Polling', () => {
+    it('does not run the 1-second ticker when no station cards are rendered, and lazily fetches hidden platform on direction switch', async () => {
+      localStorage.setItem('seattle_transit_pinned_stations', JSON.stringify([]));
+      const setIntervalSpy = vi.spyOn(window, 'setInterval');
+      const clearIntervalSpy = vi.spyOn(window, 'clearInterval');
+
+      const fetchMock = vi.fn(async () => ({
+        ok: true,
+        status: 200,
+        json: async () => ({
+          code: 200,
+          data: { entry: { stopId: 'x', arrivalsAndDepartures: [] } },
+        }),
+      }));
+      vi.stubGlobal('fetch', fetchMock);
+
+      const { clearStorageCache } = await import('../src/services/storage');
+      const { clearArrivalsCache } = await import('../src/services/oba-api');
+      clearStorageCache();
+      clearArrivalsCache();
+
+      document.body.innerHTML = '<div id="app"></div>';
+      const { TransitTrackerApp } = await import('../src/main');
+      const app = new TransitTrackerApp();
+
+      // Empty dashboard (0 pinned stations): 1000ms ticker should NOT be active
+      const active1sCallsWhileEmpty = setIntervalSpy.mock.calls.filter((c) => c[1] === 1000);
+      expect(active1sCallsWhileEmpty.length).toBe(0);
+      app.destroy();
+
+      // Now mount with 1 pinned station filtered to 'dir1'
+      document.body.innerHTML = '<div id="app"></div>';
+      localStorage.setItem('seattle_transit_pinned_stations', JSON.stringify(['westlake']));
+      localStorage.setItem('seattle_transit_direction_filters', JSON.stringify({ westlake: 'dir1' }));
+      clearStorageCache();
+      clearArrivalsCache();
+      fetchMock.mockClear();
+
+      const appWithCard = new TransitTrackerApp();
+      // Let initial poll settle
+      await new Promise((r) => setTimeout(r, 20));
+
+      // Only 1 platform (Northbound 40_1121) should have been fetched!
+      expect(fetchMock).toHaveBeenCalledTimes(1);
+      expect(String(fetchMock.mock.calls[0]?.[0])).toContain('40_1121');
+
+      // Clicking Southbound ('dir2') lazily fetches the previously skipped Southbound platform (40_1108)
+      const dirBtns = document.querySelectorAll<HTMLButtonElement>('#station-westlake .direction-segment-btn');
+      expect(dirBtns.length).toBe(3);
+      dirBtns[2].click();
+      await new Promise((r) => setTimeout(r, 20));
+
+      expect(fetchMock).toHaveBeenCalledTimes(2);
+      expect(String(fetchMock.mock.calls[1]?.[0])).toContain('40_1108');
+
+      appWithCard.destroy();
+      expect(clearIntervalSpy).toHaveBeenCalled();
+      setIntervalSpy.mockRestore();
+      clearIntervalSpy.mockRestore();
+      vi.unstubAllGlobals();
+    });
   });
 
   describe('Fix 2: GPU-Composited Approach Bar via transform: scaleX', () => {

@@ -130,6 +130,7 @@ describe("SEO Configuration & Discoverability", () => {
     const html = readFileSync(process.cwd() + "/index.html", "utf-8");
 
     expect(html).toContain('<link rel="canonical" href="https://xuanmn.github.io/SeattleLightrailTracker/" />');
+    expect(html).toContain('<link rel="preconnect" href="https://api.pugetsound.onebusaway.org" crossorigin />');
     expect(html).toContain('<meta name="robots" content="index, follow');
     expect(html).toContain("application/ld+json");
     expect(html).toContain('"@type": "WebApplication"');

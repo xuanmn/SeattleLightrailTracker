@@ -1,3 +1,5 @@
+import "../styles/modal.css";
+import "../styles/picker.css";
 import { STATIONS } from "../data/stations";
 import { Station, TransitLineId } from "../types/transit";
 import { attachBottomSheetSwipe } from "../utils/bottomSheetGesture";

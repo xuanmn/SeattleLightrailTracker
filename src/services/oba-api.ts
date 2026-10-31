@@ -1,4 +1,5 @@
 import { Station, StationPlatform, TransitArrival } from '../types/transit';
+import type { StationDirectionFilter } from './storage';
 import { formatDelayStatus } from '../utils/time';
 
 const OBA_BASE = 'https://api.pugetsound.onebusaway.org/api/where';
@@ -183,7 +184,7 @@ function getOrStartStopRequest(platform: StationPlatform): InFlightEntry {
   const timer = setTimeout(() => controller.abort(), REQUEST_TIMEOUT_MS);
   const url = `${OBA_BASE}/arrivals-and-departures-for-stop/${platform.stopId}.json?key=${encodeURIComponent(
     OBA_KEY
-  )}&minutesBefore=5&minutesAfter=75`;
+  )}&minutesBefore=1&minutesAfter=75`;
 
   const entry: InFlightEntry = {
     promise: Promise.resolve([]),
@@ -268,12 +269,14 @@ async function fetchArrivalsForStop(
 }
 
 /**
- * Fetch live departures for both directions of a Station with caching support
+ * Fetch live departures for one or both directions of a Station with caching support.
+ * When `directionFilter` is `'dir1'` or `'dir2'`, only the active platform is queried.
  */
 export async function fetchArrivalsForStation(
   station: Station,
   bypassCache: boolean = false,
-  signal?: AbortSignal
+  signal?: AbortSignal,
+  directionFilter: StationDirectionFilter = 'both'
 ): Promise<{
   direction1: { platform: StationPlatform; arrivals: TransitArrival[] };
   direction2: { platform: StationPlatform; arrivals: TransitArrival[] };
@@ -283,6 +286,22 @@ export async function fetchArrivalsForStation(
 
   if (!p1 || !p2) {
     throw new Error(`Station ${station.name} missing platform definitions`);
+  }
+
+  if (directionFilter === 'dir1') {
+    const arr1 = await fetchArrivalsForStop(p1, bypassCache, signal);
+    return {
+      direction1: { platform: p1, arrivals: arr1 },
+      direction2: { platform: p2, arrivals: [] },
+    };
+  }
+
+  if (directionFilter === 'dir2') {
+    const arr2 = await fetchArrivalsForStop(p2, bypassCache, signal);
+    return {
+      direction1: { platform: p1, arrivals: [] },
+      direction2: { platform: p2, arrivals: arr2 },
+    };
   }
 
   const [arr1, arr2] = await Promise.all([

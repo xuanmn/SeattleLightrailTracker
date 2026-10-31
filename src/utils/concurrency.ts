@@ -27,3 +27,33 @@ export async function runWithConcurrency<T>(
   const runnerCount = Math.max(0, Math.min(limit, items.length));
   await Promise.all(Array.from({ length: runnerCount }, runner));
 }
+
+/**
+ * Deduplicates concurrent async initialization calls (e.g. dynamic `import()` of modals),
+ * caches the resolved value permanently, and clears the cached promise on rejection so
+ * transient network drops (such as entering a light-rail tunnel) can retry cleanly.
+ */
+export function createLazySingleton<T>(factory: () => Promise<T>): () => Promise<T> {
+  let resolved: T | undefined;
+  let hasResolved = false;
+  let inFlight: Promise<T> | undefined;
+
+  return () => {
+    if (hasResolved) return Promise.resolve(resolved as T);
+    if (!inFlight) {
+      inFlight = factory().then(
+        (value) => {
+          resolved = value;
+          hasResolved = true;
+          inFlight = undefined;
+          return value;
+        },
+        (err) => {
+          inFlight = undefined;
+          throw err;
+        }
+      );
+    }
+    return inFlight;
+  };
+}

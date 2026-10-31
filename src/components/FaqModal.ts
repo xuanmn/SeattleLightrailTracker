@@ -1,3 +1,4 @@
+import '../styles/modal.css';
 import '../styles/faq.css';
 import { createElement, ICONS } from '../utils/dom';
 import { lockBodyScroll, unlockBodyScroll } from '../utils/scrollLock';

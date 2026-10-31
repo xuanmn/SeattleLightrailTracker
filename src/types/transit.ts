@@ -36,6 +36,8 @@ export interface TransitArrival {
 export interface StationArrivals {
   station: Station;
   lastUpdated: number;
+  dir1Fetched?: boolean;
+  dir2Fetched?: boolean;
   direction1: {
     platform: StationPlatform;
     arrivals: TransitArrival[];

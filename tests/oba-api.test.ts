@@ -343,5 +343,35 @@ describe('OneBusAway Stop Arrival Fetching & In-Memory TTL Cache', () => {
     await expect(pending).rejects.toThrow();
     expect(seenSignal?.aborted).toBe(true);
   });
+
+  it('requests minutesBefore=1 to avoid transferring 4 minutes of already-departed trains', async () => {
+    const fetchMock = stubFetch(() => livePayload('LEAN_WINDOW'));
+
+    await fetchArrivalsForStation(testStation);
+
+    expect(fetchMock).toHaveBeenCalled();
+    const requestedUrl = fetchMock.mock.calls[0][0];
+    expect(requestedUrl).toContain('minutesBefore=1');
+    expect(requestedUrl).not.toContain('minutesBefore=5');
+  });
+
+  it('fetches only the active platform when directionFilter is dir1 or dir2', async () => {
+    const fetchMock = stubFetch(() => livePayload('SINGLE_DIR'));
+
+    const dir1Res = await fetchArrivalsForStation(testStation, false, undefined, 'dir1');
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+    expect(fetchMock.mock.calls[0][0]).toContain('40_1121');
+    expect(dir1Res.direction1.arrivals.length).toBe(1);
+    expect(dir1Res.direction2.arrivals).toEqual([]);
+
+    fetchMock.mockClear();
+    clearArrivalsCache();
+
+    const dir2Res = await fetchArrivalsForStation(testStation, false, undefined, 'dir2');
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+    expect(fetchMock.mock.calls[0][0]).toContain('40_1108');
+    expect(dir2Res.direction1.arrivals).toEqual([]);
+    expect(dir2Res.direction2.arrivals.length).toBe(1);
+  });
 });
 
