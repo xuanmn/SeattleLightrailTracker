@@ -1,6 +1,6 @@
 import { describe, it, expect, vi } from 'vitest';
 import { readFileSync } from 'node:fs';
-import { injectSwManifest } from '../scripts/sw-manifest';
+import { injectSwManifest, isPrecacheableBuildAsset } from '../scripts/sw-manifest';
 
 const SW_SOURCE: string = readFileSync(process.cwd() + '/public/sw.js', 'utf-8');
 const SW_URL = 'https://example.test/app/sw.js';
@@ -132,6 +132,34 @@ describe('injectSwManifest (build-time precache manifest)', () => {
     expect(() => injectSwManifest('self.addEventListener("fetch", () => {});', { buildId: 'x', assets: [] })).toThrow(
       /placeholder/i
     );
+  });
+
+  it('includes hashed .woff2 font bundles alongside .js and .css in the service worker precache manifest', async () => {
+    expect(isPrecacheableBuildAsset('assets/index-AAAA.js')).toBe(true);
+    expect(isPrecacheableBuildAsset('assets/index-BBBB.css')).toBe(true);
+    expect(isPrecacheableBuildAsset('assets/inter-latin-var-CCCC.woff2')).toBe(true);
+    expect(isPrecacheableBuildAsset('assets/outfit-latin-var-DDDD.woff2')).toBe(true);
+    expect(isPrecacheableBuildAsset('assets/index-AAAA.js.map')).toBe(false);
+    expect(isPrecacheableBuildAsset('assets/Inter-OFL.txt')).toBe(false);
+
+    const swWithFonts = injectSwManifest(SW_SOURCE, {
+      buildId: 'fontbuild123',
+      assets: [
+        './assets/index-AAAA.js',
+        './assets/index-BBBB.css',
+        './assets/inter-latin-var-CCCC.woff2',
+        './assets/outfit-latin-var-DDDD.woff2',
+      ],
+    });
+    const sw = loadServiceWorker(swWithFonts, okFetch);
+    await sw.runLifecycle('install');
+    sw.fetchSpy.mockClear();
+
+    const fontRes = await sw.dispatchFetch('./assets/inter-latin-var-CCCC.woff2');
+    expect(await fontRes?.text()).toBe(
+      'network:https://example.test/app/assets/inter-latin-var-CCCC.woff2'
+    );
+    expect(sw.fetchSpy).not.toHaveBeenCalled();
   });
 });
 

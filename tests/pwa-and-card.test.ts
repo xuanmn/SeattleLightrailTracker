@@ -150,6 +150,23 @@ describe("SEO Configuration & Discoverability", () => {
     expect(sitemap).toContain("https://xuanmn.github.io/SeattleLightrailTracker/");
     expect(sitemap).toContain("<changefreq>daily</changefreq>");
   });
+
+  it("self-hosts Inter and Outfit variable WOFF2 fonts with zero external Google Fonts requests", () => {
+    const html = readFileSync(process.cwd() + "/index.html", "utf-8");
+    const themeCss = readFileSync(process.cwd() + "/src/styles/theme.css", "utf-8");
+
+    expect(html).not.toContain("fonts.googleapis.com");
+    expect(html).not.toContain("fonts.gstatic.com");
+    expect(html).toMatch(
+      /<link\s+[^>]*rel="preload"[^>]*href="[^"]*inter-latin-var\.woff2"[^>]*as="font"[^>]*type="font\/woff2"[^>]*crossorigin/
+    );
+
+    expect(themeCss).toContain("inter-latin-var.woff2");
+    expect(themeCss).toContain("outfit-latin-var.woff2");
+    expect(themeCss).toContain("font-weight: 400 700");
+    expect(themeCss).toContain("font-weight: 600 800");
+    expect(themeCss).toContain("font-size-adjust: from-font");
+  });
 });
 
 describe("PWA Offline Shell & Service Worker", () => {

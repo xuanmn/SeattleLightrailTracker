@@ -494,6 +494,137 @@ describe('SystemMapModal Component', () => {
     expect(zoomedScale).toBeLessThanOrEqual(initialScale);
     expect(zoomedScale).toBeGreaterThanOrEqual(initialScale * 0.88);
   });
+
+  it('fits and centers the schematic around its actual visual content bounds rather than uneven outer canvas margins', () => {
+    const mapBody = document.querySelector('.system-map-body') as HTMLElement;
+    const canvas = mapBody.querySelector('.map-svg-canvas') as HTMLElement;
+
+    // Portrait iPhone map body dimensions (390 x 748)
+    Object.defineProperty(mapBody, 'clientWidth', { value: 390, configurable: true });
+    Object.defineProperty(mapBody, 'clientHeight', { value: 748, configurable: true });
+    modal.fitToScreen(true);
+
+    const match = canvas.style.transform.match(
+      /translate3d\(([-\d.]+)px,\s*([-\d.]+)px,\s*0(?:px)?\)\s*scale\(([\d.]+)\)/
+    );
+    expect(match).not.toBeNull();
+    const tx = parseFloat(match![1]);
+    const ty = parseFloat(match![2]);
+    const scale = parseFloat(match![3]);
+
+    // Fitting to the ~588x1240 schematic content bounds yields ~0.577 scale (vs ~0.431 on full 830w canvas)
+    expect(scale).toBeGreaterThan(0.55);
+
+    // Visual content spans roughly x=[110, 698], y=[26, 1266] in SVG user units
+    const leftGap = tx + 110 * scale;
+    const rightGap = 390 - (tx + 698 * scale);
+    const topGap = ty + 26 * scale;
+    const bottomGap = 748 - (ty + 1266 * scale);
+
+    expect(Math.abs(leftGap - rightGap)).toBeLessThan(1);
+    expect(Math.abs(topGap - bottomGap)).toBeLessThan(1);
+    expect(topGap).toBeGreaterThanOrEqual(15);
+    expect(bottomGap).toBeGreaterThanOrEqual(15);
+  });
+
+  it('returns to the content-centered fit transform when double-tapping to zoom back out', () => {
+    const mapBody = document.querySelector('.system-map-body') as HTMLElement;
+    const canvas = mapBody.querySelector('.map-svg-canvas') as HTMLElement;
+
+    Object.defineProperty(mapBody, 'clientWidth', { value: 390, configurable: true });
+    Object.defineProperty(mapBody, 'clientHeight', { value: 748, configurable: true });
+    modal.fitToScreen(true);
+
+    const fitTransform = canvas.style.transform;
+
+    const createTouch = (x: number, y: number): Touch =>
+      ({
+        identifier: 0,
+        target: mapBody,
+        clientX: x,
+        clientY: y,
+        pageX: x,
+        pageY: y,
+      } as unknown as Touch);
+
+    const doubleTap = (nowBase: number) => {
+      const origNow = Date.now;
+      const origPerf = performance.now;
+      let rafCb: FrameRequestCallback | null = null;
+      const origRaf = window.requestAnimationFrame;
+      window.requestAnimationFrame = ((cb: FrameRequestCallback) => {
+        rafCb = cb;
+        return 1;
+      }) as typeof window.requestAnimationFrame;
+
+      try {
+        Date.now = () => nowBase;
+        performance.now = () => nowBase;
+        mapBody.dispatchEvent(
+          new TouchEvent('touchstart', {
+            bubbles: true,
+            cancelable: true,
+            touches: [createTouch(195, 374)],
+            changedTouches: [createTouch(195, 374)],
+          })
+        );
+        mapBody.dispatchEvent(
+          new TouchEvent('touchend', {
+            bubbles: true,
+            cancelable: true,
+            touches: [],
+            changedTouches: [createTouch(195, 374)],
+          })
+        );
+
+        Date.now = () => nowBase + 80;
+        mapBody.dispatchEvent(
+          new TouchEvent('touchstart', {
+            bubbles: true,
+            cancelable: true,
+            touches: [createTouch(195, 374)],
+            changedTouches: [createTouch(195, 374)],
+          })
+        );
+        if (rafCb) {
+          (rafCb as FrameRequestCallback)(nowBase + 500);
+        }
+      } finally {
+        Date.now = origNow;
+        performance.now = origPerf;
+        window.requestAnimationFrame = origRaf;
+      }
+    };
+
+    // Double-tap 1 zooms in (~2.4x)
+    doubleTap(10_000);
+    expect(canvas.style.transform).not.toBe(fitTransform);
+
+    // Double-tap 2 zooms back out to exact content-centered fit
+    doubleTap(20_000);
+    expect(canvas.style.transform).toBe(fitTransform);
+
+    const match = canvas.style.transform.match(
+      /translate3d\(([-\d.]+)px,\s*([-\d.]+)px,\s*0(?:px)?\)\s*scale\(([\d.]+)\)/
+    );
+    expect(match).not.toBeNull();
+    const tx = parseFloat(match![1]);
+    const scale = parseFloat(match![3]);
+    expect(Math.abs((tx + 110 * scale) - (390 - (tx + 698 * scale)))).toBeLessThan(1);
+  });
+
+  it('applies full-screen layout and compact single-row header on short landscape viewports (max-height: 500px)', () => {
+    const mapCss = readFileSync(process.cwd() + '/src/styles/map.css', 'utf-8');
+
+    // Full-screen sheet rule covers both narrow portrait and short landscape viewports
+    expect(mapCss).toMatch(
+      /@media\s*\(max-width:\s*768px\)\s*,\s*\(max-height:\s*500px\)/
+    );
+    // Dedicated short-viewport rule collapses the map header into a compact single row
+    expect(mapCss).toMatch(
+      /@media\s*\(max-height:\s*500px\)[\s\S]*?\.system-map-header\s*\{[^}]*flex-direction:\s*row/
+    );
+  });
 });
 
 
