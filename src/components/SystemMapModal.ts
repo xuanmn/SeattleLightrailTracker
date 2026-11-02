@@ -7,6 +7,14 @@ import { getStationById } from '../data/stations';
 
 const MAP_WIDTH = 830;
 const MAP_HEIGHT = 1292;
+// Visual bounding box of tracks, station labels/sublabels, and terminus badges in SVG user units
+const CONTENT_LEFT = 110;
+const CONTENT_RIGHT = 698;
+const CONTENT_TOP = 26;
+const CONTENT_BOTTOM = 1266;
+const CONTENT_WIDTH = CONTENT_RIGHT - CONTENT_LEFT;
+const CONTENT_HEIGHT = CONTENT_BOTTOM - CONTENT_TOP;
+const FIT_PADDING = 16;
 
 export class SystemMapModal {
   private overlay: HTMLElement;
@@ -159,6 +167,13 @@ export class SystemMapModal {
     }
   }
 
+  private getCenteredOffsets(s: number): { x: number; y: number } {
+    return {
+      x: (this.viewportW - CONTENT_WIDTH * s) / 2 - CONTENT_LEFT * s,
+      y: (this.viewportH - CONTENT_HEIGHT * s) / 2 - CONTENT_TOP * s,
+    };
+  }
+
   public fitToScreen(force: boolean = false) {
     if (!this.bodyEl) return;
     this.stopMomentum();
@@ -179,17 +194,16 @@ export class SystemMapModal {
       return;
     }
 
-    const padding = 16;
-
-    const scaleX = (w - padding * 2) / MAP_WIDTH;
-    const scaleY = (h - padding * 2) / MAP_HEIGHT;
+    const scaleX = (w - FIT_PADDING * 2) / CONTENT_WIDTH;
+    const scaleY = (h - FIT_PADDING * 2) / CONTENT_HEIGHT;
     this.fitScale = Math.min(scaleX, scaleY);
     this.minScale = this.fitScale * 0.88;
     this.maxScale = Math.max(3.0, this.fitScale * 4.5);
 
     this.currentScale = this.fitScale;
-    this.currentX = (w - MAP_WIDTH * this.fitScale) / 2;
-    this.currentY = (h - MAP_HEIGHT * this.fitScale) / 2;
+    const centered = this.getCenteredOffsets(this.fitScale);
+    this.currentX = centered.x;
+    this.currentY = centered.y;
 
     if (this.canvasEl) {
       this.canvasEl.style.transition = 'none';
@@ -206,30 +220,31 @@ export class SystemMapModal {
   private clampOffsets(tx: number, ty: number, s: number, allowElastic: boolean = false): { x: number; y: number } {
     const w = this.viewportW || 400;
     const h = this.viewportH || 700;
-    const mapW = MAP_WIDTH * s;
-    const mapH = MAP_HEIGHT * s;
-    const margin = allowElastic ? 60 : 16;
+    const contentW = CONTENT_WIDTH * s;
+    const contentH = CONTENT_HEIGHT * s;
+    const elastic = allowElastic ? 44 : 0;
+    const margin = FIT_PADDING + elastic;
 
     let minX: number;
     let maxX: number;
-    if (mapW <= w) {
-      const center = (w - mapW) / 2;
-      minX = allowElastic ? center - margin : center;
-      maxX = allowElastic ? center + margin : center;
+    if (contentW + FIT_PADDING * 2 <= w) {
+      const center = (w - contentW) / 2 - CONTENT_LEFT * s;
+      minX = center - elastic;
+      maxX = center + elastic;
     } else {
-      minX = w - mapW - margin;
-      maxX = margin;
+      minX = w - margin - contentW - CONTENT_LEFT * s;
+      maxX = margin - CONTENT_LEFT * s;
     }
 
     let minY: number;
     let maxY: number;
-    if (mapH <= h) {
-      const center = (h - mapH) / 2;
-      minY = allowElastic ? center - margin : center;
-      maxY = allowElastic ? center + margin : center;
+    if (contentH + FIT_PADDING * 2 <= h) {
+      const center = (h - contentH) / 2 - CONTENT_TOP * s;
+      minY = center - elastic;
+      maxY = center + elastic;
     } else {
-      minY = h - mapH - margin;
-      maxY = margin;
+      minY = h - margin - contentH - CONTENT_TOP * s;
+      maxY = margin - CONTENT_TOP * s;
     }
 
     const x = Math.min(maxX, Math.max(minX, tx));
@@ -385,11 +400,8 @@ export class SystemMapModal {
 
     if (this.currentScale > this.fitScale * 1.3) {
       // Zoom out to fit
-      this.animateTo(
-        this.fitScale,
-        (this.viewportW - MAP_WIDTH * this.fitScale) / 2,
-        (this.viewportH - MAP_HEIGHT * this.fitScale) / 2
-      );
+      const centered = this.getCenteredOffsets(this.fitScale);
+      this.animateTo(this.fitScale, centered.x, centered.y);
     } else {
       // Zoom in 2.4x
       const targetScale = Math.min(this.maxScale, this.fitScale * 2.4);

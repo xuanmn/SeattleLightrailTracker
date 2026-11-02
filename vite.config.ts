@@ -3,11 +3,11 @@ import { readFileSync, writeFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 import type { Plugin } from 'vite';
 import { defineConfig } from 'vitest/config';
-import { injectSwManifest } from './scripts/sw-manifest.ts';
+import { injectSwManifest, isPrecacheableBuildAsset } from './scripts/sw-manifest.ts';
 
 /**
  * Stamps dist/sw.js with a content hash of the build and the list of hashed
- * JS/CSS bundles, so the service worker precaches exactly this deploy's files
+ * JS/CSS/WOFF2 bundles, so the service worker precaches exactly this deploy's files
  * and purges the previous deploy's cache on activate.
  */
 function swPrecacheManifest(): Plugin {
@@ -23,7 +23,7 @@ function swPrecacheManifest(): Plugin {
         const output = bundle[fileName];
         hash.update(fileName);
         hash.update(output.type === 'chunk' ? output.code : output.source);
-        if (/\.(js|css)$/.test(fileName)) {
+        if (isPrecacheableBuildAsset(fileName)) {
           assets.push(`./${fileName}`);
         }
       }

@@ -7,7 +7,7 @@ const SW_VERSION = "1.4.0";
 
 // Replaced at build time by the sw-precache Vite plugin (see scripts/sw-manifest.ts).
 // BUILD_ID is a content hash of the build output, so every deploy gets a fresh cache
-// and the previous one is deleted on activate. BUILD_ASSETS lists every hashed JS/CSS file.
+// and the previous one is deleted on activate. BUILD_ASSETS lists every hashed JS/CSS/WOFF2 file.
 const BUILD_ID = "dev";
 const BUILD_ASSETS = [];
 
@@ -164,7 +164,7 @@ self.addEventListener("fetch", (event) => {
     return;
   }
 
-  // 4. Hashed build bundles (JS/CSS): Cache-First. Their filenames change whenever their
+  // 4. Hashed build bundles (JS/CSS/WOFF2): Cache-First. Their filenames change whenever their
   // content does, so revalidating them on every launch would only waste cellular data.
   if (url.origin === self.location.origin && url.pathname.startsWith(HASHED_ASSETS_PATH)) {
     event.respondWith(cacheFirst(request));

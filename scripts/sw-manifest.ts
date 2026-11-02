@@ -19,6 +19,10 @@ export interface SwManifest {
   assets: string[];
 }
 
+export function isPrecacheableBuildAsset(fileName: string): boolean {
+  return /\.(js|css|woff2)$/.test(fileName);
+}
+
 export function injectSwManifest(source: string, manifest: SwManifest): string {
   if (!BUILD_ID_PLACEHOLDER.test(source) || !BUILD_ASSETS_PLACEHOLDER.test(source)) {
     throw new Error(
