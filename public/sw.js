@@ -121,13 +121,7 @@ self.addEventListener("fetch", (event) => {
     return;
   }
 
-  // 2. Google Fonts & CDN assets: Cache-First with background population
-  if (url.hostname.includes("fonts.googleapis.com") || url.hostname.includes("fonts.gstatic.com")) {
-    event.respondWith(cacheFirst(request));
-    return;
-  }
-
-  // 3. Navigation requests (HTML): Network-First with a timeout + Cache fallback.
+  // 2. Navigation requests (HTML): Network-First with a timeout + Cache fallback.
   // Underground "lie-fi" connections can stall indefinitely; after NAV_TIMEOUT_MS we serve
   // the cached shell instead (the network response still refreshes the cache when it lands).
   if (request.mode === "navigate") {
@@ -156,21 +150,20 @@ self.addEventListener("fetch", (event) => {
     });
 
     event.respondWith(
-      Promise.race([
-        networkPromise.finally(() => clearTimeout(timeoutId)),
-        timeoutPromise,
-      ]).catch(async () => (await getCachedShell()) || Response.error()),
+      Promise.race([networkPromise.finally(() => clearTimeout(timeoutId)), timeoutPromise]).catch(
+        async () => (await getCachedShell()) || Response.error(),
+      ),
     );
     return;
   }
 
-  // 4. Hashed build bundles (JS/CSS/WOFF2): Cache-First. Their filenames change whenever their
+  // 3. Hashed build bundles (JS/CSS/WOFF2): Cache-First. Their filenames change whenever their
   // content does, so revalidating them on every launch would only waste cellular data.
   if (url.origin === self.location.origin && url.pathname.startsWith(HASHED_ASSETS_PATH)) {
     event.respondWith(cacheFirst(request));
     return;
   }
 
-  // 5. Other static files (Icons, Manifest): Stale-While-Revalidate
+  // 4. Other static files (Icons, Manifest): Stale-While-Revalidate
   event.respondWith(staleWhileRevalidate(event));
 });

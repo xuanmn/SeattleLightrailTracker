@@ -1,9 +1,9 @@
-import { describe, it, expect, vi } from 'vitest';
-import { readFileSync } from 'node:fs';
-import { injectSwManifest, isPrecacheableBuildAsset } from '../scripts/sw-manifest';
+import { readFileSync } from "node:fs";
+import { describe, expect, it, vi } from "vitest";
+import { injectSwManifest, isPrecacheableBuildAsset } from "../scripts/sw-manifest";
 
-const SW_SOURCE: string = readFileSync(process.cwd() + '/public/sw.js', 'utf-8');
-const SW_URL = 'https://example.test/app/sw.js';
+const SW_SOURCE: string = readFileSync(process.cwd() + "/public/sw.js", "utf-8");
+const SW_URL = "https://example.test/app/sw.js";
 
 /* ------------------------------------------------------------------ */
 /* Minimal Service Worker runtime fakes                                */
@@ -11,9 +11,9 @@ const SW_URL = 'https://example.test/app/sw.js';
 
 class FakeResponse {
   constructor(
-    public body: string = '',
+    public body: string = "",
     public status: number = 200,
-    public type: string = 'basic'
+    public type: string = "basic",
   ) {}
   get ok() {
     return this.status >= 200 && this.status < 300;
@@ -25,7 +25,7 @@ class FakeResponse {
     return this.body;
   }
   static error() {
-    return new FakeResponse('', 0, 'error');
+    return new FakeResponse("", 0, "error");
   }
 }
 
@@ -37,8 +37,7 @@ interface FakeRequest {
 
 type FetchImpl = (input: string | FakeRequest) => Promise<FakeResponse>;
 
-const toUrl = (input: string | FakeRequest) =>
-  new URL(typeof input === 'string' ? input : input.url, SW_URL).href;
+const toUrl = (input: string | FakeRequest) => new URL(typeof input === "string" ? input : input.url, SW_URL).href;
 
 function createCacheStorage(fetchImpl: FetchImpl) {
   const stores = new Map<string, Map<string, FakeResponse>>();
@@ -85,17 +84,17 @@ function loadServiceWorker(source: string, fetchImpl: FetchImpl) {
   const caches = createCacheStorage(fetchSpy);
 
   // eslint-disable-next-line @typescript-eslint/no-implied-eval
-  new Function('self', 'caches', 'fetch', 'Response', source)(self, caches.api, fetchSpy, FakeResponse);
+  new Function("self", "caches", "fetch", "Response", source)(self, caches.api, fetchSpy, FakeResponse);
 
-  const runLifecycle = async (type: 'install' | 'activate') => {
+  const runLifecycle = async (type: "install" | "activate") => {
     let pending: Promise<unknown> = Promise.resolve();
     listeners[type]({ waitUntil: (p: Promise<unknown>) => (pending = p) });
     await pending;
   };
 
-  const dispatchFetch = (url: string, mode = 'no-cors') => {
+  const dispatchFetch = (url: string, mode = "no-cors") => {
     let response: Promise<FakeResponse> | undefined;
-    const request: FakeRequest = { url: new URL(url, SW_URL).href, method: 'GET', mode };
+    const request: FakeRequest = { url: new URL(url, SW_URL).href, method: "GET", mode };
     listeners.fetch({
       request,
       respondWith: (p: Promise<FakeResponse>) => (response = Promise.resolve(p)),
@@ -109,153 +108,151 @@ function loadServiceWorker(source: string, fetchImpl: FetchImpl) {
 
 const okFetch: FetchImpl = async (input) => new FakeResponse(`network:${toUrl(input)}`);
 const failingFetch: FetchImpl = async () => {
-  throw new TypeError('Failed to fetch');
+  throw new TypeError("Failed to fetch");
 };
 
 const BUILT_SW = injectSwManifest(SW_SOURCE, {
-  buildId: 'abc123def456',
-  assets: ['./assets/index-AAAA.js', './assets/index-BBBB.css', './assets/SystemMapModal-CCCC.js'],
+  buildId: "abc123def456",
+  assets: ["./assets/index-AAAA.js", "./assets/index-BBBB.css", "./assets/SystemMapModal-CCCC.js"],
 });
 
 /* ------------------------------------------------------------------ */
 
-describe('injectSwManifest (build-time precache manifest)', () => {
-  it('stamps the build id and hashed asset list into the service worker', () => {
+describe("injectSwManifest (build-time precache manifest)", () => {
+  it("stamps the build id and hashed asset list into the service worker", () => {
     expect(BUILT_SW).toContain(`const BUILD_ID = 'abc123def456';`);
     expect(BUILT_SW).toContain(
-      `const BUILD_ASSETS = ["./assets/index-AAAA.js","./assets/index-BBBB.css","./assets/SystemMapModal-CCCC.js"];`
+      `const BUILD_ASSETS = ["./assets/index-AAAA.js","./assets/index-BBBB.css","./assets/SystemMapModal-CCCC.js"];`,
     );
     expect(BUILT_SW).not.toContain(`const BUILD_ID = 'dev';`);
   });
 
-  it('fails loudly if the placeholders are missing so a broken SW is never shipped', () => {
-    expect(() => injectSwManifest('self.addEventListener("fetch", () => {});', { buildId: 'x', assets: [] })).toThrow(
-      /placeholder/i
+  it("fails loudly if the placeholders are missing so a broken SW is never shipped", () => {
+    expect(() => injectSwManifest('self.addEventListener("fetch", () => {});', { buildId: "x", assets: [] })).toThrow(
+      /placeholder/i,
     );
   });
 
-  it('includes hashed .woff2 font bundles alongside .js and .css in the service worker precache manifest', async () => {
-    expect(isPrecacheableBuildAsset('assets/index-AAAA.js')).toBe(true);
-    expect(isPrecacheableBuildAsset('assets/index-BBBB.css')).toBe(true);
-    expect(isPrecacheableBuildAsset('assets/inter-latin-var-CCCC.woff2')).toBe(true);
-    expect(isPrecacheableBuildAsset('assets/outfit-latin-var-DDDD.woff2')).toBe(true);
-    expect(isPrecacheableBuildAsset('assets/index-AAAA.js.map')).toBe(false);
-    expect(isPrecacheableBuildAsset('assets/Inter-OFL.txt')).toBe(false);
+  it("includes hashed .woff2 font bundles alongside .js and .css in the service worker precache manifest", async () => {
+    expect(isPrecacheableBuildAsset("assets/index-AAAA.js")).toBe(true);
+    expect(isPrecacheableBuildAsset("assets/index-BBBB.css")).toBe(true);
+    expect(isPrecacheableBuildAsset("assets/inter-latin-var-CCCC.woff2")).toBe(true);
+    expect(isPrecacheableBuildAsset("assets/outfit-latin-var-DDDD.woff2")).toBe(true);
+    expect(isPrecacheableBuildAsset("assets/index-AAAA.js.map")).toBe(false);
+    expect(isPrecacheableBuildAsset("assets/Inter-OFL.txt")).toBe(false);
 
     const swWithFonts = injectSwManifest(SW_SOURCE, {
-      buildId: 'fontbuild123',
+      buildId: "fontbuild123",
       assets: [
-        './assets/index-AAAA.js',
-        './assets/index-BBBB.css',
-        './assets/inter-latin-var-CCCC.woff2',
-        './assets/outfit-latin-var-DDDD.woff2',
+        "./assets/index-AAAA.js",
+        "./assets/index-BBBB.css",
+        "./assets/inter-latin-var-CCCC.woff2",
+        "./assets/outfit-latin-var-DDDD.woff2",
       ],
     });
     const sw = loadServiceWorker(swWithFonts, okFetch);
-    await sw.runLifecycle('install');
+    await sw.runLifecycle("install");
     sw.fetchSpy.mockClear();
 
-    const fontRes = await sw.dispatchFetch('./assets/inter-latin-var-CCCC.woff2');
-    expect(await fontRes?.text()).toBe(
-      'network:https://example.test/app/assets/inter-latin-var-CCCC.woff2'
-    );
+    const fontRes = await sw.dispatchFetch("./assets/inter-latin-var-CCCC.woff2");
+    expect(await fontRes?.text()).toBe("network:https://example.test/app/assets/inter-latin-var-CCCC.woff2");
     expect(sw.fetchSpy).not.toHaveBeenCalled();
   });
 });
 
-describe('Service worker lifecycle', () => {
-  it('precaches the app shell plus every hashed build asset on install', async () => {
+describe("Service worker lifecycle", () => {
+  it("precaches the app shell plus every hashed build asset on install", async () => {
     const sw = loadServiceWorker(BUILT_SW, okFetch);
-    await sw.runLifecycle('install');
+    await sw.runLifecycle("install");
 
     const [cacheName] = [...sw.caches.stores.keys()];
     const cached = [...sw.caches.stores.get(cacheName)!.keys()];
 
-    expect(cached).toContain('https://example.test/app/index.html');
-    expect(cached).toContain('https://example.test/app/assets/index-AAAA.js');
-    expect(cached).toContain('https://example.test/app/assets/index-BBBB.css');
-    expect(cached).toContain('https://example.test/app/assets/SystemMapModal-CCCC.js');
+    expect(cached).toContain("https://example.test/app/index.html");
+    expect(cached).toContain("https://example.test/app/assets/index-AAAA.js");
+    expect(cached).toContain("https://example.test/app/assets/index-BBBB.css");
+    expect(cached).toContain("https://example.test/app/assets/SystemMapModal-CCCC.js");
   });
 
-  it('versions the cache by build id so each deploy gets a fresh cache', async () => {
+  it("versions the cache by build id so each deploy gets a fresh cache", async () => {
     const sw = loadServiceWorker(BUILT_SW, okFetch);
-    await sw.runLifecycle('install');
-    expect([...sw.caches.stores.keys()][0]).toContain('abc123def456');
+    await sw.runLifecycle("install");
+    expect([...sw.caches.stores.keys()][0]).toContain("abc123def456");
   });
 
-  it('deletes caches from previous builds on activate', async () => {
+  it("deletes caches from previous builds on activate", async () => {
     const sw = loadServiceWorker(BUILT_SW, okFetch);
-    await sw.caches.api.open('link-tracker-v1.3.0');
-    await sw.caches.api.open('link-tracker-v1.4.0-oldbuild');
-    await sw.runLifecycle('install');
-    await sw.runLifecycle('activate');
+    await sw.caches.api.open("link-tracker-v1.3.0");
+    await sw.caches.api.open("link-tracker-v1.4.0-oldbuild");
+    await sw.runLifecycle("install");
+    await sw.runLifecycle("activate");
 
     const remaining = [...sw.caches.stores.keys()];
     expect(remaining).toHaveLength(1);
-    expect(remaining[0]).toContain('abc123def456');
+    expect(remaining[0]).toContain("abc123def456");
   });
 });
 
-describe('Service worker fetch routing', () => {
-  it('serves hashed bundles straight from cache without touching the network', async () => {
+describe("Service worker fetch routing", () => {
+  it("serves hashed bundles straight from cache without touching the network", async () => {
     const sw = loadServiceWorker(BUILT_SW, okFetch);
-    await sw.runLifecycle('install');
+    await sw.runLifecycle("install");
     sw.fetchSpy.mockClear();
 
-    const res = await sw.dispatchFetch('./assets/index-AAAA.js');
-    expect(res?.body).toBe('network:https://example.test/app/assets/index-AAAA.js');
+    const res = await sw.dispatchFetch("./assets/index-AAAA.js");
+    expect(res?.body).toBe("network:https://example.test/app/assets/index-AAAA.js");
     expect(sw.fetchSpy).not.toHaveBeenCalled();
   });
 
-  it('fetches and caches a hashed bundle that is not yet cached', async () => {
+  it("fetches and caches a hashed bundle that is not yet cached", async () => {
     const sw = loadServiceWorker(BUILT_SW, okFetch);
-    const res = await sw.dispatchFetch('./assets/FaqModal-DDDD.js');
+    const res = await sw.dispatchFetch("./assets/FaqModal-DDDD.js");
     expect(res?.status).toBe(200);
     expect(sw.fetchSpy).toHaveBeenCalledTimes(1);
 
     sw.fetchSpy.mockClear();
-    await sw.dispatchFetch('./assets/FaqModal-DDDD.js');
+    await sw.dispatchFetch("./assets/FaqModal-DDDD.js");
     expect(sw.fetchSpy).not.toHaveBeenCalled();
   });
 
-  it('returns a network error response (not undefined) for an uncached bundle while offline', async () => {
+  it("returns a network error response (not undefined) for an uncached bundle while offline", async () => {
     const sw = loadServiceWorker(BUILT_SW, failingFetch);
-    const res = await sw.dispatchFetch('./assets/FaqModal-DDDD.js');
+    const res = await sw.dispatchFetch("./assets/FaqModal-DDDD.js");
     expect(res).toBeDefined();
-    expect(res?.type).toBe('error');
+    expect(res?.type).toBe("error");
   });
 
-  it('returns a network error response (not undefined) for an uncached static file while offline', async () => {
+  it("returns a network error response (not undefined) for an uncached static file while offline", async () => {
     const sw = loadServiceWorker(BUILT_SW, failingFetch);
-    const res = await sw.dispatchFetch('./icons/unknown.png');
+    const res = await sw.dispatchFetch("./icons/unknown.png");
     expect(res).toBeDefined();
-    expect(res?.type).toBe('error');
+    expect(res?.type).toBe("error");
   });
 
-  it('returns a network error response (not undefined) for an uncached font while offline', async () => {
+  it("returns a network error response (not undefined) for an uncached font while offline", async () => {
     const sw = loadServiceWorker(BUILT_SW, failingFetch);
-    const res = await sw.dispatchFetch('https://fonts.gstatic.com/s/inter/v1/font.woff2');
+    const res = await sw.dispatchFetch("./assets/inter-latin-var-UNCACHED.woff2");
     expect(res).toBeDefined();
-    expect(res?.type).toBe('error');
+    expect(res?.type).toBe("error");
   });
 
-  it('never intercepts live OneBusAway API requests', () => {
+  it("never intercepts live OneBusAway API requests", () => {
     const sw = loadServiceWorker(BUILT_SW, okFetch);
-    const res = sw.dispatchFetch('https://api.pugetsound.onebusaway.org/api/where/arrivals.json');
+    const res = sw.dispatchFetch("https://api.pugetsound.onebusaway.org/api/where/arrivals.json");
     expect(res).toBeUndefined();
   });
 
-  it('clears the navigation fallback timeout once the network navigation succeeds', async () => {
+  it("clears the navigation fallback timeout once the network navigation succeeds", async () => {
     vi.useFakeTimers();
     try {
       const sw = loadServiceWorker(BUILT_SW, okFetch);
-      await sw.runLifecycle('install');
+      await sw.runLifecycle("install");
 
-      const res = await sw.dispatchFetch('./index.html', 'navigate');
+      const res = await sw.dispatchFetch("./index.html", "navigate");
       expect(res?.status).toBe(200);
 
       // Spy on caches.open AFTER navigation has already resolved
-      const openSpy = vi.spyOn(sw.caches.api, 'open');
+      const openSpy = vi.spyOn(sw.caches.api, "open");
       await vi.advanceTimersByTimeAsync(5000);
 
       // The 3s fallback timer should have been cleared and must not open the cache later
