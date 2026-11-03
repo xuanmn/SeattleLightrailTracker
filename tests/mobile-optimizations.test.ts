@@ -116,7 +116,8 @@ describe('Mobile Performance Optimizations', () => {
     it('updates clock elements in-place on setTimeFormat without running full updateArrivals', () => {
       const station = STATIONS[0];
       const card = new StationCardComponent(station, false, false, { onTogglePin: () => {} });
-      const target = new Date('2026-10-31T15:05:00').getTime();
+      // Use a known UTC epoch: 2026-10-31T22:05:00Z = 3:05 PM Pacific (PDT, UTC-7)
+      const target = Date.UTC(2026, 9, 31, 22, 5, 0);
 
       card.updateArrivals({
         station,
