@@ -625,6 +625,102 @@ describe('SystemMapModal Component', () => {
       /@media\s*\(max-height:\s*500px\)[\s\S]*?\.system-map-header\s*\{[^}]*flex-direction:\s*row/
     );
   });
+
+  it('provides proper dialog and canvas accessibility attributes', () => {
+    const overlay = document.querySelector('.system-map-modal-overlay') as HTMLElement;
+    expect(overlay.getAttribute('role')).toBe('dialog');
+    expect(overlay.getAttribute('aria-modal')).toBe('true');
+    expect(overlay.getAttribute('aria-label')).toBe('Sound Transit Link Map');
+
+    const mapBody = document.querySelector('.system-map-body') as HTMLElement;
+    expect(mapBody.getAttribute('tabindex')).toBe('0');
+    expect(mapBody.getAttribute('role')).toBe('region');
+    expect(mapBody.getAttribute('aria-label')).toContain('Interactive Link light rail map');
+  });
+
+  it('supports keyboard navigation on map canvas (pan with arrow keys, zoom with + / - / 0)', () => {
+    const mapBody = document.querySelector('.system-map-body') as HTMLElement;
+    const canvas = mapBody.querySelector('.map-svg-canvas') as HTMLElement;
+    modal.fitToScreen(true);
+    const fitTransform = canvas.style.transform;
+
+    // Zoom in with '+'
+    mapBody.dispatchEvent(
+      new KeyboardEvent('keydown', {
+        key: '+',
+        bubbles: true,
+        cancelable: true,
+      })
+    );
+    expect(canvas.style.transform).not.toBe(fitTransform);
+
+    // Pan with ArrowDown when zoomed in
+    const zoomedTransform = canvas.style.transform;
+    mapBody.dispatchEvent(
+      new KeyboardEvent('keydown', {
+        key: 'ArrowDown',
+        bubbles: true,
+        cancelable: true,
+      })
+    );
+    expect(canvas.style.transform).not.toBe(zoomedTransform);
+
+    // Reset fit with '0'
+    let rafCb: FrameRequestCallback | null = null;
+    const origRaf = window.requestAnimationFrame;
+    window.requestAnimationFrame = ((cb: FrameRequestCallback) => {
+      rafCb = cb;
+      return 1;
+    }) as typeof window.requestAnimationFrame;
+
+    try {
+      mapBody.dispatchEvent(
+        new KeyboardEvent('keydown', {
+          key: '0',
+          bubbles: true,
+          cancelable: true,
+        })
+      );
+      if (rafCb) {
+        (rafCb as FrameRequestCallback)(performance.now() + 500);
+      }
+      expect(canvas.style.transform).toBe(fitTransform);
+    } finally {
+      window.requestAnimationFrame = origRaf;
+    }
+  });
+
+  it('supports desktop double-click to toggle zoom and trackpad 2-finger panning', () => {
+    const mapBody = document.querySelector('.system-map-body') as HTMLElement;
+    const canvas = mapBody.querySelector('.map-svg-canvas') as HTMLElement;
+    modal.fitToScreen(true);
+    const fitTransform = canvas.style.transform;
+
+    // Double-click on desktop zooms in
+    mapBody.dispatchEvent(
+      new MouseEvent('dblclick', {
+        clientX: 200,
+        clientY: 300,
+        bubbles: true,
+        cancelable: true,
+      })
+    );
+    expect(canvas.style.transform).not.toBe(fitTransform);
+
+    // Trackpad 2-finger pan (continuous wheel with deltaX)
+    const beforePan = canvas.style.transform;
+    mapBody.dispatchEvent(
+      new WheelEvent('wheel', {
+        deltaX: 25,
+        deltaY: 10,
+        clientX: 200,
+        clientY: 300,
+        bubbles: true,
+        cancelable: true,
+      })
+    );
+    expect(canvas.style.transform).not.toBe(beforePan);
+  });
 });
 
 

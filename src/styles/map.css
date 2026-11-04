@@ -196,6 +196,11 @@
   cursor: grabbing;
 }
 
+.system-map-body:focus-visible {
+  outline: 2px solid var(--st-blue, #0072ce);
+  outline-offset: -2px;
+}
+
 .map-svg-canvas {
   width: 830px;
   height: 1292px;

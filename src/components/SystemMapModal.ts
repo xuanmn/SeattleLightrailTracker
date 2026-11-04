@@ -1,9 +1,9 @@
-import '../styles/modal.css';
-import '../styles/map.css';
-import { createElement, ICONS } from '../utils/dom';
-import { lockBodyScroll, unlockBodyScroll } from '../utils/scrollLock';
-import { attachBottomSheetSwipe } from '../utils/bottomSheetGesture';
-import { getStationById } from '../data/stations';
+import { getStationById } from "../data/stations";
+import "../styles/map.css";
+import "../styles/modal.css";
+import { attachBottomSheetSwipe } from "../utils/bottomSheetGesture";
+import { createElement, ICONS } from "../utils/dom";
+import { lockBodyScroll, unlockBodyScroll } from "../utils/scrollLock";
 
 const MAP_WIDTH = 830;
 const MAP_HEIGHT = 1292;
@@ -15,14 +15,24 @@ const CONTENT_BOTTOM = 1266;
 const CONTENT_WIDTH = CONTENT_RIGHT - CONTENT_LEFT;
 const CONTENT_HEIGHT = CONTENT_BOTTOM - CONTENT_TOP;
 const FIT_PADDING = 16;
+// Rubber-band overscroll allowance (screen px) while a finger or mouse is actively dragging
+const ELASTIC_PX = 44;
+// Frame duration the momentum friction constant is tuned for (60Hz)
+const FRAME_MS = 1000 / 60;
+const KEY_PAN_PX = 80;
+const KEY_ZOOM_STEP = 1.25;
 
 export class SystemMapModal {
   private overlay: HTMLElement;
+  private containerEl!: HTMLElement;
   private bodyEl!: HTMLElement;
   private canvasEl!: HTMLElement;
   private svgInitialized: boolean = false;
+  private resizeObserver: ResizeObserver | null = null;
+  private returnFocusEl: HTMLElement | null = null;
 
-  private fitScale: number = 1;
+  // 0 until the first measurement so the initial fitToScreen() can never be skipped as "unchanged"
+  private fitScale: number = 0;
   private minScale: number = 0.5;
   private maxScale: number = 4;
   private currentScale: number = 1;
@@ -41,7 +51,6 @@ export class SystemMapModal {
   private tweenRaf: number | null = null;
   private openRaf: number | null = null;
   private resizeRaf: number | null = null;
-  private openTimer?: number;
   private wheelSnapTimer?: number;
 
   private isMouseDown = false;
@@ -51,9 +60,48 @@ export class SystemMapModal {
   private mouseStartTransY = 0;
 
   private handleKeyDown = (e: KeyboardEvent) => {
-    if (e.key === 'Escape' && this.overlay.classList.contains('open')) {
+    if (!this.overlay.classList.contains("open")) return;
+    if (e.key === "Escape") {
       this.close();
+      return;
     }
+    if (e.key === "Tab") {
+      this.trapTabFocus(e);
+      return;
+    }
+    // Never hijack browser shortcuts (e.g. Cmd/Ctrl + / - page zoom)
+    if (e.metaKey || e.ctrlKey || e.altKey) return;
+    // Map navigation keys only apply while the map viewport itself has focus
+    if (e.target !== this.bodyEl) return;
+
+    switch (e.key) {
+      case "+":
+      case "=":
+        this.zoomAroundCenter(KEY_ZOOM_STEP);
+        break;
+      case "-":
+      case "_":
+        this.zoomAroundCenter(1 / KEY_ZOOM_STEP);
+        break;
+      case "0":
+        this.resetToFit();
+        break;
+      case "ArrowLeft":
+        this.panBy(KEY_PAN_PX, 0);
+        break;
+      case "ArrowRight":
+        this.panBy(-KEY_PAN_PX, 0);
+        break;
+      case "ArrowUp":
+        this.panBy(0, KEY_PAN_PX);
+        break;
+      case "ArrowDown":
+        this.panBy(0, -KEY_PAN_PX);
+        break;
+      default:
+        return;
+    }
+    e.preventDefault();
   };
 
   private handleMouseMove = (e: MouseEvent) => {
@@ -71,15 +119,15 @@ export class SystemMapModal {
   private handleMouseUp = () => {
     if (this.isMouseDown) {
       this.isMouseDown = false;
-      this.bodyEl.classList.remove('is-panning');
-      window.removeEventListener('mousemove', this.handleMouseMove);
-      window.removeEventListener('mouseup', this.handleMouseUp);
+      this.bodyEl.classList.remove("is-panning");
+      window.removeEventListener("mousemove", this.handleMouseMove);
+      window.removeEventListener("mouseup", this.handleMouseUp);
       this.snapToBoundsIfNeeded();
     }
   };
 
   private handleResize = () => {
-    if (this.overlay.classList.contains('open')) {
+    if (this.overlay.classList.contains("open")) {
       if (this.resizeRaf !== null) return;
       this.resizeRaf = requestAnimationFrame(() => {
         this.resizeRaf = null;
@@ -95,46 +143,46 @@ export class SystemMapModal {
   }
 
   public open() {
-    if (this.overlay.classList.contains('open')) return;
+    if (this.overlay.classList.contains("open")) return;
     // Lazy-init: generate the heavy SVG map only on first open to avoid ~36KB DOM on page load
     if (!this.svgInitialized && this.canvasEl) {
       this.canvasEl.innerHTML = this.generateOfficialSchematicSvg();
       this.svgInitialized = true;
     }
 
-    this.overlay.classList.add('open');
+    const active = document.activeElement;
+    this.returnFocusEl = active instanceof HTMLElement && active !== document.body ? active : null;
+
+    this.overlay.classList.add("open");
     lockBodyScroll();
-    window.addEventListener('keydown', this.handleKeyDown);
-    window.addEventListener('resize', this.handleResize);
+    window.addEventListener("keydown", this.handleKeyDown);
 
-    // Ensure viewport is measured accurately on next frame and after transition
-    if (this.openRaf !== null) {
-      cancelAnimationFrame(this.openRaf);
-      this.openRaf = null;
+    if (typeof ResizeObserver !== "undefined") {
+      // Fires once after the first layout (before paint) and again only on real size changes
+      // (rotation, window resize) — no forced synchronous layout and no post-transition timers.
+      this.resizeObserver ??= new ResizeObserver(() => this.fitToScreen());
+      this.resizeObserver.observe(this.bodyEl);
+    } else {
+      window.addEventListener("resize", this.handleResize);
+      if (this.openRaf !== null) cancelAnimationFrame(this.openRaf);
+      this.openRaf = requestAnimationFrame(() => {
+        this.openRaf = null;
+        this.fitToScreen();
+      });
     }
-    this.openRaf = requestAnimationFrame(() => {
-      this.fitToScreen();
-      this.openRaf = null;
-    });
 
-    if (this.openTimer !== undefined) clearTimeout(this.openTimer);
-    this.openTimer = window.setTimeout(() => {
-      this.fitToScreen();
-      this.openTimer = undefined;
-    }, 260);
+    // Move focus into the dialog so keyboard pan/zoom works immediately
+    this.bodyEl.focus({ preventScroll: true });
   }
 
   public close() {
-    if (!this.overlay.classList.contains('open')) return;
+    if (!this.overlay.classList.contains("open")) return;
     this.stopMomentum();
     this.stopTween();
+    this.resizeObserver?.disconnect();
     if (this.openRaf !== null) {
       cancelAnimationFrame(this.openRaf);
       this.openRaf = null;
-    }
-    if (this.openTimer !== undefined) {
-      clearTimeout(this.openTimer);
-      this.openTimer = undefined;
     }
     if (this.wheelSnapTimer !== undefined) {
       clearTimeout(this.wheelSnapTimer);
@@ -146,21 +194,48 @@ export class SystemMapModal {
     }
     if (this.isMouseDown) {
       this.isMouseDown = false;
-      if (this.bodyEl) this.bodyEl.classList.remove('is-panning');
-      window.removeEventListener('mousemove', this.handleMouseMove);
-      window.removeEventListener('mouseup', this.handleMouseUp);
+      if (this.bodyEl) this.bodyEl.classList.remove("is-panning");
+      window.removeEventListener("mousemove", this.handleMouseMove);
+      window.removeEventListener("mouseup", this.handleMouseUp);
     }
-    this.overlay.classList.remove('open');
+    this.overlay.classList.remove("open");
     unlockBodyScroll();
-    window.removeEventListener('keydown', this.handleKeyDown);
-    window.removeEventListener('resize', this.handleResize);
+    window.removeEventListener("keydown", this.handleKeyDown);
+    window.removeEventListener("resize", this.handleResize);
+
+    // Return focus to the control that opened the map
+    const returnTo = this.returnFocusEl;
+    this.returnFocusEl = null;
+    if (returnTo?.isConnected) returnTo.focus({ preventScroll: true });
+  }
+
+  private trapTabFocus(e: KeyboardEvent) {
+    const focusables = Array.from(
+      this.containerEl.querySelectorAll<HTMLElement>('button, a[href], [tabindex]:not([tabindex="-1"])'),
+    );
+    if (focusables.length === 0) return;
+    const first = focusables[0];
+    const last = focusables[focusables.length - 1];
+    const active = document.activeElement;
+    const inside = active instanceof Node && this.containerEl.contains(active);
+    if (e.shiftKey && (active === first || !inside)) {
+      e.preventDefault();
+      last.focus();
+    } else if (!e.shiftKey && (active === last || !inside)) {
+      e.preventDefault();
+      first.focus();
+    }
+  }
+
+  private prefersReducedMotion(): boolean {
+    return typeof window.matchMedia === "function" && window.matchMedia("(prefers-reduced-motion: reduce)").matches;
   }
 
   private updateCachedDimensions() {
     if (!this.bodyEl) return;
     this.viewportW = this.bodyEl.clientWidth || window.innerWidth || 400;
-    this.viewportH = this.bodyEl.clientHeight || (window.innerHeight * 0.75) || 700;
-    if (typeof this.bodyEl.getBoundingClientRect === 'function') {
+    this.viewportH = this.bodyEl.clientHeight || window.innerHeight * 0.75 || 700;
+    if (typeof this.bodyEl.getBoundingClientRect === "function") {
       const rect = this.bodyEl.getBoundingClientRect();
       this.bodyRectLeft = rect.left;
       this.bodyRectTop = rect.top;
@@ -206,7 +281,7 @@ export class SystemMapModal {
     this.currentY = centered.y;
 
     if (this.canvasEl) {
-      this.canvasEl.style.transition = 'none';
+      this.canvasEl.style.transition = "none";
     }
     this.applyTransform();
   }
@@ -222,7 +297,7 @@ export class SystemMapModal {
     const h = this.viewportH || 700;
     const contentW = CONTENT_WIDTH * s;
     const contentH = CONTENT_HEIGHT * s;
-    const elastic = allowElastic ? 44 : 0;
+    const elastic = allowElastic ? ELASTIC_PX : 0;
     const margin = FIT_PADDING + elastic;
 
     let minX: number;
@@ -299,18 +374,24 @@ export class SystemMapModal {
     }
 
     const friction = 0.93;
+    let lastTime = performance.now();
 
-    const step = () => {
-      vx *= friction;
-      vy *= friction;
+    // Velocities are in px per 60Hz frame; scale both decay and travel by real elapsed time so
+    // flicks glide the same distance and duration on 60Hz, 90Hz and 120Hz (ProMotion) displays.
+    const step = (now: number) => {
+      const frames = Math.min(4, Math.max(0.25, (now - lastTime) / FRAME_MS));
+      lastTime = now;
+      const decay = Math.pow(friction, frames);
+      vx *= decay;
+      vy *= decay;
 
       if (Math.hypot(vx, vy) < 0.15) {
         this.snapToBoundsIfNeeded();
         return;
       }
 
-      const nextX = this.currentX + vx;
-      const nextY = this.currentY + vy;
+      const nextX = this.currentX + vx * frames;
+      const nextY = this.currentY + vy * frames;
       const clamped = this.clampOffsets(nextX, nextY, this.currentScale, false);
 
       if (Math.abs(clamped.x - this.currentX) < 0.01) vx = 0;
@@ -331,7 +412,7 @@ export class SystemMapModal {
     targetX: number,
     targetY: number,
     duration: number = 200,
-    useSpring: boolean = false
+    useSpring: boolean = false,
   ) {
     if (!this.canvasEl) return;
     this.stopMomentum();
@@ -341,10 +422,12 @@ export class SystemMapModal {
     const startY = this.currentY;
 
     if (
-      Math.abs(targetScale - startScale) < 0.001 &&
-      Math.abs(targetX - startX) < 0.5 &&
-      Math.abs(targetY - startY) < 0.5
+      this.prefersReducedMotion() ||
+      (Math.abs(targetScale - startScale) < 0.001 &&
+        Math.abs(targetX - startX) < 0.5 &&
+        Math.abs(targetY - startY) < 0.5)
     ) {
+      // Reduced motion: jump straight to the destination instead of animating zoom/pan/bounce
       this.currentScale = targetScale;
       this.currentX = targetX;
       this.currentY = targetY;
@@ -352,7 +435,7 @@ export class SystemMapModal {
       return;
     }
 
-    this.canvasEl.style.transition = 'none';
+    this.canvasEl.style.transition = "none";
     const startTime = performance.now();
 
     // Damped harmonic spring: pleasant bounce overshoot when recovering from over-zoom
@@ -412,6 +495,30 @@ export class SystemMapModal {
     }
   }
 
+  private resetToFit() {
+    this.stopMomentum();
+    const centered = this.getCenteredOffsets(this.fitScale);
+    this.animateTo(this.fitScale, centered.x, centered.y);
+  }
+
+  private zoomAroundCenter(factor: number) {
+    this.stopMomentum();
+    this.updateCachedDimensions();
+    const targetScale = Math.min(this.maxScale, Math.max(this.fitScale, this.currentScale * factor));
+    const px = this.viewportW / 2;
+    const py = this.viewportH / 2;
+    const targetX = px - (px - this.currentX) * (targetScale / this.currentScale);
+    const targetY = py - (py - this.currentY) * (targetScale / this.currentScale);
+    const clamped = this.clampOffsets(targetX, targetY, targetScale, false);
+    this.animateTo(targetScale, clamped.x, clamped.y, 180);
+  }
+
+  private panBy(dx: number, dy: number) {
+    this.stopMomentum();
+    const clamped = this.clampOffsets(this.currentX + dx, this.currentY + dy, this.currentScale, false);
+    this.animateTo(this.currentScale, clamped.x, clamped.y, 160);
+  }
+
   private setupEventListeners() {
     if (!this.bodyEl) return;
 
@@ -424,7 +531,7 @@ export class SystemMapModal {
     let lastMoveTime = 0;
 
     this.bodyEl.addEventListener(
-      'touchstart',
+      "touchstart",
       (e: TouchEvent) => {
         this.stopMomentum();
         this.updateCachedDimensions();
@@ -435,10 +542,7 @@ export class SystemMapModal {
           const tapY = t.clientY - this.bodyRectTop;
           const now = Date.now();
 
-          if (
-            now - this.lastTapTime < 300 &&
-            Math.hypot(tapX - this.lastTapX, tapY - this.lastTapY) < 40
-          ) {
+          if (now - this.lastTapTime < 300 && Math.hypot(tapX - this.lastTapX, tapY - this.lastTapY) < 40) {
             if (e.cancelable) e.preventDefault();
             this.handleDoubleTap(t.clientX, t.clientY);
             this.lastTapTime = 0;
@@ -456,7 +560,7 @@ export class SystemMapModal {
           velocityX = 0;
           velocityY = 0;
           lastMoveTime = now;
-          if (this.canvasEl) this.canvasEl.style.transition = 'none';
+          if (this.canvasEl) this.canvasEl.style.transition = "none";
         } else if (e.touches.length >= 2) {
           isTouching = true;
           const t0 = e.touches[0];
@@ -467,14 +571,14 @@ export class SystemMapModal {
           velocityX = 0;
           velocityY = 0;
           lastMoveTime = Date.now();
-          if (this.canvasEl) this.canvasEl.style.transition = 'none';
+          if (this.canvasEl) this.canvasEl.style.transition = "none";
         }
       },
-      { passive: false }
+      { passive: false },
     );
 
     this.bodyEl.addEventListener(
-      'touchmove',
+      "touchmove",
       (e: TouchEvent) => {
         if (!isTouching) return;
         if (e.cancelable) e.preventDefault();
@@ -520,10 +624,7 @@ export class SystemMapModal {
               // Elastic resistance damping when pinching out beyond fit scale
               rawScale = this.fitScale - (this.fitScale - rawScale) * 0.45;
             }
-            newScale = Math.min(
-              this.maxScale,
-              Math.max(this.minScale, rawScale)
-            );
+            newScale = Math.min(this.maxScale, Math.max(this.minScale, rawScale));
           }
 
           // Focal zoom around touch midpoint
@@ -548,7 +649,7 @@ export class SystemMapModal {
           velocityY = 0;
         }
       },
-      { passive: false }
+      { passive: false },
     );
 
     const handleTouchEnd = (e: TouchEvent) => {
@@ -582,11 +683,11 @@ export class SystemMapModal {
       }
     };
 
-    this.bodyEl.addEventListener('touchend', handleTouchEnd);
-    this.bodyEl.addEventListener('touchcancel', handleTouchEnd);
+    this.bodyEl.addEventListener("touchend", handleTouchEnd);
+    this.bodyEl.addEventListener("touchcancel", handleTouchEnd);
 
     // Desktop Mouse Controls: Attach window listeners only while dragging to eliminate idle CPU overhead
-    this.bodyEl.addEventListener('mousedown', (e: MouseEvent) => {
+    this.bodyEl.addEventListener("mousedown", (e: MouseEvent) => {
       if (e.button !== 0) return;
       this.stopMomentum();
       this.updateCachedDimensions();
@@ -595,38 +696,68 @@ export class SystemMapModal {
       this.mouseStartY = e.clientY;
       this.mouseStartTransX = this.currentX;
       this.mouseStartTransY = this.currentY;
-      this.bodyEl.classList.add('is-panning');
-      if (this.canvasEl) this.canvasEl.style.transition = 'none';
+      this.bodyEl.classList.add("is-panning");
+      if (this.canvasEl) this.canvasEl.style.transition = "none";
 
-      window.addEventListener('mousemove', this.handleMouseMove);
-      window.addEventListener('mouseup', this.handleMouseUp);
+      window.addEventListener("mousemove", this.handleMouseMove);
+      window.addEventListener("mouseup", this.handleMouseUp);
+    });
+
+    // Desktop double click to zoom in/out
+    this.bodyEl.addEventListener("dblclick", (e: MouseEvent) => {
+      this.handleDoubleTap(e.clientX, e.clientY);
     });
 
     this.bodyEl.addEventListener(
-      'wheel',
+      "wheel",
       (e: WheelEvent) => {
         e.preventDefault();
         this.stopMomentum();
         this.updateCachedDimensions();
-        const px = e.clientX - this.bodyRectLeft;
-        const py = e.clientY - this.bodyRectTop;
-        const factor = e.deltaY < 0 ? 1.14 : 0.88;
-        let newScale = this.currentScale * factor;
-        if (newScale < this.fitScale) {
-          // Elastic resistance damping when scrolling out beyond fit scale
-          newScale = this.fitScale - (this.fitScale - newScale) * 0.45;
+
+        if (e.ctrlKey) {
+          // Trackpad pinch-to-zoom (smooth continuous scaling centered at cursor)
+          const px = e.clientX - this.bodyRectLeft;
+          const py = e.clientY - this.bodyRectTop;
+          const factor = Math.exp(-e.deltaY * 0.008);
+          let newScale = this.currentScale * factor;
+          if (newScale < this.fitScale) {
+            newScale = this.fitScale - (this.fitScale - newScale) * 0.45;
+          }
+          newScale = Math.min(this.maxScale, Math.max(this.minScale, newScale));
+          const nextX = px - (px - this.currentX) * (newScale / this.currentScale);
+          const nextY = py - (py - this.currentY) * (newScale / this.currentScale);
+          const clamped = this.clampOffsets(nextX, nextY, newScale, newScale < this.fitScale);
+          this.currentScale = newScale;
+          this.currentX = clamped.x;
+          this.currentY = clamped.y;
+          this.applyTransform();
+        } else if (Math.abs(e.deltaX) > 0 || (Math.abs(e.deltaY) < 30 && e.deltaMode === 0)) {
+          // Trackpad 2-finger continuous panning
+          const nextX = this.currentX - e.deltaX;
+          const nextY = this.currentY - e.deltaY;
+          const clamped = this.clampOffsets(nextX, nextY, this.currentScale, true);
+          this.currentX = clamped.x;
+          this.currentY = clamped.y;
+          this.applyTransform();
+        } else {
+          // Standard mouse scroll wheel zoom (stepped zoom centered at cursor)
+          const px = e.clientX - this.bodyRectLeft;
+          const py = e.clientY - this.bodyRectTop;
+          const factor = e.deltaY < 0 ? 1.14 : 0.88;
+          let newScale = this.currentScale * factor;
+          if (newScale < this.fitScale) {
+            newScale = this.fitScale - (this.fitScale - newScale) * 0.45;
+          }
+          newScale = Math.min(this.maxScale, Math.max(this.minScale, newScale));
+          const nextX = px - (px - this.currentX) * (newScale / this.currentScale);
+          const nextY = py - (py - this.currentY) * (newScale / this.currentScale);
+          const clamped = this.clampOffsets(nextX, nextY, newScale, newScale < this.fitScale);
+          this.currentScale = newScale;
+          this.currentX = clamped.x;
+          this.currentY = clamped.y;
+          this.applyTransform();
         }
-        newScale = Math.min(
-          this.maxScale,
-          Math.max(this.minScale, newScale)
-        );
-        const nextX = px - (px - this.currentX) * (newScale / this.currentScale);
-        const nextY = py - (py - this.currentY) * (newScale / this.currentScale);
-        const clamped = this.clampOffsets(nextX, nextY, newScale, newScale < this.fitScale);
-        this.currentScale = newScale;
-        this.currentX = clamped.x;
-        this.currentY = clamped.y;
-        this.applyTransform();
 
         // Bounce back if zoomed out beyond fitScale or out of bounds
         if (this.wheelSnapTimer !== undefined) {
@@ -637,29 +768,34 @@ export class SystemMapModal {
           this.snapToBoundsIfNeeded(this.currentScale < this.fitScale);
         }, 140);
       },
-      { passive: false }
+      { passive: false },
     );
   }
 
   private render(): HTMLElement {
-    const overlay = createElement('div', 'system-map-modal-overlay');
-    const container = createElement('div', 'system-map-container');
+    const overlay = createElement("div", "system-map-modal-overlay");
+    overlay.setAttribute("role", "dialog");
+    overlay.setAttribute("aria-modal", "true");
+    overlay.setAttribute("aria-label", "Sound Transit Link Map");
+
+    this.containerEl = createElement("div", "system-map-container");
+    const container = this.containerEl;
 
     // Header
-    const header = createElement('div', 'system-map-header');
+    const header = createElement("div", "system-map-header");
 
     // Header Top Row: Brand & Title on left, Close button on right
-    const headerTop = createElement('div', 'system-map-header-top');
-    const titleGroup = createElement('div', 'system-map-title-group');
-    const iconBadge = createElement('div', 'system-map-icon-badge', ICONS.train);
-    const title = createElement('h3', 'system-map-title', 'Sound Transit Link Map');
+    const headerTop = createElement("div", "system-map-header-top");
+    const titleGroup = createElement("div", "system-map-title-group");
+    const iconBadge = createElement("div", "system-map-icon-badge", ICONS.train);
+    const title = createElement("h3", "system-map-title", "Sound Transit Link Map");
     titleGroup.appendChild(iconBadge);
     titleGroup.appendChild(title);
 
-    const actions = createElement('div', 'system-map-header-actions');
-    const closeBtn = createElement('button', 'icon-btn modal-close-btn', ICONS.close);
-    closeBtn.setAttribute('aria-label', 'Close Link Map');
-    closeBtn.title = 'Close Link Map';
+    const actions = createElement("div", "system-map-header-actions");
+    const closeBtn = createElement("button", "icon-btn modal-close-btn", ICONS.close);
+    closeBtn.setAttribute("aria-label", "Close Link Map");
+    closeBtn.title = "Close Link Map";
     closeBtn.onclick = () => this.close();
     actions.appendChild(closeBtn);
 
@@ -667,7 +803,7 @@ export class SystemMapModal {
     headerTop.appendChild(actions);
 
     // Header Legend Row: Clean pills underneath title, never competing with close button
-    const headerLegend = createElement('div', 'system-map-header-legend');
+    const headerLegend = createElement("div", "system-map-header-legend");
     headerLegend.innerHTML = `
       <div class="map-legend-item">
         <span class="map-legend-line-sample line-1"></span>
@@ -679,24 +815,26 @@ export class SystemMapModal {
       </div>
     `;
 
-    const officialLink = createElement(
-      'a',
-      'map-official-link',
-      `Stations Directory ↗`
-    ) as HTMLAnchorElement;
-    officialLink.href = 'https://www.soundtransit.org/ride-with-us/stations/link-light-rail-stations';
-    officialLink.target = '_blank';
-    officialLink.rel = 'noopener noreferrer';
+    const officialLink = createElement("a", "map-official-link", `Stations Directory ↗`) as HTMLAnchorElement;
+    officialLink.href = "https://www.soundtransit.org/ride-with-us/stations/link-light-rail-stations";
+    officialLink.target = "_blank";
+    officialLink.rel = "noopener noreferrer";
     headerLegend.appendChild(officialLink);
 
     header.appendChild(headerTop);
     header.appendChild(headerLegend);
 
     // Map Viewport Body
-    this.bodyEl = createElement('div', 'system-map-body');
+    this.bodyEl = createElement("div", "system-map-body");
+    this.bodyEl.setAttribute("tabindex", "0");
+    this.bodyEl.setAttribute("role", "region");
+    this.bodyEl.setAttribute(
+      "aria-label",
+      "Interactive Link light rail map. Use arrow keys to pan, plus and minus to zoom, zero to reset fit.",
+    );
 
     // SVG Canvas (content lazily populated on first open())
-    this.canvasEl = createElement('div', 'map-svg-canvas');
+    this.canvasEl = createElement("div", "map-svg-canvas");
     this.bodyEl.appendChild(this.canvasEl);
 
     container.appendChild(header);
@@ -776,66 +914,62 @@ export class SystemMapModal {
         </g>
 
         <!-- ================= LEFT SPINE: SHARED 1 LINE & 2 LINE STATIONS ================= -->
-        ${this.renderDualCapsuleStation('lynnwood-city-center', 285, 75, true)}
-        ${this.renderDualCapsuleStation('mountlake-terrace', 285, 117)}
-        ${this.renderDualCapsuleStation('shoreline-north-185th', 285, 158)}
-        ${this.renderDualCapsuleStation('shoreline-south-148th', 285, 200)}
-        ${this.renderDualCapsuleStation('pinehurst', 285, 241)}
-        ${this.renderDualCapsuleStation('northgate', 285, 283)}
-        ${this.renderDualCapsuleStation('roosevelt', 285, 324)}
-        ${this.renderDualCapsuleStation('u-district', 285, 366)}
-        ${this.renderDualCapsuleStation('university-of-washington', 285, 407)}
-        ${this.renderDualCapsuleStation('capitol-hill', 285, 449)}
+        ${this.renderDualCapsuleStation("lynnwood-city-center", 285, 75, true)}
+        ${this.renderDualCapsuleStation("mountlake-terrace", 285, 117)}
+        ${this.renderDualCapsuleStation("shoreline-north-185th", 285, 158)}
+        ${this.renderDualCapsuleStation("shoreline-south-148th", 285, 200)}
+        ${this.renderDualCapsuleStation("pinehurst", 285, 241)}
+        ${this.renderDualCapsuleStation("northgate", 285, 283)}
+        ${this.renderDualCapsuleStation("roosevelt", 285, 324)}
+        ${this.renderDualCapsuleStation("u-district", 285, 366)}
+        ${this.renderDualCapsuleStation("university-of-washington", 285, 407)}
+        ${this.renderDualCapsuleStation("capitol-hill", 285, 449)}
 
         <!-- Downtown Seattle Transit Tunnel Stations -->
-        ${this.renderDualCapsuleStation('westlake', 285, 490)}
-        ${this.renderDualCapsuleStation('symphony', 285, 532)}
-        ${this.renderDualCapsuleStation('pioneer-square', 285, 573)}
-        
+        ${this.renderDualCapsuleStation("westlake", 285, 490)}
+        ${this.renderDualCapsuleStation("symphony", 285, 532)}
+        ${this.renderDualCapsuleStation("pioneer-square", 285, 573)}
+
         <!-- Highlighted 1 Line ⇄ 2 Line Transfer Hub -->
-        ${this.renderTransferHubStation('international-district-chinatown', 285, 615)}
+        ${this.renderTransferHubStation("international-district-chinatown", 285, 615)}
 
         <!-- ================= LEFT SPINE: 1 LINE SOUTH STATIONS ================= -->
-        ${this.renderLine1Station('stadium', 272, 665)}
-        ${this.renderLine1Station('sodo', 272, 710)}
-        ${this.renderLine1Station('beacon-hill', 272, 755)}
-        ${this.renderLine1Station('mount-baker', 272, 800)}
-        ${this.renderLine1Station('columbia-city', 272, 845)}
-        ${this.renderLine1Station('othello', 272, 890)}
-        ${this.renderLine1Station('rainier-beach', 272, 935)}
-        ${this.renderLine1Station('tukwila-intl-blvd', 272, 980)}
-        ${this.renderAirportStation('seatac-airport', 272, 1025)}
-        ${this.renderLine1Station('angle-lake', 272, 1070)}
-        ${this.renderLine1Station('kent-des-moines', 272, 1115)}
-        ${this.renderLine1Station('star-lake', 272, 1160)}
-        ${this.renderLine1Station('federal-way-downtown', 272, 1205, true)}
+        ${this.renderLine1Station("stadium", 272, 665)}
+        ${this.renderLine1Station("sodo", 272, 710)}
+        ${this.renderLine1Station("beacon-hill", 272, 755)}
+        ${this.renderLine1Station("mount-baker", 272, 800)}
+        ${this.renderLine1Station("columbia-city", 272, 845)}
+        ${this.renderLine1Station("othello", 272, 890)}
+        ${this.renderLine1Station("rainier-beach", 272, 935)}
+        ${this.renderLine1Station("tukwila-intl-blvd", 272, 980)}
+        ${this.renderAirportStation("seatac-airport", 272, 1025)}
+        ${this.renderLine1Station("angle-lake", 272, 1070)}
+        ${this.renderLine1Station("kent-des-moines", 272, 1115)}
+        ${this.renderLine1Station("star-lake", 272, 1160)}
+        ${this.renderLine1Station("federal-way-downtown", 272, 1205, true)}
 
         <!-- ================= CONNECTING SEGMENT (I-90 CORRIDOR) ================= -->
-        ${this.renderLine2Station('judkins-park', 355, 665, 'bottom')}
-        ${this.renderLine2Station('mercer-island', 480, 665, 'bottom')}
+        ${this.renderLine2Station("judkins-park", 355, 665, "bottom")}
+        ${this.renderLine2Station("mercer-island", 480, 665, "bottom")}
 
         <!-- ================= RIGHT SPINE: 2 LINE EASTSIDE STATIONS ================= -->
-        ${this.renderLine2Station('south-bellevue', 540, 635, 'right', true)}
-        ${this.renderLine2Station('east-main', 540, 571, 'right')}
-        ${this.renderLine2Station('bellevue-downtown', 540, 509, 'right', true)}
-        ${this.renderLine2Station('wilburton', 540, 447, 'right')}
-        ${this.renderLine2Station('spring-district', 540, 385, 'right')}
-        ${this.renderLine2Station('bel-red', 540, 323, 'right')}
-        ${this.renderLine2Station('overlake-village', 540, 261, 'right')}
-        ${this.renderLine2Station('redmond-technology', 540, 199, 'right', true)}
-        ${this.renderLine2Station('marymoor-village', 540, 137, 'right')}
-        ${this.renderLine2Station('downtown-redmond', 540, 75, 'right', true)}
+        ${this.renderLine2Station("south-bellevue", 540, 635, "right", true)}
+        ${this.renderLine2Station("east-main", 540, 571, "right")}
+        ${this.renderLine2Station("bellevue-downtown", 540, 509, "right", true)}
+        ${this.renderLine2Station("wilburton", 540, 447, "right")}
+        ${this.renderLine2Station("spring-district", 540, 385, "right")}
+        ${this.renderLine2Station("bel-red", 540, 323, "right")}
+        ${this.renderLine2Station("overlake-village", 540, 261, "right")}
+        ${this.renderLine2Station("redmond-technology", 540, 199, "right", true)}
+        ${this.renderLine2Station("marymoor-village", 540, 137, "right")}
+        ${this.renderLine2Station("downtown-redmond", 540, 75, "right", true)}
       </svg>
     `;
   }
 
-  private renderTransferHubStation(
-    id: string,
-    x: number,
-    y: number
-  ): string {
+  private renderTransferHubStation(id: string, x: number, y: number): string {
     const station = getStationById(id);
-    const name = station?.name || 'Intl. District / Chinatown';
+    const name = station?.name || "Intl. District / Chinatown";
     const textX = 252;
 
     return `
@@ -844,7 +978,7 @@ export class SystemMapModal {
         <!-- Outer Glowing Capsule -->
         <rect x="${x - 26}" y="${y - 13}" width="52" height="26" rx="13" fill="none" stroke="#38bdf8" stroke-width="3" opacity="0.25" />
         <rect x="${x - 24}" y="${y - 11}" width="48" height="22" rx="11" fill="#091122" stroke="url(#transfer-border-grad)" stroke-width="2" />
-        
+
         <!-- Transfer Connector Bridge -->
         <line x1="${x - 13}" y1="${y}" x2="${x + 13}" y2="${y}" stroke="rgba(255, 255, 255, 0.95)" stroke-width="3" stroke-linecap="round" />
 
@@ -862,11 +996,11 @@ export class SystemMapModal {
         <!-- Snug Transfer Pill Badge: (1) ⇄ (2) TRANSFER -->
         <g transform="translate(${textX}, ${y + 8})">
           <rect x="-106" y="0" width="106" height="18" rx="9" fill="#080f1d" stroke="url(#transfer-border-grad)" stroke-width="1.3" />
-          
+
           <!-- Line 1 bullet -->
           <circle cx="-95" cy="9" r="4.8" fill="#008542" />
           <text x="-95" y="12.2" fill="#ffffff" font-size="7" font-weight="900" text-anchor="middle">1</text>
-          
+
           <!-- Transfer symbol -->
           <text x="-84" y="11.8" fill="#cbd5e1" font-size="8" font-weight="800" text-anchor="middle">⇄</text>
 
@@ -881,15 +1015,10 @@ export class SystemMapModal {
     `;
   }
 
-  private renderDualCapsuleStation(
-    id: string,
-    x: number,
-    y: number,
-    isTerminus: boolean = false
-  ): string {
+  private renderDualCapsuleStation(id: string, x: number, y: number, isTerminus: boolean = false): string {
     const station = getStationById(id);
     const name = station?.name || id;
-    const sub = station?.shortName || '';
+    const sub = station?.shortName || "";
     const textX = 252;
     const r = isTerminus ? 5.5 : 4.8;
 
@@ -899,20 +1028,15 @@ export class SystemMapModal {
         <circle class="map-station-circle" cx="${x - 13}" cy="${y}" r="${r}" fill="#ffffff" stroke="#008542" stroke-width="2.5" />
         <circle class="map-station-circle" cx="${x + 13}" cy="${y}" r="${r}" fill="#ffffff" stroke="#0072CE" stroke-width="2.5" />
         <text class="map-station-label" x="${textX}" y="${y + 4.5}" text-anchor="end">${name}</text>
-        ${sub ? `<text class="map-station-sublabel" x="${textX}" y="${y + 16.5}" text-anchor="end">${sub}</text>` : ''}
+        ${sub ? `<text class="map-station-sublabel" x="${textX}" y="${y + 16.5}" text-anchor="end">${sub}</text>` : ""}
       </g>
     `;
   }
 
-  private renderLine1Station(
-    id: string,
-    x: number,
-    y: number,
-    isTerminus: boolean = false
-  ): string {
+  private renderLine1Station(id: string, x: number, y: number, isTerminus: boolean = false): string {
     const station = getStationById(id);
     const name = station?.name || id;
-    const sub = station?.shortName || '';
+    const sub = station?.shortName || "";
     const textX = 252;
     const r = isTerminus ? 7 : 5.5;
 
@@ -920,7 +1044,7 @@ export class SystemMapModal {
       <g class="map-station-node" id="map-node-${id}">
         <circle class="map-station-circle" cx="${x}" cy="${y}" r="${r}" fill="#ffffff" stroke="#008542" stroke-width="3" />
         <text class="map-station-label" x="${textX}" y="${y + 4.5}" text-anchor="end">${name}</text>
-        ${sub ? `<text class="map-station-sublabel" x="${textX}" y="${y + 16.5}" text-anchor="end">${sub}</text>` : ''}
+        ${sub ? `<text class="map-station-sublabel" x="${textX}" y="${y + 16.5}" text-anchor="end">${sub}</text>` : ""}
       </g>
     `;
   }
@@ -929,34 +1053,30 @@ export class SystemMapModal {
     id: string,
     x: number,
     y: number,
-    labelPos: 'right' | 'bottom' = 'right',
-    isMajor: boolean = false
+    labelPos: "right" | "bottom" = "right",
+    isMajor: boolean = false,
   ): string {
     const station = getStationById(id);
     const name = station?.name || id;
-    const sub = station?.shortName || '';
-    const textX = labelPos === 'bottom' ? x : x + 18;
-    const textY = labelPos === 'bottom' ? y + 22 : y + 4.5;
-    const textAnchor = labelPos === 'bottom' ? 'middle' : 'start';
+    const sub = station?.shortName || "";
+    const textX = labelPos === "bottom" ? x : x + 18;
+    const textY = labelPos === "bottom" ? y + 22 : y + 4.5;
+    const textAnchor = labelPos === "bottom" ? "middle" : "start";
     const r = isMajor ? 7 : 5.5;
 
     return `
       <g class="map-station-node" id="map-node-${id}">
         <circle class="map-station-circle" cx="${x}" cy="${y}" r="${r}" fill="#ffffff" stroke="#0072CE" stroke-width="3" />
         <text class="map-station-label" x="${textX}" y="${textY}" text-anchor="${textAnchor}">${name}</text>
-        ${sub ? `<text class="map-station-sublabel" x="${textX}" y="${textY + 12}" text-anchor="${textAnchor}">${sub}</text>` : ''}
+        ${sub ? `<text class="map-station-sublabel" x="${textX}" y="${textY + 12}" text-anchor="${textAnchor}">${sub}</text>` : ""}
       </g>
     `;
   }
 
-  private renderAirportStation(
-    id: string,
-    x: number,
-    y: number
-  ): string {
+  private renderAirportStation(id: string, x: number, y: number): string {
     const station = getStationById(id);
     const name = station?.name || id;
-    const sub = station?.shortName || '';
+    const sub = station?.shortName || "";
     const textX = 252;
 
     return `
@@ -965,7 +1085,7 @@ export class SystemMapModal {
         <rect x="${x - 7}" y="${y - 7}" width="14" height="14" rx="3" fill="#f59e0b" />
         <text x="${x}" y="${y + 3.5}" fill="#0f172a" font-size="9" font-weight="900" text-anchor="middle">✈</text>
         <text class="map-station-label" x="${textX}" y="${y + 4.5}" text-anchor="end">${name}</text>
-        ${sub ? `<text class="map-station-sublabel" x="${textX}" y="${y + 16.5}" text-anchor="end">${sub}</text>` : ''}
+        ${sub ? `<text class="map-station-sublabel" x="${textX}" y="${y + 16.5}" text-anchor="end">${sub}</text>` : ""}
       </g>
     `;
   }
