@@ -130,6 +130,8 @@ export class TransitTrackerApp {
     // Toast Container
     this.toastEl = createElement('div', 'app-toast');
     this.toastEl.id = 'app-toast';
+    this.toastEl.setAttribute('role', 'status');
+    this.toastEl.setAttribute('aria-live', 'polite');
     document.body.appendChild(this.toastEl);
 
     // Header with lazy modal loading
@@ -150,6 +152,8 @@ export class TransitTrackerApp {
 
     // Status / Stale Banner (hidden by default)
     this.staleBannerEl = createElement('div', 'status-banner hidden');
+    this.staleBannerEl.setAttribute('role', 'status');
+    this.staleBannerEl.setAttribute('aria-live', 'polite');
     container.appendChild(this.staleBannerEl);
 
     // Dashboard Toolbar
@@ -204,9 +208,14 @@ export class TransitTrackerApp {
         'button',
         'view-mode-btn'
       ) as HTMLButtonElement;
+      this.myStationsBtn.type = 'button';
       this.myStationsBtn.innerHTML = `★ My Stations`;
       this.myStationsBtn.onclick = () => {
         if (this.showOnlyPinned) return;
+        if (this.fetchController) {
+          this.fetchController.abort();
+          this.fetchController = undefined;
+        }
         this.showOnlyPinned = true;
         this.performViewTransition(() => {
           this.renderViewModePills();
@@ -219,9 +228,14 @@ export class TransitTrackerApp {
         'button',
         'view-mode-btn'
       ) as HTMLButtonElement;
+      this.allStationsBtn.type = 'button';
       this.allStationsBtn.innerHTML = `All Stations`;
       this.allStationsBtn.onclick = () => {
         if (!this.showOnlyPinned) return;
+        if (this.fetchController) {
+          this.fetchController.abort();
+          this.fetchController = undefined;
+        }
         this.showOnlyPinned = false;
         this.performViewTransition(() => {
           this.renderViewModePills();
@@ -240,10 +254,12 @@ export class TransitTrackerApp {
     this.myStationsBtn.classList.toggle('active', this.showOnlyPinned);
     this.myStationsBtn.classList.toggle(activeLineClass, this.showOnlyPinned);
     this.myStationsBtn.classList.remove(inactiveLineClass);
+    this.myStationsBtn.setAttribute('aria-pressed', String(this.showOnlyPinned));
 
     this.allStationsBtn.classList.toggle('active', !this.showOnlyPinned);
     this.allStationsBtn.classList.toggle(activeLineClass, !this.showOnlyPinned);
     this.allStationsBtn.classList.remove(inactiveLineClass);
+    this.allStationsBtn.setAttribute('aria-pressed', String(!this.showOnlyPinned));
   }
 
   private switchLine(line: TransitLineId) {
@@ -364,6 +380,7 @@ export class TransitTrackerApp {
         const cached = this.arrivalsData.get(station.id);
         if (cached) {
           cardComp.updateArrivals(cached);
+          cardComp.tickCountdowns();
         }
       }
 
@@ -459,6 +476,7 @@ export class TransitTrackerApp {
         if (changed) {
           const updated: StationArrivals = {
             ...prev,
+            lastUpdated: now,
             dir1Fetched: nextDir1Fetched,
             dir2Fetched: nextDir2Fetched,
             dir1Unavailable: nextDir1Unavailable,
@@ -728,6 +746,7 @@ export class TransitTrackerApp {
               card.updateArrivals(data);
             }
           } catch (err) {
+            if (!isCurrent()) return;
             failedFetches++;
             console.warn(`Failed fetching arrivals for ${station.name}:`, err);
             const filter = this.cardComponents.get(station.id)?.getDirectionFilter() ?? 'both';
@@ -737,7 +756,7 @@ export class TransitTrackerApp {
         isCurrent
       );
 
-      if (this.activeFetchId === currentFetchId) {
+      if (isCurrent()) {
         if (failedFetches === stations.length && stations.length > 0) {
           this.showStatusBanner(
             navigator.onLine === false ? OFFLINE_MESSAGE : NETWORK_INTERRUPTED_MESSAGE
@@ -747,7 +766,7 @@ export class TransitTrackerApp {
         }
       }
     } catch {
-      if (isManual && this.activeFetchId === currentFetchId) {
+      if (isManual && isCurrent()) {
         this.showStatusBanner(NETWORK_INTERRUPTED_MESSAGE);
       }
     } finally {

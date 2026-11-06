@@ -18,6 +18,7 @@
   padding: max(0.75rem, env(safe-area-inset-top)) max(0.75rem, env(safe-area-inset-right)) max(0.75rem, env(safe-area-inset-bottom)) max(0.75rem, env(safe-area-inset-left));
   box-sizing: border-box;
   opacity: 0;
+  visibility: hidden;
   pointer-events: none;
   transition: opacity var(--transition-normal);
   overscroll-behavior: contain;
@@ -27,6 +28,7 @@
 
 .system-map-modal-overlay.open {
   opacity: 1;
+  visibility: visible;
   pointer-events: auto;
   will-change: opacity;
 }

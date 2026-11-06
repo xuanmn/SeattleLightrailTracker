@@ -141,12 +141,6 @@
   cursor: pointer;
 }
 
-.picker-add-btn:hover {
-  background: var(--st-green);
-  border-color: var(--st-green);
-  color: #fff;
-}
-
 .picker-add-btn.pinned {
   background: rgba(16, 185, 129, 0.12);
   border-color: rgba(16, 185, 129, 0.35);
@@ -161,18 +155,26 @@
   display: inline;
 }
 
-.picker-add-btn.pinned:hover {
-  background: rgba(239, 68, 68, 0.15);
-  border-color: rgba(239, 68, 68, 0.45);
-  color: #f87171;
-}
+@media (hover: hover) {
+  .picker-add-btn:hover {
+    background: var(--st-green);
+    border-color: var(--st-green);
+    color: #fff;
+  }
 
-.picker-add-btn.pinned:hover .btn-text-default {
-  display: none;
-}
+  .picker-add-btn.pinned:hover {
+    background: rgba(239, 68, 68, 0.15);
+    border-color: rgba(239, 68, 68, 0.45);
+    color: #f87171;
+  }
 
-.picker-add-btn.pinned:hover .btn-text-hover {
-  display: inline;
+  .picker-add-btn.pinned:hover .btn-text-default {
+    display: none;
+  }
+
+  .picker-add-btn.pinned:hover .btn-text-hover {
+    display: inline;
+  }
 }
 
 .picker-filter-pills {

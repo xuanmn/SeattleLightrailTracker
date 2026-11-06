@@ -37,7 +37,10 @@ self.addEventListener("install", (event) => {
       .open(CACHE_NAME)
       .then((cache) => cache.addAll(PRECACHE_ASSETS))
       .then(() => self.skipWaiting())
-      .catch((err) => console.warn("PWA Precache failed:", err)),
+      .catch((err) => {
+        console.warn("PWA Precache failed:", err);
+        throw err;
+      }),
   );
 });
 
@@ -137,8 +140,9 @@ self.addEventListener("fetch", (event) => {
       networkPromise
         .then(async (networkResponse) => {
           if (networkResponse && networkResponse.status === 200) {
+            const responseClone = networkResponse.clone();
             const cache = await caches.open(CACHE_NAME);
-            await cache.put(request, networkResponse.clone());
+            await cache.put(request, responseClone);
           }
         })
         .catch(() => undefined),
