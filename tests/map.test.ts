@@ -721,6 +721,45 @@ describe('SystemMapModal Component', () => {
     );
     expect(canvas.style.transform).not.toBe(beforePan);
   });
+
+  it('orders header focusables left-to-right (directory link before close button) and locks wheel mode across ticks', () => {
+    const header = document.querySelector('.system-map-header') as HTMLElement;
+    const focusables = Array.from(header.querySelectorAll<HTMLElement>('a[href], button'));
+    expect(focusables.length).toBe(2);
+    expect(focusables[0].classList.contains('map-official-link')).toBe(true);
+    expect(focusables[1].classList.contains('modal-close-btn')).toBe(true);
+
+    const mapBody = document.querySelector('.system-map-body') as HTMLElement;
+    const canvas = mapBody.querySelector('.map-svg-canvas') as HTMLElement;
+    modal.fitToScreen(true);
+
+    // Zoom in first
+    mapBody.dispatchEvent(
+      new WheelEvent('wheel', {
+        deltaX: 0,
+        deltaY: -120,
+        clientX: 200,
+        clientY: 300,
+        bubbles: true,
+        cancelable: true,
+      })
+    );
+    const scaleAfterTick1 = parseFloat(canvas.style.transform.match(/scale\(([\d.]+)\)/)![1]);
+
+    // Subsequent tick in the same vertical scroll stream with 1px horizontal jitter still zooms instead of panning
+    mapBody.dispatchEvent(
+      new WheelEvent('wheel', {
+        deltaX: 1,
+        deltaY: -120,
+        clientX: 200,
+        clientY: 300,
+        bubbles: true,
+        cancelable: true,
+      })
+    );
+    const scaleAfterTick2 = parseFloat(canvas.style.transform.match(/scale\(([\d.]+)\)/)![1]);
+    expect(scaleAfterTick2).toBeGreaterThan(scaleAfterTick1);
+  });
 });
 
 

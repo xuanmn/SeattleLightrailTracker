@@ -52,6 +52,7 @@ export class SystemMapModal {
   private openRaf: number | null = null;
   private resizeRaf: number | null = null;
   private wheelSnapTimer?: number;
+  private wheelMode: "pan" | "zoom" | null = null;
 
   private isMouseDown = false;
   private mouseStartX = 0;
@@ -165,7 +166,7 @@ export class SystemMapModal {
       if (this.openRaf !== null) cancelAnimationFrame(this.openRaf);
       this.openRaf = requestAnimationFrame(() => {
         this.openRaf = null;
-        this.fitToScreen(true);
+        this.fitToScreen();
       });
     }
     this.fitToScreen(true);
@@ -184,6 +185,7 @@ export class SystemMapModal {
       clearTimeout(this.wheelSnapTimer);
       this.wheelSnapTimer = undefined;
     }
+    this.wheelMode = null;
     if (this.resizeRaf !== null) {
       cancelAnimationFrame(this.resizeRaf);
       this.resizeRaf = null;
@@ -732,7 +734,14 @@ export class SystemMapModal {
         this.updateCachedDimensions();
         this.setGesturing(true);
 
-        if (!e.ctrlKey && Math.abs(e.deltaX) > 0 && this.currentScale > this.fitScale * 1.01) {
+        if (e.ctrlKey || this.currentScale <= this.fitScale * 1.01) {
+          this.wheelMode = "zoom";
+        } else if (this.wheelMode === null) {
+          this.wheelMode =
+            Math.abs(e.deltaX) >= 2 && Math.abs(e.deltaX) >= Math.abs(e.deltaY) * 0.25 ? "pan" : "zoom";
+        }
+
+        if (this.wheelMode === "pan") {
           // Trackpad 2-finger continuous panning when zoomed in
           const nextX = this.currentX - e.deltaX;
           const nextY = this.currentY - e.deltaY;
@@ -771,6 +780,7 @@ export class SystemMapModal {
         }
         this.wheelSnapTimer = window.setTimeout(() => {
           this.wheelSnapTimer = undefined;
+          this.wheelMode = null;
           this.snapToBoundsIfNeeded(this.currentScale < this.fitScale);
         }, 140);
       },
@@ -787,28 +797,15 @@ export class SystemMapModal {
     this.containerEl = createElement("div", "system-map-container");
     const container = this.containerEl;
 
-    // Header
+    // Header: Brand & Title -> Route Legend + Directory Link -> Close Button (natural left-to-right Tab order)
     const header = createElement("div", "system-map-header");
 
-    // Header Top Row: Brand & Title on left, Close button on right
-    const headerTop = createElement("div", "system-map-header-top");
     const titleGroup = createElement("div", "system-map-title-group");
     const iconBadge = createElement("div", "system-map-icon-badge", ICONS.train);
     const title = createElement("h3", "system-map-title", "Sound Transit Link Map");
     titleGroup.appendChild(iconBadge);
     titleGroup.appendChild(title);
 
-    const actions = createElement("div", "system-map-header-actions");
-    const closeBtn = createElement("button", "icon-btn modal-close-btn", ICONS.close);
-    closeBtn.setAttribute("aria-label", "Close Link Map");
-    closeBtn.title = "Close Link Map";
-    closeBtn.onclick = () => this.close();
-    actions.appendChild(closeBtn);
-
-    headerTop.appendChild(titleGroup);
-    headerTop.appendChild(actions);
-
-    // Header Legend Row: Clean pills underneath title, never competing with close button
     const headerLegend = createElement("div", "system-map-header-legend");
     headerLegend.innerHTML = `
       <div class="map-legend-item">
@@ -827,8 +824,16 @@ export class SystemMapModal {
     officialLink.rel = "noopener noreferrer";
     headerLegend.appendChild(officialLink);
 
-    header.appendChild(headerTop);
+    const actions = createElement("div", "system-map-header-actions");
+    const closeBtn = createElement("button", "icon-btn modal-close-btn", ICONS.close);
+    closeBtn.setAttribute("aria-label", "Close Link Map");
+    closeBtn.title = "Close Link Map";
+    closeBtn.onclick = () => this.close();
+    actions.appendChild(closeBtn);
+
+    header.appendChild(titleGroup);
     header.appendChild(headerLegend);
+    header.appendChild(actions);
 
     // Map Viewport Body
     this.bodyEl = createElement("div", "system-map-body");
