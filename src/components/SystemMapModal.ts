@@ -71,8 +71,6 @@ export class SystemMapModal {
     }
     // Never hijack browser shortcuts (e.g. Cmd/Ctrl + / - page zoom)
     if (e.metaKey || e.ctrlKey || e.altKey) return;
-    // Map navigation keys only apply while the map viewport itself has focus
-    if (e.target !== this.bodyEl) return;
 
     switch (e.key) {
       case "+":
@@ -167,12 +165,10 @@ export class SystemMapModal {
       if (this.openRaf !== null) cancelAnimationFrame(this.openRaf);
       this.openRaf = requestAnimationFrame(() => {
         this.openRaf = null;
-        this.fitToScreen();
+        this.fitToScreen(true);
       });
     }
-
-    // Move focus into the dialog so keyboard pan/zoom works immediately
-    this.bodyEl.focus({ preventScroll: true });
+    this.fitToScreen(true);
   }
 
   public close() {
@@ -258,32 +254,42 @@ export class SystemMapModal {
     const w = this.viewportW;
     const h = this.viewportH;
 
-    // Avoid redundant transform recalculations if viewport geometry is unchanged
+    const scaleX = (w - FIT_PADDING * 2) / CONTENT_WIDTH;
+    const scaleY = (h - FIT_PADDING * 2) / CONTENT_HEIGHT;
+    const nextFitScale = Math.min(scaleX, scaleY);
+    const centered = this.getCenteredOffsets(nextFitScale);
+
+    // Avoid redundant transform recalculations if viewport geometry and centered fit are unchanged
     if (
       !force &&
       prevW === w &&
       prevH === h &&
       this.fitScale > 0 &&
-      Math.abs(this.currentScale - this.fitScale) < 0.001
+      Math.abs(this.currentScale - nextFitScale) < 0.001 &&
+      Math.abs(this.currentX - centered.x) < 0.5 &&
+      Math.abs(this.currentY - centered.y) < 0.5
     ) {
       return;
     }
 
-    const scaleX = (w - FIT_PADDING * 2) / CONTENT_WIDTH;
-    const scaleY = (h - FIT_PADDING * 2) / CONTENT_HEIGHT;
-    this.fitScale = Math.min(scaleX, scaleY);
+    this.fitScale = nextFitScale;
     this.minScale = this.fitScale * 0.88;
     this.maxScale = Math.max(3.0, this.fitScale * 4.5);
 
     this.currentScale = this.fitScale;
-    const centered = this.getCenteredOffsets(this.fitScale);
     this.currentX = centered.x;
     this.currentY = centered.y;
 
     if (this.canvasEl) {
       this.canvasEl.style.transition = "none";
+      this.canvasEl.classList.remove("is-gesturing");
     }
     this.applyTransform();
+  }
+
+  private setGesturing(active: boolean) {
+    if (!this.canvasEl) return;
+    this.canvasEl.classList.toggle("is-gesturing", active);
   }
 
   private applyTransform() {
@@ -353,6 +359,8 @@ export class SystemMapModal {
       const isUnderZoomed = this.currentScale < this.fitScale;
       const duration = isBounce || isUnderZoomed ? 340 : 220;
       this.animateTo(targetScale, strict.x, strict.y, duration, isBounce || isUnderZoomed);
+    } else {
+      this.setGesturing(false);
     }
   }
 
@@ -366,6 +374,8 @@ export class SystemMapModal {
       this.snapToBoundsIfNeeded();
       return;
     }
+
+    this.setGesturing(true);
 
     const maxSpeed = 35;
     if (speed > maxSpeed) {
@@ -431,10 +441,12 @@ export class SystemMapModal {
       this.currentScale = targetScale;
       this.currentX = targetX;
       this.currentY = targetY;
+      this.setGesturing(false);
       this.applyTransform();
       return;
     }
 
+    this.setGesturing(true);
     this.canvasEl.style.transition = "none";
     const startTime = performance.now();
 
@@ -468,6 +480,7 @@ export class SystemMapModal {
         this.currentScale = targetScale;
         this.currentX = targetX;
         this.currentY = targetY;
+        this.setGesturing(false);
         this.applyTransform();
       }
     };
@@ -554,6 +567,7 @@ export class SystemMapModal {
           this.lastTapY = tapY;
 
           isTouching = true;
+          this.setGesturing(true);
           lastMidX = t.clientX;
           lastMidY = t.clientY;
           lastDist = 0;
@@ -563,6 +577,7 @@ export class SystemMapModal {
           if (this.canvasEl) this.canvasEl.style.transition = "none";
         } else if (e.touches.length >= 2) {
           isTouching = true;
+          this.setGesturing(true);
           const t0 = e.touches[0];
           const t1 = e.touches[1];
           lastMidX = (t0.clientX + t1.clientX) / 2;
@@ -692,6 +707,7 @@ export class SystemMapModal {
       this.stopMomentum();
       this.updateCachedDimensions();
       this.isMouseDown = true;
+      this.setGesturing(true);
       this.mouseStartX = e.clientX;
       this.mouseStartY = e.clientY;
       this.mouseStartTransX = this.currentX;
@@ -714,37 +730,27 @@ export class SystemMapModal {
         e.preventDefault();
         this.stopMomentum();
         this.updateCachedDimensions();
+        this.setGesturing(true);
 
-        if (e.ctrlKey) {
-          // Trackpad pinch-to-zoom (smooth continuous scaling centered at cursor)
-          const px = e.clientX - this.bodyRectLeft;
-          const py = e.clientY - this.bodyRectTop;
-          const factor = Math.exp(-e.deltaY * 0.008);
-          let newScale = this.currentScale * factor;
-          if (newScale < this.fitScale) {
-            newScale = this.fitScale - (this.fitScale - newScale) * 0.45;
-          }
-          newScale = Math.min(this.maxScale, Math.max(this.minScale, newScale));
-          const nextX = px - (px - this.currentX) * (newScale / this.currentScale);
-          const nextY = py - (py - this.currentY) * (newScale / this.currentScale);
-          const clamped = this.clampOffsets(nextX, nextY, newScale, newScale < this.fitScale);
-          this.currentScale = newScale;
-          this.currentX = clamped.x;
-          this.currentY = clamped.y;
-          this.applyTransform();
-        } else if (Math.abs(e.deltaX) > 0 || (Math.abs(e.deltaY) < 30 && e.deltaMode === 0)) {
-          // Trackpad 2-finger continuous panning
+        if (!e.ctrlKey && Math.abs(e.deltaX) > 0 && this.currentScale > this.fitScale * 1.01) {
+          // Trackpad 2-finger continuous panning when zoomed in
           const nextX = this.currentX - e.deltaX;
           const nextY = this.currentY - e.deltaY;
           const clamped = this.clampOffsets(nextX, nextY, this.currentScale, true);
           this.currentX = clamped.x;
           this.currentY = clamped.y;
           this.applyTransform();
-        } else {
-          // Standard mouse scroll wheel zoom (stepped zoom centered at cursor)
+        } else if (e.deltaY !== 0) {
+          // Cursor-centered zoom (proportional for trackpad pinch/scroll, stepped for discrete wheel ticks)
           const px = e.clientX - this.bodyRectLeft;
           const py = e.clientY - this.bodyRectTop;
-          const factor = e.deltaY < 0 ? 1.14 : 0.88;
+          const factor = e.ctrlKey
+            ? Math.exp(-e.deltaY * 0.008)
+            : e.deltaMode === 0 && Math.abs(e.deltaY) < 50
+              ? Math.exp(-e.deltaY * 0.0045)
+              : e.deltaY < 0
+                ? 1.14
+                : 0.88;
           let newScale = this.currentScale * factor;
           if (newScale < this.fitScale) {
             newScale = this.fitScale - (this.fitScale - newScale) * 0.45;
@@ -882,35 +888,35 @@ export class SystemMapModal {
 
         <!-- 2 Line Track (Blue #0072CE) - Shared in North/Tunnel + Eastside Corridor - Multi-Layer Vector Glow -->
         <path class="map-track-path line-2-aura"
-          d="M 298,75 L 298,615 Q 298,665 338,665 L 500,665 Q 540,665 540,635 L 540,75" />
+          d="M 298,75 L 298,635 Q 298,665 328,665 L 510,665 Q 540,665 540,635 L 540,75" />
         <path class="map-track-path line-2-glow"
-          d="M 298,75 L 298,615 Q 298,665 338,665 L 500,665 Q 540,665 540,635 L 540,75" />
+          d="M 298,75 L 298,635 Q 298,665 328,665 L 510,665 Q 540,665 540,635 L 540,75" />
         <path class="map-track-path line-2-main"
-          d="M 298,75 L 298,615 Q 298,665 338,665 L 500,665 Q 540,665 540,635 L 540,75" />
+          d="M 298,75 L 298,635 Q 298,665 328,665 L 510,665 Q 540,665 540,635 L 540,75" />
 
         <!-- ================= TERMINUS HEADERS & BULLETS ================= -->
 
         <!-- North Terminus (Lynnwood City Center) -->
         <g transform="translate(285, 42)">
-          <rect x="-42" y="-16" width="84" height="26" rx="13" fill="#0f172a" stroke="rgba(255,255,255,0.35)" stroke-width="1.5" />
+          <rect x="-42" y="-16" width="84" height="26" rx="13" fill="#0f172a" stroke="url(#transfer-border-grad)" stroke-width="1.5" />
           <circle cx="-13" cy="-3" r="9" fill="#008542" />
-          <text x="-13" y="0.5" fill="#ffffff" font-size="11" font-weight="800" text-anchor="middle">1</text>
+          <text x="-13" y="0.8" fill="#ffffff" font-size="11" font-weight="800" text-anchor="middle">1</text>
           <circle cx="13" cy="-3" r="9" fill="#0072CE" />
-          <text x="13" y="0.5" fill="#ffffff" font-size="11" font-weight="800" text-anchor="middle">2</text>
+          <text x="13" y="0.8" fill="#ffffff" font-size="11" font-weight="800" text-anchor="middle">2</text>
         </g>
 
         <!-- 2 Line East Terminus (Downtown Redmond) -->
         <g transform="translate(540, 42)">
           <rect x="-24" y="-16" width="48" height="26" rx="13" fill="#0f172a" stroke="rgba(0,114,206,0.6)" stroke-width="1.5" />
           <circle cx="0" cy="-3" r="9" fill="#0072CE" />
-          <text x="0" y="0.5" fill="#ffffff" font-size="11" font-weight="800" text-anchor="middle">2</text>
+          <text x="0" y="0.8" fill="#ffffff" font-size="11" font-weight="800" text-anchor="middle">2</text>
         </g>
 
         <!-- 1 Line South Terminus (Federal Way Downtown) -->
         <g transform="translate(272, 1256)">
           <rect x="-24" y="-16" width="48" height="26" rx="13" fill="#0f172a" stroke="rgba(0,133,66,0.6)" stroke-width="1.5" />
           <circle cx="0" cy="-3" r="9" fill="#008542" />
-          <text x="0" y="0.5" fill="#ffffff" font-size="11" font-weight="800" text-anchor="middle">1</text>
+          <text x="0" y="0.8" fill="#ffffff" font-size="11" font-weight="800" text-anchor="middle">1</text>
         </g>
 
         <!-- ================= LEFT SPINE: SHARED 1 LINE & 2 LINE STATIONS ================= -->
@@ -949,8 +955,8 @@ export class SystemMapModal {
         ${this.renderLine1Station("federal-way-downtown", 272, 1205, true)}
 
         <!-- ================= CONNECTING SEGMENT (I-90 CORRIDOR) ================= -->
-        ${this.renderLine2Station("judkins-park", 355, 665, "bottom")}
-        ${this.renderLine2Station("mercer-island", 480, 665, "bottom")}
+        ${this.renderLine2Station("judkins-park", 356, 665, "bottom")}
+        ${this.renderLine2Station("mercer-island", 482, 665, "bottom")}
 
         <!-- ================= RIGHT SPINE: 2 LINE EASTSIDE STATIONS ================= -->
         ${this.renderLine2Station("south-bellevue", 540, 635, "right", true)}
@@ -995,21 +1001,21 @@ export class SystemMapModal {
 
         <!-- Snug Transfer Pill Badge: (1) ⇄ (2) TRANSFER -->
         <g transform="translate(${textX}, ${y + 8})">
-          <rect x="-106" y="0" width="106" height="18" rx="9" fill="#080f1d" stroke="url(#transfer-border-grad)" stroke-width="1.3" />
+          <rect x="-100" y="0" width="100" height="18" rx="9" fill="#080f1d" stroke="url(#transfer-border-grad)" stroke-width="1.3" />
 
           <!-- Line 1 bullet -->
-          <circle cx="-95" cy="9" r="4.8" fill="#008542" />
-          <text x="-95" y="12.2" fill="#ffffff" font-size="7" font-weight="900" text-anchor="middle">1</text>
+          <circle cx="-89" cy="9" r="4.8" fill="#008542" />
+          <text x="-89" y="11.5" fill="#ffffff" font-size="7" font-weight="900" text-anchor="middle">1</text>
 
           <!-- Transfer symbol -->
-          <text x="-84" y="11.8" fill="#cbd5e1" font-size="8" font-weight="800" text-anchor="middle">⇄</text>
+          <text x="-78" y="11.6" fill="#cbd5e1" font-size="8" font-weight="800" text-anchor="middle">⇄</text>
 
           <!-- Line 2 bullet -->
-          <circle cx="-73" cy="9" r="4.8" fill="#0072CE" />
-          <text x="-73" y="12.2" fill="#ffffff" font-size="7" font-weight="900" text-anchor="middle">2</text>
+          <circle cx="-67" cy="9" r="4.8" fill="#0072CE" />
+          <text x="-67" y="11.5" fill="#ffffff" font-size="7" font-weight="900" text-anchor="middle">2</text>
 
           <!-- Transfer Label -->
-          <text x="-63" y="12.2" fill="#38bdf8" font-size="8.5" font-weight="800" letter-spacing="0.4">TRANSFER</text>
+          <text x="-57" y="12" fill="#38bdf8" font-size="8.5" font-weight="800" letter-spacing="0.4">TRANSFER</text>
         </g>
       </g>
     `;
