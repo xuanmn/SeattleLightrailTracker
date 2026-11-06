@@ -38,6 +38,7 @@ export function attachBottomSheetSwipe(options: BottomSheetSwipeOptions): () => 
   let startY = 0;
   let currentY = 0;
   let startTime = 0;
+  let moveCount = 0;
   let isDragging = false;
   let resetTimer: number | undefined;
 
@@ -55,12 +56,14 @@ export function attachBottomSheetSwipe(options: BottomSheetSwipeOptions): () => 
     startY = touch.clientY;
     currentY = startY;
     startTime = Date.now();
+    moveCount = 0;
     isDragging = true;
     container.style.transition = 'none';
   };
 
   const onTouchMove = (e: TouchEvent) => {
     if (!isDragging || e.touches.length !== 1) return;
+    moveCount++;
     const touch = e.touches[0];
     currentY = touch.clientY;
     const deltaY = currentY - startY;
@@ -86,20 +89,15 @@ export function attachBottomSheetSwipe(options: BottomSheetSwipeOptions): () => 
     const deltaTime = Math.max(1, Date.now() - startTime);
     const velocity = deltaY / deltaTime; // px/ms
 
-    // Require real swipe duration (>= 30ms) for velocity flicks to avoid synthetic instant-event false positives
-    const isFlick = deltaY > 30 && deltaTime >= 30 && velocity > velocityThreshold;
+    // Require real multi-sample swipe (>= 2 moves, >= 30ms) for velocity flicks to avoid synthetic test stalls
+    const isFlick = moveCount >= 2 && deltaY > 30 && deltaTime >= 30 && velocity > velocityThreshold;
     const shouldDismiss = deltaY >= thresholdPx || isFlick;
 
     clearResetTimer();
     if (shouldDismiss) {
-      container.style.transition = 'transform 0.22s cubic-bezier(0.32, 0.72, 0, 1)';
-      container.style.transform = 'translateY(100%)';
+      container.style.transition = '';
+      container.style.transform = '';
       onClose();
-      resetTimer = window.setTimeout(() => {
-        container.style.transform = '';
-        container.style.transition = '';
-        resetTimer = undefined;
-      }, 250);
     } else {
       // Snap back smoothly
       container.style.transition = 'transform 0.2s cubic-bezier(0.2, 0.9, 0.3, 1)';

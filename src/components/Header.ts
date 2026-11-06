@@ -33,10 +33,14 @@ export class HeaderComponent {
     }
     if (line === 'line-1') {
       this.line1Btn.className = 'line-btn active line-1-active';
+      this.line1Btn.setAttribute('aria-pressed', 'true');
       this.line2Btn.className = 'line-btn';
+      this.line2Btn.setAttribute('aria-pressed', 'false');
     } else {
       this.line1Btn.className = 'line-btn';
+      this.line1Btn.setAttribute('aria-pressed', 'false');
       this.line2Btn.className = 'line-btn active line-2-active';
+      this.line2Btn.setAttribute('aria-pressed', 'true');
     }
   }
 
@@ -85,6 +89,8 @@ export class HeaderComponent {
       'button',
       `line-btn ${this.activeLine === 'line-1' ? 'active line-1-active' : ''}`
     ) as HTMLButtonElement;
+    this.line1Btn.type = 'button';
+    this.line1Btn.setAttribute('aria-pressed', String(this.activeLine === 'line-1'));
     this.line1Btn.innerHTML = `<span class="line-badge-circle line-1-circle">1</span> 1 Line`;
     this.line1Btn.title = 'Lynnwood City Center ⇄ Federal Way Downtown';
     this.line1Btn.onclick = () => {
@@ -97,6 +103,8 @@ export class HeaderComponent {
       'button',
       `line-btn ${this.activeLine === 'line-2' ? 'active line-2-active' : ''}`
     ) as HTMLButtonElement;
+    this.line2Btn.type = 'button';
+    this.line2Btn.setAttribute('aria-pressed', String(this.activeLine === 'line-2'));
     this.line2Btn.innerHTML = `<span class="line-badge-circle line-2-circle">2</span> 2 Line`;
     this.line2Btn.title = 'Lynnwood City Center ⇄ Downtown Redmond';
     this.line2Btn.onclick = () => {

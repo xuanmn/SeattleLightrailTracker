@@ -619,4 +619,98 @@ describe('Mobile Performance Optimizations', () => {
       expect(cssContent).not.toMatch(/transition:\s*left/);
     });
   });
+
+  describe('Fix 6: Abort-Safe Line Switching & Modal Dialog Accessibility', () => {
+    it('does not flash a false Network connection interrupted banner when switching lines mid-fetch', async () => {
+      vi.stubGlobal(
+        'fetch',
+        vi.fn((_url: string, init?: RequestInit) => {
+          return new Promise((resolve, reject) => {
+            if (init?.signal?.aborted) {
+              reject(new DOMException('The operation was aborted', 'AbortError'));
+              return;
+            }
+            init?.signal?.addEventListener('abort', () => {
+              reject(new DOMException('The operation was aborted', 'AbortError'));
+            });
+            setTimeout(() => {
+              resolve({
+                ok: true,
+                json: async () => ({ data: { entry: { arrivalsAndDepartures: [] } } }),
+              });
+            }, 30);
+          });
+        })
+      );
+
+      const { clearStorageCache } = await import('../src/services/storage');
+      const { clearArrivalsCache } = await import('../src/services/oba-api');
+      document.body.innerHTML = '<div id="app"></div>';
+      localStorage.setItem('seattle_transit_pinned_stations', JSON.stringify(['westlake', 'bellevue-downtown']));
+      clearStorageCache();
+      clearArrivalsCache();
+
+      const { TransitTrackerApp } = await import('../src/main');
+      const app = new TransitTrackerApp();
+
+      // Immediately switch to 2 Line while initial 1 Line fetch is still in flight
+      const lineBtns = document.querySelectorAll<HTMLButtonElement>('.app-header .line-btn');
+      lineBtns[1].click();
+
+      await new Promise((r) => setTimeout(r, 80));
+
+      const banner = document.querySelector('.status-banner') as HTMLElement;
+      expect(banner.classList.contains('hidden')).toBe(true);
+
+      app.destroy();
+      vi.unstubAllGlobals();
+    });
+
+    it('provides dialog ARIA attributes, traps Tab focus, and restores focus on close across all modals', async () => {
+      document.body.innerHTML = '';
+      const opener = document.createElement('button');
+      opener.textContent = 'Open Modal';
+      document.body.appendChild(opener);
+      opener.focus();
+
+      const { StationPickerModal } = await import('../src/components/StationPickerModal');
+      const { FaqModal } = await import('../src/components/FaqModal');
+      const { SettingsModal } = await import('../src/components/SettingsModal');
+
+      const picker = new StationPickerModal({
+        onTogglePin: () => {},
+        isStationPinned: () => false,
+      });
+      const faq = new FaqModal();
+      const settings = new SettingsModal({
+        onSettingsSaved: () => {},
+      });
+
+      const overlays = document.querySelectorAll<HTMLElement>('.modal-overlay');
+      expect(overlays.length).toBe(3);
+      overlays.forEach((overlay) => {
+        expect(overlay.getAttribute('role')).toBe('dialog');
+        expect(overlay.getAttribute('aria-modal')).toBe('true');
+        expect(overlay.getAttribute('aria-label')).toBeTruthy();
+      });
+
+      // Open Settings modal from opener, trap Tab on last focusable, then close and verify focus restoration
+      opener.focus();
+      settings.open();
+      const settingsOverlay = overlays[2];
+      const focusables = settingsOverlay.querySelectorAll<HTMLElement>('button, input');
+      const first = focusables[0];
+      const last = focusables[focusables.length - 1];
+      last.focus();
+
+      window.dispatchEvent(new KeyboardEvent('keydown', { key: 'Tab', bubbles: true, cancelable: true }));
+      expect(document.activeElement).toBe(first);
+
+      settings.close();
+      expect(document.activeElement).toBe(opener);
+
+      picker.close();
+      faq.close();
+    });
+  });
 });

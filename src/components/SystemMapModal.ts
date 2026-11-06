@@ -2,7 +2,7 @@ import { getStationById } from "../data/stations";
 import "../styles/map.css";
 import "../styles/modal.css";
 import { attachBottomSheetSwipe } from "../utils/bottomSheetGesture";
-import { createElement, ICONS } from "../utils/dom";
+import { createElement, ICONS, trapModalTabFocus } from "../utils/dom";
 import { lockBodyScroll, unlockBodyScroll } from "../utils/scrollLock";
 
 const MAP_WIDTH = 830;
@@ -67,7 +67,7 @@ export class SystemMapModal {
       return;
     }
     if (e.key === "Tab") {
-      this.trapTabFocus(e);
+      trapModalTabFocus(e, this.containerEl);
       return;
     }
     // Never hijack browser shortcuts (e.g. Cmd/Ctrl + / - page zoom)
@@ -205,24 +205,6 @@ export class SystemMapModal {
     const returnTo = this.returnFocusEl;
     this.returnFocusEl = null;
     if (returnTo?.isConnected) returnTo.focus({ preventScroll: true });
-  }
-
-  private trapTabFocus(e: KeyboardEvent) {
-    const focusables = Array.from(
-      this.containerEl.querySelectorAll<HTMLElement>('button, a[href], [tabindex]:not([tabindex="-1"])'),
-    );
-    if (focusables.length === 0) return;
-    const first = focusables[0];
-    const last = focusables[focusables.length - 1];
-    const active = document.activeElement;
-    const inside = active instanceof Node && this.containerEl.contains(active);
-    if (e.shiftKey && (active === first || !inside)) {
-      e.preventDefault();
-      last.focus();
-    } else if (!e.shiftKey && (active === last || !inside)) {
-      e.preventDefault();
-      first.focus();
-    }
   }
 
   private prefersReducedMotion(): boolean {

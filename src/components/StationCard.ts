@@ -65,8 +65,8 @@ export class StationCardComponent {
   private arrivalTimes: number[] = [];
 
   // Track current trip keys per direction for fast diff (Fix #6)
-  private currentDir1TripKey: string = '';
-  private currentDir2TripKey: string = '';
+  private currentDir1TripKey: string = '__init__';
+  private currentDir2TripKey: string = '__init__';
   private clockElements: HTMLElement[] = [];
   private statusElements: HTMLElement[] = [];
 
@@ -95,6 +95,7 @@ export class StationCardComponent {
     this.isPinned = pinned;
     this.starBtn.className = `star-btn ${pinned ? 'pinned' : ''}`;
     this.starBtn.innerHTML = pinned ? ICONS.starFilled : ICONS.star;
+    this.starBtn.setAttribute('aria-pressed', String(pinned));
     this.starBtn.title = pinned ? 'Remove from favorites' : 'Add to favorites';
     this.starBtn.setAttribute('aria-label', `${pinned ? 'Remove' : 'Add'} ${this.station.name} to favorites`);
   }
@@ -131,12 +132,15 @@ export class StationCardComponent {
 
     if (this.btnBoth) {
       this.btnBoth.classList.toggle('active', this.directionFilter === 'both');
+      this.btnBoth.setAttribute('aria-pressed', String(this.directionFilter === 'both'));
     }
     if (this.btnDir1) {
       this.btnDir1.classList.toggle('active', this.directionFilter === 'dir1');
+      this.btnDir1.setAttribute('aria-pressed', String(this.directionFilter === 'dir1'));
     }
     if (this.btnDir2) {
       this.btnDir2.classList.toggle('active', this.directionFilter === 'dir2');
+      this.btnDir2.setAttribute('aria-pressed', String(this.directionFilter === 'dir2'));
     }
   }
 
@@ -158,8 +162,8 @@ export class StationCardComponent {
 
   public setUnavailable() {
     this.currentArrivals = undefined;
-    this.currentDir1TripKey = '';
-    this.currentDir2TripKey = '';
+    this.currentDir1TripKey = '__init__';
+    this.currentDir2TripKey = '__init__';
     this.countdownChips = [];
     this.countdownRows = [];
     this.arrivalTimes = [];
@@ -196,7 +200,7 @@ export class StationCardComponent {
       dir1Key === this.currentDir1TripKey &&
       dir2Key === this.currentDir2TripKey;
 
-    if (sameTrips && this.countdownChips.length > 0) {
+    if (sameTrips) {
       // Same trips in same order — patch values in-place without DOM rebuild
       this.patchArrivalsInPlace(data);
     } else {
@@ -513,6 +517,7 @@ export class StationCardComponent {
       'Both'
     ) as HTMLButtonElement;
     this.btnBoth.type = 'button';
+    this.btnBoth.setAttribute('aria-pressed', String(this.directionFilter === 'both'));
     this.btnBoth.title = 'Show departures in both directions';
     this.btnBoth.onclick = () => this.setDirectionFilter('both');
 
@@ -523,6 +528,7 @@ export class StationCardComponent {
       dir1Label
     ) as HTMLButtonElement;
     this.btnDir1.type = 'button';
+    this.btnDir1.setAttribute('aria-pressed', String(this.directionFilter === 'dir1'));
     this.btnDir1.title = isLine1 ? 'Show Northbound only' : 'Show Eastbound only';
     this.btnDir1.onclick = () => this.setDirectionFilter('dir1');
 
@@ -533,6 +539,7 @@ export class StationCardComponent {
       dir2Label
     ) as HTMLButtonElement;
     this.btnDir2.type = 'button';
+    this.btnDir2.setAttribute('aria-pressed', String(this.directionFilter === 'dir2'));
     this.btnDir2.title = isLine1 ? 'Show Southbound only' : 'Show Westbound only';
     this.btnDir2.onclick = () => this.setDirectionFilter('dir2');
 
@@ -545,6 +552,8 @@ export class StationCardComponent {
       `star-btn ${this.isPinned ? 'pinned' : ''}`,
       this.isPinned ? ICONS.starFilled : ICONS.star
     ) as HTMLButtonElement;
+    this.starBtn.type = 'button';
+    this.starBtn.setAttribute('aria-pressed', String(this.isPinned));
     this.starBtn.title = this.isPinned ? 'Remove from favorites' : 'Add to favorites';
     this.starBtn.setAttribute('aria-label', `${this.isPinned ? 'Remove' : 'Add'} ${this.station.name} to favorites`);
     this.starBtn.onclick = (e) => {
@@ -569,7 +578,7 @@ export class StationCardComponent {
     const header1 = createElement('div', 'platform-header');
     const dest1 = createElement('div', 'platform-dest');
     const label1 = formatSimpleDestination(p1?.terminalDestination || 'Terminal', this.station.id, true);
-    dest1.innerHTML = `${ICONS.arrowUp} <span class="dest-text">${label1}</span>`;
+    dest1.innerHTML = `${isLine1 ? ICONS.arrowUp : ICONS.arrowRight} <span class="dest-text">${label1}</span>`;
     header1.appendChild(dest1);
 
     this.platform1Container = createElement('div');
@@ -581,7 +590,7 @@ export class StationCardComponent {
     const header2 = createElement('div', 'platform-header');
     const dest2 = createElement('div', 'platform-dest');
     const label2 = formatSimpleDestination(p2?.terminalDestination || 'Terminal', this.station.id, false);
-    dest2.innerHTML = `${ICONS.arrowDown} <span class="dest-text">${label2}</span>`;
+    dest2.innerHTML = `${isLine1 ? ICONS.arrowDown : ICONS.arrowLeft} <span class="dest-text">${label2}</span>`;
     header2.appendChild(dest2);
 
     this.platform2Container = createElement('div');

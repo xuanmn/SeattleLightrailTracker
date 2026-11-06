@@ -1,14 +1,18 @@
 import '../styles/modal.css';
 import '../styles/faq.css';
-import { createElement, ICONS } from '../utils/dom';
+import { createElement, ICONS, trapModalTabFocus } from '../utils/dom';
 import { lockBodyScroll, unlockBodyScroll } from '../utils/scrollLock';
 import { attachBottomSheetSwipe } from '../utils/bottomSheetGesture';
 
 export class FaqModal {
   private overlay: HTMLElement;
+  private returnFocusEl: HTMLElement | null = null;
   private handleKeyDown = (e: KeyboardEvent) => {
-    if (e.key === 'Escape' && this.overlay.classList.contains('open')) {
+    if (!this.overlay.classList.contains('open')) return;
+    if (e.key === 'Escape') {
       this.close();
+    } else if (e.key === 'Tab') {
+      trapModalTabFocus(e, this.overlay);
     }
   };
 
@@ -19,6 +23,8 @@ export class FaqModal {
 
   public open() {
     if (this.overlay.classList.contains('open')) return;
+    const active = document.activeElement;
+    this.returnFocusEl = active instanceof HTMLElement && active !== document.body ? active : null;
     this.overlay.classList.add('open');
     lockBodyScroll();
     window.addEventListener('keydown', this.handleKeyDown);
@@ -29,16 +35,23 @@ export class FaqModal {
     this.overlay.classList.remove('open');
     unlockBodyScroll();
     window.removeEventListener('keydown', this.handleKeyDown);
+    const returnTo = this.returnFocusEl;
+    this.returnFocusEl = null;
+    if (returnTo?.isConnected) returnTo.focus({ preventScroll: true });
   }
 
   private render(): HTMLElement {
     const overlay = createElement('div', 'modal-overlay faq-modal-overlay');
+    overlay.setAttribute('role', 'dialog');
+    overlay.setAttribute('aria-modal', 'true');
+    overlay.setAttribute('aria-label', 'Seattle Transit Guide & FAQ');
     const modal = createElement('div', 'modal-container modal-container-wide faq-modal-container');
 
     // Header
     const header = createElement('div', 'modal-header');
     const title = createElement('h3', 'modal-title', 'Seattle Transit Guide & FAQ');
-    const closeBtn = createElement('button', 'icon-btn modal-close-btn', ICONS.close);
+    const closeBtn = createElement('button', 'icon-btn modal-close-btn', ICONS.close) as HTMLButtonElement;
+    closeBtn.type = 'button';
     closeBtn.setAttribute('aria-label', 'Close Transit Guide');
     closeBtn.title = 'Close Transit Guide';
     closeBtn.onclick = () => this.close();

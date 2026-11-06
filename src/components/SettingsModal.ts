@@ -2,7 +2,7 @@ import '../styles/modal.css';
 import '../styles/settings.css';
 import { getSettings, updateSettings } from '../services/storage';
 import { AppSettings } from '../types/transit';
-import { createElement, ICONS } from '../utils/dom';
+import { createElement, ICONS, trapModalTabFocus } from '../utils/dom';
 import { lockBodyScroll, unlockBodyScroll } from '../utils/scrollLock';
 import { attachBottomSheetSwipe } from '../utils/bottomSheetGesture';
 
@@ -14,10 +14,14 @@ export class SettingsModal {
   private overlay: HTMLElement;
   private timeFormatCheckbox!: HTMLInputElement;
   private callbacks: SettingsModalCallbacks;
+  private returnFocusEl: HTMLElement | null = null;
 
   private handleKeyDown = (e: KeyboardEvent) => {
-    if (e.key === 'Escape' && this.overlay.classList.contains('open')) {
+    if (!this.overlay.classList.contains('open')) return;
+    if (e.key === 'Escape') {
       this.close();
+    } else if (e.key === 'Tab') {
+      trapModalTabFocus(e, this.overlay);
     }
   };
 
@@ -29,6 +33,8 @@ export class SettingsModal {
 
   public open() {
     if (this.overlay.classList.contains('open')) return;
+    const active = document.activeElement;
+    this.returnFocusEl = active instanceof HTMLElement && active !== document.body ? active : null;
     const current = getSettings();
     this.timeFormatCheckbox.checked = current.timeFormat24Hour;
     this.overlay.classList.add('open');
@@ -41,6 +47,9 @@ export class SettingsModal {
     this.overlay.classList.remove('open');
     unlockBodyScroll();
     window.removeEventListener('keydown', this.handleKeyDown);
+    const returnTo = this.returnFocusEl;
+    this.returnFocusEl = null;
+    if (returnTo?.isConnected) returnTo.focus({ preventScroll: true });
   }
 
   private save() {
@@ -53,12 +62,16 @@ export class SettingsModal {
 
   private render(): HTMLElement {
     const overlay = createElement('div', 'modal-overlay');
+    overlay.setAttribute('role', 'dialog');
+    overlay.setAttribute('aria-modal', 'true');
+    overlay.setAttribute('aria-label', 'Tracker Settings');
     const modal = createElement('div', 'modal-container');
 
     // Header
     const header = createElement('div', 'modal-header');
     const title = createElement('h3', 'modal-title', 'Tracker Settings');
-    const closeBtn = createElement('button', 'icon-btn modal-close-btn', ICONS.close);
+    const closeBtn = createElement('button', 'icon-btn modal-close-btn', ICONS.close) as HTMLButtonElement;
+    closeBtn.type = 'button';
     closeBtn.setAttribute('aria-label', 'Close Settings');
     closeBtn.title = 'Close Settings';
     closeBtn.onclick = () => this.close();
