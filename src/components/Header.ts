@@ -54,7 +54,7 @@ export class HeaderComponent {
     brand.setAttribute('role', 'button');
     brand.setAttribute('tabindex', '0');
     brand.setAttribute('title', 'Reload live tracker');
-    brand.setAttribute('aria-label', 'Reload live tracker');
+    brand.setAttribute('aria-description', 'Reload live tracker');
     const handleBrandClick = () => {
       if (window.scrollY > 60) {
         window.scrollTo({ top: 0, behavior: 'smooth' });

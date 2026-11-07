@@ -107,6 +107,26 @@ describe("StationCard Live Approach Track", () => {
     card.updateArrivals(arrivalsData);
     expect(trackWrap.classList.contains("active")).toBe(false);
   });
+
+  it("renders 4 skeleton rows per platform on initial load and uses grammatical action labels on favorite button", () => {
+    const card = new StationCardComponent(mockStation, false, false, {
+      onTogglePin: () => {},
+    });
+
+    const el = card.getElement();
+    const bodies = el.querySelectorAll(".platform-body");
+    expect(bodies.length).toBe(2);
+    expect(bodies[0].querySelectorAll(".skeleton-row").length).toBe(4);
+    expect(bodies[1].querySelectorAll(".skeleton-row").length).toBe(4);
+
+    const starBtn = el.querySelector(".star-btn") as HTMLButtonElement;
+    expect(starBtn.getAttribute("aria-label")).toBe("Add Westlake to favorites");
+    expect(starBtn.hasAttribute("aria-pressed")).toBe(false);
+
+    card.setPinned(true);
+    expect(starBtn.getAttribute("aria-label")).toBe("Remove Westlake from favorites");
+    expect(starBtn.hasAttribute("aria-pressed")).toBe(false);
+  });
 });
 
 describe("PWA Manifest Configuration", () => {
@@ -130,6 +150,7 @@ describe("SEO Configuration & Discoverability", () => {
     const html = readFileSync(process.cwd() + "/index.html", "utf-8");
 
     expect(html).toContain('<link rel="canonical" href="https://xuanmn.github.io/SeattleLightrailTracker/" />');
+    expect(html).toContain('<meta name="mobile-web-app-capable" content="yes" />');
     expect(html).toContain('<link rel="preconnect" href="https://api.pugetsound.onebusaway.org" crossorigin />');
     expect(html).toContain('<meta name="robots" content="index, follow');
     expect(html).toContain("application/ld+json");

@@ -45,4 +45,13 @@ describe("CSS rendering performance", () => {
     expect(boardCss).toMatch(/\.station-card:nth-child\(n\s*\+\s*5\)\s*\{[^}]*content-visibility:\s*auto/);
     expect(boardCss).toContain("contain-intrinsic-size: auto none auto 280px");
   });
+
+  it("stabilizes desktop root scrollbar gutter and departure list height to prevent cold-load CLS", () => {
+    const themeCss = readFileSync(`${process.cwd()}/src/styles/theme.css`, "utf-8");
+    const boardCss = readFileSync(`${process.cwd()}/src/styles/board.css`, "utf-8");
+
+    expect(themeCss).toMatch(/html\s*\{[^}]*scrollbar-gutter:\s*stable/);
+    expect(boardCss).toMatch(/\.skeleton-row\s*\{[^}]*height:\s*64px/);
+    expect(boardCss).toMatch(/@media\s*\(min-width:\s*651px\)[\s\S]*?\.platform-body\s*\{[^}]*min-height:\s*282px/);
+  });
 });

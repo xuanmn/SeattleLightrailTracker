@@ -29,6 +29,7 @@ export class SystemMapModal {
   private canvasEl!: HTMLElement;
   private svgInitialized: boolean = false;
   private resizeObserver: ResizeObserver | null = null;
+  private pendingOpenFit: boolean = false;
   private returnFocusEl: HTMLElement | null = null;
 
   // 0 until the first measurement so the initial fitToScreen() can never be skipped as "unchanged"
@@ -159,7 +160,12 @@ export class SystemMapModal {
     if (typeof ResizeObserver !== "undefined") {
       // Fires once after the first layout (before paint) and again only on real size changes
       // (rotation, window resize) — no forced synchronous layout and no post-transition timers.
-      this.resizeObserver ??= new ResizeObserver(() => this.fitToScreen());
+      this.pendingOpenFit = true;
+      this.resizeObserver ??= new ResizeObserver((entries) => {
+        const force = this.pendingOpenFit;
+        this.pendingOpenFit = false;
+        this.fitToScreen(force, entries[0]?.contentRect);
+      });
       this.resizeObserver.observe(this.bodyEl);
     } else {
       window.addEventListener("resize", this.handleResize);
@@ -168,14 +174,15 @@ export class SystemMapModal {
         this.openRaf = null;
         this.fitToScreen();
       });
+      this.fitToScreen(true);
     }
-    this.fitToScreen(true);
   }
 
   public close() {
     if (!this.overlay.classList.contains("open")) return;
     this.stopMomentum();
     this.stopTween();
+    this.pendingOpenFit = false;
     this.resizeObserver?.disconnect();
     if (this.openRaf !== null) {
       cancelAnimationFrame(this.openRaf);
@@ -211,10 +218,15 @@ export class SystemMapModal {
     return typeof window.matchMedia === "function" && window.matchMedia("(prefers-reduced-motion: reduce)").matches;
   }
 
-  private updateCachedDimensions() {
+  private updateCachedDimensions(contentRect?: Pick<DOMRectReadOnly, "width" | "height">) {
     if (!this.bodyEl) return;
-    this.viewportW = this.bodyEl.clientWidth || window.innerWidth || 400;
-    this.viewportH = this.bodyEl.clientHeight || window.innerHeight * 0.75 || 700;
+    if (contentRect && contentRect.width > 0 && contentRect.height > 0) {
+      this.viewportW = contentRect.width;
+      this.viewportH = contentRect.height;
+    } else {
+      this.viewportW = this.bodyEl.clientWidth || window.innerWidth || 400;
+      this.viewportH = this.bodyEl.clientHeight || window.innerHeight * 0.75 || 700;
+    }
     if (typeof this.bodyEl.getBoundingClientRect === "function") {
       const rect = this.bodyEl.getBoundingClientRect();
       this.bodyRectLeft = rect.left;
@@ -229,12 +241,12 @@ export class SystemMapModal {
     };
   }
 
-  public fitToScreen(force: boolean = false) {
+  public fitToScreen(force: boolean = false, contentRect?: Pick<DOMRectReadOnly, "width" | "height">) {
     if (!this.bodyEl) return;
     this.stopMomentum();
     const prevW = this.viewportW;
     const prevH = this.viewportH;
-    this.updateCachedDimensions();
+    this.updateCachedDimensions(contentRect);
     const w = this.viewportW;
     const h = this.viewportH;
 

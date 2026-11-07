@@ -95,9 +95,11 @@ export class StationCardComponent {
     this.isPinned = pinned;
     this.starBtn.className = `star-btn ${pinned ? 'pinned' : ''}`;
     this.starBtn.innerHTML = pinned ? ICONS.starFilled : ICONS.star;
-    this.starBtn.setAttribute('aria-pressed', String(pinned));
     this.starBtn.title = pinned ? 'Remove from favorites' : 'Add to favorites';
-    this.starBtn.setAttribute('aria-label', `${pinned ? 'Remove' : 'Add'} ${this.station.name} to favorites`);
+    this.starBtn.setAttribute(
+      'aria-label',
+      pinned ? `Remove ${this.station.name} from favorites` : `Add ${this.station.name} to favorites`
+    );
   }
 
   public setTimeFormat(is24Hour: boolean) {
@@ -146,6 +148,8 @@ export class StationCardComponent {
 
   private renderPlatformSkeleton(container: HTMLElement) {
     container.innerHTML = `
+      <div class="skeleton-row"></div>
+      <div class="skeleton-row"></div>
       <div class="skeleton-row"></div>
       <div class="skeleton-row"></div>
     `;
@@ -553,9 +557,11 @@ export class StationCardComponent {
       this.isPinned ? ICONS.starFilled : ICONS.star
     ) as HTMLButtonElement;
     this.starBtn.type = 'button';
-    this.starBtn.setAttribute('aria-pressed', String(this.isPinned));
     this.starBtn.title = this.isPinned ? 'Remove from favorites' : 'Add to favorites';
-    this.starBtn.setAttribute('aria-label', `${this.isPinned ? 'Remove' : 'Add'} ${this.station.name} to favorites`);
+    this.starBtn.setAttribute(
+      'aria-label',
+      this.isPinned ? `Remove ${this.station.name} from favorites` : `Add ${this.station.name} to favorites`
+    );
     this.starBtn.onclick = (e) => {
       e.stopPropagation();
       this.callbacks.onTogglePin(this.station.id);
@@ -581,7 +587,7 @@ export class StationCardComponent {
     dest1.innerHTML = `${isLine1 ? ICONS.arrowUp : ICONS.arrowRight} <span class="dest-text">${label1}</span>`;
     header1.appendChild(dest1);
 
-    this.platform1Container = createElement('div');
+    this.platform1Container = createElement('div', 'platform-body');
     col1El.appendChild(header1);
     col1El.appendChild(this.platform1Container);
 
@@ -593,7 +599,7 @@ export class StationCardComponent {
     dest2.innerHTML = `${isLine1 ? ICONS.arrowDown : ICONS.arrowLeft} <span class="dest-text">${label2}</span>`;
     header2.appendChild(dest2);
 
-    this.platform2Container = createElement('div');
+    this.platform2Container = createElement('div', 'platform-body');
     col2El.appendChild(header2);
     col2El.appendChild(this.platform2Container);
 

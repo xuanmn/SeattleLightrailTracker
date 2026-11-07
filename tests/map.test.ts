@@ -760,6 +760,57 @@ describe('SystemMapModal Component', () => {
     const scaleAfterTick2 = parseFloat(canvas.style.transform.match(/scale\(([\d.]+)\)/)![1]);
     expect(scaleAfterTick2).toBeGreaterThan(scaleAfterTick1);
   });
+
+  it('defers initial fitToScreen layout read to ResizeObserver callback on open() when ResizeObserver is available', () => {
+    modal.close();
+    document.body.innerHTML = '';
+
+    let roCallback: ResizeObserverCallback = () => {};
+    let observedCount = 0;
+    const origRO = globalThis.ResizeObserver;
+    class MockResizeObserver {
+      constructor(cb: ResizeObserverCallback) {
+        roCallback = cb;
+      }
+      observe() {
+        observedCount++;
+      }
+      unobserve() {}
+      disconnect() {}
+    }
+    globalThis.ResizeObserver = MockResizeObserver as unknown as typeof ResizeObserver;
+
+    try {
+      const freshModal = new SystemMapModal();
+      const mapBody = document.querySelector('.system-map-body') as HTMLElement;
+      const canvas = mapBody.querySelector('.map-svg-canvas') as HTMLElement;
+
+      let clientWidthReads = 0;
+      Object.defineProperty(mapBody, 'clientWidth', {
+        get: () => {
+          clientWidthReads++;
+          return 500;
+        },
+        configurable: true,
+      });
+
+      freshModal.open();
+      // No synchronous layout read during open() right after SVG innerHTML injection
+      expect(clientWidthReads).toBe(0);
+      expect(observedCount).toBe(1);
+
+      // ResizeObserver fires after layout before paint with contentRect already computed
+      roCallback(
+        [{ contentRect: { width: 500, height: 800 } } as unknown as ResizeObserverEntry],
+        {} as ResizeObserver
+      );
+      expect(clientWidthReads).toBe(0);
+      expect(canvas.style.transform).toContain('scale(');
+      freshModal.close();
+    } finally {
+      globalThis.ResizeObserver = origRO;
+    }
+  });
 });
 
 

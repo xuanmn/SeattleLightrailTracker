@@ -47,6 +47,8 @@ describe("HeaderComponent", () => {
     expect(brand).not.toBeNull();
     expect(brand.getAttribute("role")).toBe("button");
     expect(brand.getAttribute("title")).toBe("Reload live tracker");
+    expect(brand.hasAttribute("aria-label")).toBe(false);
+    expect(brand.getAttribute("aria-description")).toBe("Reload live tracker");
   });
 
   it("does not fire onLineChange when clicking the already-active line button", () => {
