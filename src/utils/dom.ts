@@ -15,7 +15,9 @@ export function createElement<K extends keyof HTMLElementTagNameMap>(
 
 export function trapModalTabFocus(e: KeyboardEvent, container: HTMLElement) {
   const focusables = Array.from(
-    container.querySelectorAll<HTMLElement>('button, a[href], input, summary, [tabindex]:not([tabindex="-1"])'),
+    container.querySelectorAll<HTMLElement>(
+      'button:not([disabled]), a[href], input:not([disabled]), select:not([disabled]), textarea:not([disabled]), summary, [tabindex]:not([tabindex="-1"])'
+    )
   );
   if (focusables.length === 0) return;
   const first = focusables[0];

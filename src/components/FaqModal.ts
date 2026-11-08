@@ -6,6 +6,7 @@ import { attachBottomSheetSwipe } from '../utils/bottomSheetGesture';
 
 export class FaqModal {
   private overlay: HTMLElement;
+  private closeBtn!: HTMLButtonElement;
   private returnFocusEl: HTMLElement | null = null;
   private handleKeyDown = (e: KeyboardEvent) => {
     if (!this.overlay.classList.contains('open')) return;
@@ -28,6 +29,9 @@ export class FaqModal {
     this.overlay.classList.add('open');
     lockBodyScroll();
     window.addEventListener('keydown', this.handleKeyDown);
+    if (this.closeBtn) {
+      this.closeBtn.focus({ preventScroll: true });
+    }
   }
 
   public close() {
@@ -50,13 +54,13 @@ export class FaqModal {
     // Header
     const header = createElement('div', 'modal-header');
     const title = createElement('h3', 'modal-title', 'Seattle Transit Guide & FAQ');
-    const closeBtn = createElement('button', 'icon-btn modal-close-btn', ICONS.close) as HTMLButtonElement;
-    closeBtn.type = 'button';
-    closeBtn.setAttribute('aria-label', 'Close Transit Guide');
-    closeBtn.title = 'Close Transit Guide';
-    closeBtn.onclick = () => this.close();
+    this.closeBtn = createElement('button', 'icon-btn modal-close-btn', ICONS.close) as HTMLButtonElement;
+    this.closeBtn.type = 'button';
+    this.closeBtn.setAttribute('aria-label', 'Close Transit Guide');
+    this.closeBtn.title = 'Close Transit Guide';
+    this.closeBtn.onclick = () => this.close();
     header.appendChild(title);
-    header.appendChild(closeBtn);
+    header.appendChild(this.closeBtn);
 
     // Enable mobile bottom sheet swipe-to-dismiss gesture directly on header
     attachBottomSheetSwipe({

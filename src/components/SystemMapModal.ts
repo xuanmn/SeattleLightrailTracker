@@ -27,6 +27,7 @@ export class SystemMapModal {
   private containerEl!: HTMLElement;
   private bodyEl!: HTMLElement;
   private canvasEl!: HTMLElement;
+  private closeBtn!: HTMLElement;
   private svgInitialized: boolean = false;
   private resizeObserver: ResizeObserver | null = null;
   private pendingOpenFit: boolean = false;
@@ -157,11 +158,17 @@ export class SystemMapModal {
     lockBodyScroll();
     window.addEventListener("keydown", this.handleKeyDown);
 
+    // Initial keyboard focus inside dialog (WCAG 2.4.3)
+    if (this.closeBtn) {
+      this.closeBtn.focus({ preventScroll: true });
+    }
+
     if (typeof ResizeObserver !== "undefined") {
       // Fires once after the first layout (before paint) and again only on real size changes
       // (rotation, window resize) — no forced synchronous layout and no post-transition timers.
       this.pendingOpenFit = true;
       this.resizeObserver ??= new ResizeObserver((entries) => {
+        if (!this.overlay.classList.contains("open")) return;
         const force = this.pendingOpenFit;
         this.pendingOpenFit = false;
         this.fitToScreen(force, entries[0]?.contentRect);
@@ -819,11 +826,11 @@ export class SystemMapModal {
     headerLegend.appendChild(officialLink);
 
     const actions = createElement("div", "system-map-header-actions");
-    const closeBtn = createElement("button", "icon-btn modal-close-btn", ICONS.close);
-    closeBtn.setAttribute("aria-label", "Close Link Map");
-    closeBtn.title = "Close Link Map";
-    closeBtn.onclick = () => this.close();
-    actions.appendChild(closeBtn);
+    this.closeBtn = createElement("button", "icon-btn modal-close-btn", ICONS.close);
+    this.closeBtn.setAttribute("aria-label", "Close Link Map");
+    this.closeBtn.title = "Close Link Map";
+    this.closeBtn.onclick = () => this.close();
+    actions.appendChild(this.closeBtn);
 
     header.appendChild(titleGroup);
     header.appendChild(headerLegend);

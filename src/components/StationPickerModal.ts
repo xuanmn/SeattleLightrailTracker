@@ -20,6 +20,7 @@ export class StationPickerModal {
   private callbacks: StationPickerCallbacks;
   private tab1Btn!: HTMLButtonElement;
   private tab2Btn!: HTMLButtonElement;
+  private closeBtn!: HTMLButtonElement;
   private returnFocusEl: HTMLElement | null = null;
 
   private handleKeyDown = (e: KeyboardEvent) => {
@@ -56,6 +57,13 @@ export class StationPickerModal {
     this.overlay.classList.add("open");
     lockBodyScroll();
     window.addEventListener("keydown", this.handleKeyDown);
+
+    // Initial keyboard focus inside dialog (WCAG 2.4.3)
+    if (this.searchInput && typeof window !== "undefined" && window.innerWidth > 640) {
+      this.searchInput.focus({ preventScroll: true });
+    } else if (this.closeBtn) {
+      this.closeBtn.focus({ preventScroll: true });
+    }
   }
 
   public close() {
@@ -94,9 +102,12 @@ export class StationPickerModal {
       : row.querySelector<HTMLButtonElement>(".picker-add-btn");
     if (!actionBtn || actionBtn.classList.contains("pinned") === isPinned) return;
     actionBtn.classList.toggle("pinned", isPinned);
-    actionBtn.setAttribute("aria-pressed", String(isPinned));
+    actionBtn.removeAttribute("aria-pressed");
     const stationName = actionBtn.dataset.stationName || "Station";
-    actionBtn.setAttribute("aria-label", `${isPinned ? "Remove" : "Add"} ${stationName}`);
+    actionBtn.setAttribute(
+      "aria-label",
+      isPinned ? `Remove ${stationName} from favorites` : `Add ${stationName} to favorites`
+    );
     if (isPinned) {
       actionBtn.innerHTML = `<span class="btn-text-default">✓ Added</span><span class="btn-text-hover">✕ Remove</span>`;
     } else {
@@ -178,8 +189,10 @@ export class StationPickerModal {
     const actionBtn = createElement("button", `picker-add-btn ${isPinned ? "pinned" : ""}`) as HTMLButtonElement;
     actionBtn.type = "button";
     actionBtn.dataset.stationName = station.name;
-    actionBtn.setAttribute("aria-pressed", String(isPinned));
-    actionBtn.setAttribute("aria-label", `${isPinned ? "Remove" : "Add"} ${station.name}`);
+    actionBtn.setAttribute(
+      "aria-label",
+      isPinned ? `Remove ${station.name} from favorites` : `Add ${station.name} to favorites`
+    );
 
     if (isPinned) {
       actionBtn.innerHTML = `<span class="btn-text-default">✓ Added</span><span class="btn-text-hover">✕ Remove</span>`;
@@ -194,7 +207,7 @@ export class StationPickerModal {
   }
 
   private render(): HTMLElement {
-    const overlay = createElement("div", "modal-overlay");
+    const overlay = createElement("div", "modal-overlay picker-modal-overlay");
     overlay.setAttribute("role", "dialog");
     overlay.setAttribute("aria-modal", "true");
     overlay.setAttribute("aria-label", "Add & Remove Stations");
@@ -203,13 +216,13 @@ export class StationPickerModal {
     // Header
     const header = createElement("div", "modal-header");
     const title = createElement("h3", "modal-title", "Add & Remove Stations");
-    const closeBtn = createElement("button", "icon-btn modal-close-btn", ICONS.close) as HTMLButtonElement;
-    closeBtn.type = "button";
-    closeBtn.setAttribute("aria-label", "Close Add & Remove Stations");
-    closeBtn.title = "Close";
-    closeBtn.onclick = () => this.close();
+    this.closeBtn = createElement("button", "icon-btn modal-close-btn", ICONS.close) as HTMLButtonElement;
+    this.closeBtn.type = "button";
+    this.closeBtn.setAttribute("aria-label", "Close Add & Remove Stations");
+    this.closeBtn.title = "Close";
+    this.closeBtn.onclick = () => this.close();
     header.appendChild(title);
-    header.appendChild(closeBtn);
+    header.appendChild(this.closeBtn);
 
     // Enable mobile bottom sheet swipe-to-dismiss gesture directly on header
     attachBottomSheetSwipe({

@@ -14,6 +14,7 @@ export class SettingsModal {
   private overlay: HTMLElement;
   private timeFormatCheckbox!: HTMLInputElement;
   private callbacks: SettingsModalCallbacks;
+  private closeBtn!: HTMLButtonElement;
   private returnFocusEl: HTMLElement | null = null;
 
   private handleKeyDown = (e: KeyboardEvent) => {
@@ -40,6 +41,9 @@ export class SettingsModal {
     this.overlay.classList.add('open');
     lockBodyScroll();
     window.addEventListener('keydown', this.handleKeyDown);
+    if (this.closeBtn) {
+      this.closeBtn.focus({ preventScroll: true });
+    }
   }
 
   public close() {
@@ -61,7 +65,7 @@ export class SettingsModal {
   }
 
   private render(): HTMLElement {
-    const overlay = createElement('div', 'modal-overlay');
+    const overlay = createElement('div', 'modal-overlay settings-modal-overlay');
     overlay.setAttribute('role', 'dialog');
     overlay.setAttribute('aria-modal', 'true');
     overlay.setAttribute('aria-label', 'Tracker Settings');
@@ -70,13 +74,13 @@ export class SettingsModal {
     // Header
     const header = createElement('div', 'modal-header');
     const title = createElement('h3', 'modal-title', 'Tracker Settings');
-    const closeBtn = createElement('button', 'icon-btn modal-close-btn', ICONS.close) as HTMLButtonElement;
-    closeBtn.type = 'button';
-    closeBtn.setAttribute('aria-label', 'Close Settings');
-    closeBtn.title = 'Close Settings';
-    closeBtn.onclick = () => this.close();
+    this.closeBtn = createElement('button', 'icon-btn modal-close-btn', ICONS.close) as HTMLButtonElement;
+    this.closeBtn.type = 'button';
+    this.closeBtn.setAttribute('aria-label', 'Close Settings');
+    this.closeBtn.title = 'Close Settings';
+    this.closeBtn.onclick = () => this.close();
     header.appendChild(title);
-    header.appendChild(closeBtn);
+    header.appendChild(this.closeBtn);
 
     // Enable mobile bottom sheet swipe-to-dismiss gesture directly on header
     attachBottomSheetSwipe({
