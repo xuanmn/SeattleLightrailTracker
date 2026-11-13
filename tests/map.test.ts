@@ -811,6 +811,12 @@ describe('SystemMapModal Component', () => {
       globalThis.ResizeObserver = origRO;
     }
   });
+
+  it('sets explicit type="button" on the modal close button', () => {
+    const closeBtn = document.querySelector('.system-map-modal-overlay .modal-close-btn') as HTMLButtonElement | null;
+    expect(closeBtn).not.toBeNull();
+    expect(closeBtn?.getAttribute('type')).toBe('button');
+  });
 });
 
 

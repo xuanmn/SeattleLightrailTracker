@@ -299,4 +299,82 @@ describe('Modal Scroll Lock and Gesture Integration', () => {
     trapModalTabFocus(tabBackward, container);
     expect(document.activeElement).toBe(enabledBtn);
   });
+
+  it('excludes tabindex="-1", hidden/inert controls, and links inside closed details in trapModalTabFocus', () => {
+    const container = document.createElement('div');
+
+    const negTabBtn = document.createElement('button');
+    negTabBtn.setAttribute('tabindex', '-1');
+
+    const hiddenWrap = document.createElement('div');
+    hiddenWrap.style.display = 'none';
+    hiddenWrap.appendChild(document.createElement('button'));
+
+    const hiddenAttrBtn = document.createElement('button');
+    hiddenAttrBtn.hidden = true;
+
+    const inertWrap = document.createElement('div');
+    inertWrap.setAttribute('inert', '');
+    inertWrap.appendChild(document.createElement('button'));
+
+    const firstVisible = document.createElement('button');
+
+    const closedDetails = document.createElement('details');
+    const summary = document.createElement('summary');
+    summary.textContent = 'More';
+    const hiddenLink = document.createElement('a');
+    hiddenLink.href = 'https://example.com';
+    closedDetails.append(summary, hiddenLink);
+
+    const visHiddenBtn = document.createElement('button');
+    visHiddenBtn.style.visibility = 'hidden';
+
+    const negTabInput = document.createElement('input');
+    negTabInput.setAttribute('tabindex', '-1');
+
+    container.append(
+      negTabBtn,
+      hiddenWrap,
+      hiddenAttrBtn,
+      inertWrap,
+      firstVisible,
+      closedDetails,
+      visHiddenBtn,
+      negTabInput
+    );
+    document.body.appendChild(container);
+
+    // Shift+Tab from firstVisible must wrap to summary (skipping closed-details link, visibility:hidden button, and tabindex="-1" input)
+    firstVisible.focus();
+    const tabBackward = new KeyboardEvent('keydown', { key: 'Tab', shiftKey: true, bubbles: true, cancelable: true });
+    trapModalTabFocus(tabBackward, container);
+    expect(document.activeElement).toBe(summary);
+
+    // Tab forward from summary must wrap back to firstVisible (skipping leading tabindex="-1", hidden, and inert controls)
+    const tabForward = new KeyboardEvent('keydown', { key: 'Tab', bubbles: true, cancelable: true });
+    trapModalTabFocus(tabForward, container);
+    expect(document.activeElement).toBe(firstVisible);
+  });
+
+  it('focuses closeBtn rather than searchInput on mobile viewports in StationPickerModal', () => {
+    const origInnerWidth = window.innerWidth;
+    Object.defineProperty(window, 'innerWidth', { value: 390, configurable: true, writable: true });
+
+    try {
+      const picker = new StationPickerModal({
+        onTogglePin: () => {},
+        isStationPinned: () => false,
+      });
+
+      picker.open('line-1');
+      const closeBtn = document.querySelector('.picker-modal-overlay .modal-close-btn') as HTMLButtonElement;
+      const searchInput = document.querySelector('.picker-search-input') as HTMLInputElement;
+      expect(document.activeElement).toBe(closeBtn);
+      expect(document.activeElement).not.toBe(searchInput);
+
+      picker.close();
+    } finally {
+      Object.defineProperty(window, 'innerWidth', { value: origInnerWidth, configurable: true, writable: true });
+    }
+  });
 });

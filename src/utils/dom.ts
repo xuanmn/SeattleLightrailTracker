@@ -13,12 +13,51 @@ export function createElement<K extends keyof HTMLElementTagNameMap>(
   return el;
 }
 
+const FOCUSABLE_SELECTOR = [
+  'button:not([disabled]):not([tabindex="-1"])',
+  'a[href]:not([tabindex="-1"])',
+  'input:not([disabled]):not([type="hidden"]):not([tabindex="-1"])',
+  'select:not([disabled]):not([tabindex="-1"])',
+  'textarea:not([disabled]):not([tabindex="-1"])',
+  'summary:not([tabindex="-1"])',
+  '[tabindex]:not([disabled]):not([type="hidden"]):not([tabindex="-1"])',
+].join(', ');
+
+/** Returns true if an element inside a modal container is visibly rendered and interactive. */
+function isFocusableVisible(el: HTMLElement, container: HTMLElement): boolean {
+  // Check styles and ancestors explicitly instead of offsetParent, which is null on fixed elements and in jsdom.
+  const getStyle = typeof window !== 'undefined' && typeof window.getComputedStyle === 'function'
+    ? window.getComputedStyle.bind(window)
+    : null;
+  if (getStyle) {
+    const visibility = getStyle(el).visibility;
+    if (visibility === 'hidden' || visibility === 'collapse') return false;
+  }
+
+  let cur: HTMLElement | null = el;
+  while (cur && cur !== container) {
+    if (cur.hasAttribute('hidden') || cur.hasAttribute('inert')) return false;
+    if (cur.style.display === 'none' || getStyle?.(cur).display === 'none') return false;
+
+    const parentDetails: HTMLElement | null = cur.parentElement;
+    if (
+      parentDetails?.tagName === 'DETAILS' &&
+      !parentDetails.hasAttribute('open') &&
+      cur !== parentDetails.querySelector(':scope > summary')
+    ) {
+      return false;
+    }
+
+    cur = cur.parentElement;
+  }
+
+  return true;
+}
+
+/** Constrains Tab/Shift+Tab keyboard cycling to visible, enabled controls within `container`. */
 export function trapModalTabFocus(e: KeyboardEvent, container: HTMLElement) {
-  const focusables = Array.from(
-    container.querySelectorAll<HTMLElement>(
-      'button:not([disabled]), a[href], input:not([disabled]), select:not([disabled]), textarea:not([disabled]), summary, [tabindex]:not([tabindex="-1"])'
-    )
-  );
+  const focusables = Array.from(container.querySelectorAll<HTMLElement>(FOCUSABLE_SELECTOR))
+    .filter((el) => isFocusableVisible(el, container));
   if (focusables.length === 0) return;
   const first = focusables[0];
   const last = focusables[focusables.length - 1];

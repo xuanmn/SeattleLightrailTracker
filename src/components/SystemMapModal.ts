@@ -27,7 +27,7 @@ export class SystemMapModal {
   private containerEl!: HTMLElement;
   private bodyEl!: HTMLElement;
   private canvasEl!: HTMLElement;
-  private closeBtn!: HTMLElement;
+  private closeBtn!: HTMLButtonElement;
   private svgInitialized: boolean = false;
   private resizeObserver: ResizeObserver | null = null;
   private pendingOpenFit: boolean = false;
@@ -826,7 +826,8 @@ export class SystemMapModal {
     headerLegend.appendChild(officialLink);
 
     const actions = createElement("div", "system-map-header-actions");
-    this.closeBtn = createElement("button", "icon-btn modal-close-btn", ICONS.close);
+    this.closeBtn = createElement("button", "icon-btn modal-close-btn", ICONS.close) as HTMLButtonElement;
+    this.closeBtn.type = "button";
     this.closeBtn.setAttribute("aria-label", "Close Link Map");
     this.closeBtn.title = "Close Link Map";
     this.closeBtn.onclick = () => this.close();
