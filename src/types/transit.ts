@@ -53,3 +53,24 @@ export interface StationArrivals {
 export interface AppSettings {
   timeFormat24Hour: boolean;
 }
+
+export type AlertSeverity = 'SEVERE' | 'WARNING' | 'INFO';
+
+export interface ServiceAlert {
+  id: string;
+  severity: AlertSeverity;
+  effect: string;
+  cause: string;
+  lines: TransitLineId[];
+  header: string;
+  description: string;
+  url: string | null;
+  activeStartMs: number | null;
+  activeEndMs: number | null;
+}
+
+export interface ServiceAlertsFeed {
+  alerts: ServiceAlert[];
+  updatedAt: number;
+}
+
