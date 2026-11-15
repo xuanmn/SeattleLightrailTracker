@@ -1090,32 +1090,51 @@ if (!import.meta.env.VITEST) {
 }
 
 /**
- * Register Service Worker for offline PWA support in underground stations
+ * Register Service Worker for offline PWA support in production builds, and clear
+ * any lingering SW/cache in local Vite dev so live HMR modules are never shadowed.
  */
-if (
-  'serviceWorker' in navigator &&
-  (window.location.protocol === 'https:' ||
+if ('serviceWorker' in navigator && !import.meta.env.VITEST) {
+  if (import.meta.env.DEV) {
+    navigator.serviceWorker
+      .getRegistrations()
+      .then((registrations) => Promise.all(registrations.map((reg) => reg.unregister())))
+      .catch(() => undefined);
+    if ('caches' in window) {
+      caches
+        .keys()
+        .then((keys) =>
+          Promise.all(
+            keys
+              .filter((key) => key.startsWith('link-tracker-'))
+              .map((key) => caches.delete(key))
+          )
+        )
+        .catch(() => undefined);
+    }
+  } else if (
+    window.location.protocol === 'https:' ||
     window.location.hostname === 'localhost' ||
-    window.location.hostname === '127.0.0.1')
-) {
-  window.addEventListener('load', () => {
-    const swUrl = new URL('./sw.js', window.location.href).href;
-    navigator.serviceWorker.register(swUrl)
-      .then((registration) => {
-        registration.addEventListener('updatefound', () => {
-          const newWorker = registration.installing;
-          if (newWorker) {
-            newWorker.addEventListener('statechange', () => {
-              if (newWorker.state === 'installed' && navigator.serviceWorker.controller) {
-                console.info('New Seattle Light Rail Tracker update available.');
-              }
-            });
-          }
+    window.location.hostname === '127.0.0.1'
+  ) {
+    window.addEventListener('load', () => {
+      const swUrl = new URL('./sw.js', window.location.href).href;
+      navigator.serviceWorker.register(swUrl)
+        .then((registration) => {
+          registration.addEventListener('updatefound', () => {
+            const newWorker = registration.installing;
+            if (newWorker) {
+              newWorker.addEventListener('statechange', () => {
+                if (newWorker.state === 'installed' && navigator.serviceWorker.controller) {
+                  console.info('New Seattle Light Rail Tracker update available.');
+                }
+              });
+            }
+          });
+        })
+        .catch((err) => {
+          console.warn('PWA Service Worker registration failed:', err);
         });
-      })
-      .catch((err) => {
-        console.warn('PWA Service Worker registration failed:', err);
-      });
-  });
+    });
+  }
 }
 

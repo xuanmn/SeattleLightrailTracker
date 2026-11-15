@@ -269,4 +269,13 @@ describe("Service worker fetch routing", () => {
       vi.useRealTimers();
     }
   });
+
+  it("never caches Vite dev modules or intercepts requests when BUILD_ID is dev", () => {
+    const devSw = loadServiceWorker(SW_SOURCE, okFetch);
+    expect(devSw.dispatchFetch("/src/main.ts")).toBeUndefined();
+    expect(devSw.dispatchFetch("/@vite/client")).toBeUndefined();
+
+    const builtSw = loadServiceWorker(BUILT_SW, okFetch);
+    expect(builtSw.dispatchFetch("/src/main.ts")).toBeUndefined();
+  });
 });

@@ -118,6 +118,17 @@ self.addEventListener("fetch", (event) => {
   const url = new URL(request.url);
   if (url.protocol !== "http:" && url.protocol !== "https:") return;
 
+  // Never intercept or cache Vite dev server requests or source modules
+  if (
+    BUILD_ID === "dev" ||
+    url.pathname.startsWith("/src/") ||
+    url.pathname.startsWith("/@vite/") ||
+    url.pathname.startsWith("/@fs/") ||
+    url.pathname.startsWith("/node_modules/")
+  ) {
+    return;
+  }
+
   // 1. Live transit API requests (OneBusAway & Sound Transit Alerts): Network-Only with graceful client fallback
   // Live arrival countdowns and service alerts change frequently and should never be frozen in disk cache.
   if (
