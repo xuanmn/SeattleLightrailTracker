@@ -22,3 +22,7 @@ coverage/
 npm-debug.log*
 yarn-debug.log*
 pnpm-debug.log*
+
+# Worktrees & agent scratch workspaces
+.worktrees/
+.superpowers/
