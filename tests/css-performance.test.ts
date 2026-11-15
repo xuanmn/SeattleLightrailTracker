@@ -10,6 +10,7 @@ const STYLE_FILES = [
   "settings.css",
   "map.css",
   "faq.css",
+  "alerts.css",
 ];
 
 describe("CSS rendering performance", () => {
