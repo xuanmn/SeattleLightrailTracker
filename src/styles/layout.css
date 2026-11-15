@@ -481,6 +481,14 @@
   .toolbar-controls .line-switcher {
     width: 100%;
     margin-top: 0;
+    flex-wrap: wrap;
+    gap: 2px;
+  }
+
+  .toolbar-controls .view-mode-btn {
+    flex: 1 1 auto;
+    min-width: 0;
+    white-space: nowrap;
   }
 }
 

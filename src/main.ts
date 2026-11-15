@@ -1,8 +1,10 @@
 import './styles/theme.css';
 import './styles/layout.css';
 import './styles/board.css';
+import './styles/alerts.css';
 // map.css is imported by the lazily loaded SystemMapModal chunk
 
+import { AlertsViewComponent } from './components/AlertsView';
 import type { FaqModal } from './components/FaqModal';
 import { HeaderComponent } from './components/Header';
 import type { SettingsModal } from './components/SettingsModal';
@@ -10,6 +12,7 @@ import { StationCardComponent } from './components/StationCard';
 import type { StationPickerModal } from './components/StationPickerModal';
 import type { SystemMapModal } from './components/SystemMapModal';
 import { getStationById, getStationsByLine, LINE_CONFIG } from './data/stations';
+import { fetchServiceAlerts } from './services/alerts-api';
 import { fetchArrivalsForStation } from './services/oba-api';
 import { PollScheduler } from './services/pollScheduler';
 import {
@@ -24,11 +27,14 @@ import {
 } from './services/storage';
 import {
   AppSettings,
+  ServiceAlert,
   Station,
   StationArrivals,
   TransitArrival,
   TransitLineId,
 } from './types/transit';
+
+type DashboardViewMode = 'pinned' | 'all' | 'alerts';
 import { createLazySingleton, runWithConcurrency } from './utils/concurrency';
 import { createElement, ICONS } from './utils/dom';
 
@@ -72,7 +78,7 @@ export class TransitTrackerApp {
   });
 
   private activeLine: TransitLineId = 'line-1';
-  private showOnlyPinned: boolean = true; // Default to showing only user's chosen favorite stations
+  private viewMode: DashboardViewMode = 'pinned'; // Default to showing only user's chosen favorite stations
   private settings: AppSettings;
   private pinnedIds: Set<string> = new Set();
   private cardComponents: Map<string, StationCardComponent> = new Map();
@@ -81,10 +87,18 @@ export class TransitTrackerApp {
   private dirFetchTimestamps: Map<string, { dir1At: number; dir2At: number }> = new Map();
   private inFlightStationFetches: Set<string> = new Set();
 
+  private activeAlerts: ServiceAlert[] = [];
+  private alertsUpdatedAt: number | null = null;
+  private alertsError: string | null = null;
+  private isFetchingAlerts: boolean = false;
+  private alertsAbortController?: AbortController;
+
   private stationsGridEl!: HTMLElement;
   private lineTitleEl!: HTMLElement;
   private lineSubtitleEl!: HTMLElement;
   private staleBannerEl!: HTMLElement;
+  private disruptionBannerEl!: HTMLButtonElement;
+  private alertsView!: AlertsViewComponent;
   private viewModePillWrap!: HTMLElement;
   private toastEl!: HTMLElement;
 
@@ -98,6 +112,7 @@ export class TransitTrackerApp {
   private fetchController?: AbortController;
   private myStationsBtn?: HTMLButtonElement;
   private allStationsBtn?: HTMLButtonElement;
+  private alertsBtn?: HTMLButtonElement;
 
   constructor() {
     const root = document.getElementById('app');
@@ -115,8 +130,12 @@ export class TransitTrackerApp {
 
     this.pollScheduler = new PollScheduler({
       intervalMs: SYNC_INTERVAL_MS,
-      // A reconnect bypasses the short-lived arrivals cache so riders leaving a tunnel get fresh data
-      onPoll: (reason) => this.fetchVisibleArrivals(reason === 'reconnect'),
+      // A reconnect bypasses short-lived caches so riders leaving a tunnel get fresh data
+      onPoll: (reason) => {
+        const bypassCache = reason === 'reconnect';
+        this.fetchVisibleArrivals(bypassCache);
+        void this.fetchAlerts(bypassCache);
+      },
       onConnectivityChange: (isOnline) => {
         if (!isOnline) this.showStatusBanner(OFFLINE_MESSAGE);
       },
@@ -156,6 +175,12 @@ export class TransitTrackerApp {
     this.staleBannerEl.setAttribute('aria-live', 'polite');
     container.appendChild(this.staleBannerEl);
 
+    // Clickable Disruption Summary Strip (visible on station views when Link alerts are active)
+    this.disruptionBannerEl = createElement('button', 'disruption-banner hidden') as HTMLButtonElement;
+    this.disruptionBannerEl.type = 'button';
+    this.disruptionBannerEl.addEventListener('click', () => this.setViewMode('alerts'));
+    container.appendChild(this.disruptionBannerEl);
+
     // Dashboard Toolbar
     const toolbar = createElement('div', 'dashboard-toolbar');
     const heading = createElement('div', 'toolbar-heading');
@@ -166,7 +191,7 @@ export class TransitTrackerApp {
 
     const controls = createElement('div', 'toolbar-controls');
 
-    // View Mode Toggle Pills (My Stations vs All Stations)
+    // View Mode Toggle Pills (My Stations / All Stations / Alerts)
     this.viewModePillWrap = createElement('div', 'line-switcher');
     this.renderViewModePills();
     controls.appendChild(this.viewModePillWrap);
@@ -179,11 +204,20 @@ export class TransitTrackerApp {
     this.stationsGridEl = createElement('div', 'stations-grid');
     container.appendChild(this.stationsGridEl);
 
+    // Service Alerts View (hidden by default)
+    this.alertsView = new AlertsViewComponent({
+      onBackToStations: () => this.setViewMode('pinned'),
+      onRetry: () => void this.fetchAlerts(true),
+    });
+    this.alertsView.getElement().classList.add('hidden');
+    container.appendChild(this.alertsView.getElement());
+
     main.appendChild(container);
     this.appEl.appendChild(main);
 
     this.updateToolbarHeader();
     this.renderStationCards();
+    this.syncAlertsUI();
   }
 
   private performViewTransition(updateFn: () => void) {
@@ -201,7 +235,7 @@ export class TransitTrackerApp {
   }
 
   private renderViewModePills() {
-    if (!this.myStationsBtn || !this.allStationsBtn) {
+    if (!this.myStationsBtn || !this.allStationsBtn || !this.alertsBtn) {
       this.viewModePillWrap.innerHTML = '';
 
       this.myStationsBtn = createElement(
@@ -209,57 +243,82 @@ export class TransitTrackerApp {
         'view-mode-btn'
       ) as HTMLButtonElement;
       this.myStationsBtn.type = 'button';
-      this.myStationsBtn.innerHTML = `★ My Stations`;
-      this.myStationsBtn.onclick = () => {
-        if (this.showOnlyPinned) return;
-        if (this.fetchController) {
-          this.fetchController.abort();
-          this.fetchController = undefined;
-        }
-        this.showOnlyPinned = true;
-        this.performViewTransition(() => {
-          this.renderViewModePills();
-          this.renderStationCards();
-        });
-        this.fetchVisibleArrivals();
-      };
+      this.myStationsBtn.textContent = '★ My Stations';
+      this.myStationsBtn.onclick = () => this.setViewMode('pinned');
 
       this.allStationsBtn = createElement(
         'button',
         'view-mode-btn'
       ) as HTMLButtonElement;
       this.allStationsBtn.type = 'button';
-      this.allStationsBtn.innerHTML = `All Stations`;
-      this.allStationsBtn.onclick = () => {
-        if (!this.showOnlyPinned) return;
-        if (this.fetchController) {
-          this.fetchController.abort();
-          this.fetchController = undefined;
-        }
-        this.showOnlyPinned = false;
-        this.performViewTransition(() => {
-          this.renderViewModePills();
-          this.renderStationCards();
-        });
-        this.fetchVisibleArrivals();
-      };
+      this.allStationsBtn.textContent = 'All Stations';
+      this.allStationsBtn.onclick = () => this.setViewMode('all');
+
+      this.alertsBtn = createElement(
+        'button',
+        'view-mode-btn alerts-tab-btn'
+      ) as HTMLButtonElement;
+      this.alertsBtn.type = 'button';
+      this.alertsBtn.textContent = 'Alerts';
+      this.alertsBtn.setAttribute('aria-label', 'Alerts');
+      this.alertsBtn.onclick = () => this.setViewMode('alerts');
 
       this.viewModePillWrap.appendChild(this.myStationsBtn);
       this.viewModePillWrap.appendChild(this.allStationsBtn);
+      this.viewModePillWrap.appendChild(this.alertsBtn);
     }
 
     const activeLineClass = this.activeLine === 'line-1' ? 'line-1-active' : 'line-2-active';
     const inactiveLineClass = this.activeLine === 'line-1' ? 'line-2-active' : 'line-1-active';
 
-    this.myStationsBtn.classList.toggle('active', this.showOnlyPinned);
-    this.myStationsBtn.classList.toggle(activeLineClass, this.showOnlyPinned);
-    this.myStationsBtn.classList.remove(inactiveLineClass);
-    this.myStationsBtn.setAttribute('aria-pressed', String(this.showOnlyPinned));
+    const syncButtonState = (btn: HTMLButtonElement, isActive: boolean) => {
+      btn.classList.toggle('active', isActive);
+      btn.classList.toggle(activeLineClass, isActive);
+      btn.classList.remove(inactiveLineClass);
+      btn.setAttribute('aria-pressed', String(isActive));
+    };
 
-    this.allStationsBtn.classList.toggle('active', !this.showOnlyPinned);
-    this.allStationsBtn.classList.toggle(activeLineClass, !this.showOnlyPinned);
-    this.allStationsBtn.classList.remove(inactiveLineClass);
-    this.allStationsBtn.setAttribute('aria-pressed', String(!this.showOnlyPinned));
+    syncButtonState(this.myStationsBtn, this.viewMode === 'pinned');
+    syncButtonState(this.allStationsBtn, this.viewMode === 'all');
+    syncButtonState(this.alertsBtn, this.viewMode === 'alerts');
+    this.renderAlertsButtonIndicator();
+  }
+
+  private setViewMode(nextMode: DashboardViewMode) {
+    if (this.viewMode === nextMode) return;
+    if (this.fetchController) {
+      this.fetchController.abort();
+      this.fetchController = undefined;
+    }
+
+    const previousMode = this.viewMode;
+    this.viewMode = nextMode;
+
+    if (nextMode === 'alerts') {
+      this.stopSecondTicker();
+      this.performViewTransition(() => {
+        this.stationsGridEl.classList.add('hidden');
+        this.alertsView.getElement().classList.remove('hidden');
+        this.renderViewModePills();
+        this.syncAlertsUI();
+      });
+      if (!this.alertsError && this.alertsUpdatedAt === null && !this.isFetchingAlerts) {
+        void this.fetchAlerts(false);
+      }
+      return;
+    }
+
+    this.performViewTransition(() => {
+      if (previousMode === 'alerts') {
+        this.alertsView.getElement().classList.add('hidden');
+        this.stationsGridEl.classList.remove('hidden');
+      }
+      this.renderViewModePills();
+      this.renderDisruptionBanner();
+      this.renderStationCards();
+      this.syncSecondTicker();
+    });
+    this.fetchVisibleArrivals();
   }
 
   private switchLine(line: TransitLineId) {
@@ -277,9 +336,16 @@ export class TransitTrackerApp {
     this.performViewTransition(() => {
       this.updateToolbarHeader();
       this.renderViewModePills();
-      this.renderStationCards();
+      if (this.viewMode === 'alerts') {
+        this.syncAlertsUI();
+      } else {
+        this.renderDisruptionBanner();
+        this.renderStationCards();
+      }
     });
-    this.fetchVisibleArrivals(true);
+    if (this.viewMode !== 'alerts') {
+      this.fetchVisibleArrivals(true);
+    }
   }
 
   private updateToolbarHeader() {
@@ -313,7 +379,7 @@ export class TransitTrackerApp {
   private getVisibleStations(): Station[] {
     const lineStations = getStationsByLine(this.activeLine);
 
-    if (this.showOnlyPinned) {
+    if (this.viewMode === 'pinned') {
       // Return only stations the user has pinned for this line
       return lineStations.filter((s) => this.pinnedIds.has(s.id));
     }
@@ -540,7 +606,7 @@ export class TransitTrackerApp {
     const station = getStationById(stationId);
     const stationName = station?.name || 'Station';
 
-    if (this.showOnlyPinned) {
+    if (this.viewMode === 'pinned') {
       // In "My Saved Stations" mode, surgical removal of unpinned card avoids rebuilding the entire grid
       if (!isNowPinned) {
         const card = this.cardComponents.get(stationId);
@@ -584,6 +650,7 @@ export class TransitTrackerApp {
       this.cardComponents.forEach((card) => {
         card.setTimeFormat(newSettings.timeFormat24Hour);
       });
+      this.syncAlertsView();
     }
   }
 
@@ -614,12 +681,14 @@ export class TransitTrackerApp {
     } else {
       // Resume ticker when user refocuses tab
       this.syncSecondTicker();
-      const now = Date.now();
-      this.cardComponents.forEach((card) => {
-        if (card.isVisible) {
-          card.tickCountdowns(now);
-        }
-      });
+      if (this.viewMode !== 'alerts') {
+        const now = Date.now();
+        this.cardComponents.forEach((card) => {
+          if (card.isVisible) {
+            card.tickCountdowns(now);
+          }
+        });
+      }
     }
   };
 
@@ -690,6 +759,7 @@ export class TransitTrackerApp {
   }
 
   private async fetchVisibleArrivals(isManual: boolean = false) {
+    if (this.viewMode === 'alerts') return;
     if (this.isFetching) {
       this.hasPendingFetch = true;
       if (isManual) this.pendingFetchIsManual = true;
@@ -712,7 +782,7 @@ export class TransitTrackerApp {
 
     // In "All Stations" view, only poll stations whose cards are currently visible (or within buffer)
     // In "My Stations" view, keep all cards polled since it's already a small set (<= 10 cards)
-    const stations = !this.showOnlyPinned
+    const stations = this.viewMode === 'all'
       ? allStations.filter((station) => {
           const card = this.cardComponents.get(station.id);
           return card ? card.isVisible : true;
@@ -818,8 +888,135 @@ export class TransitTrackerApp {
     }
   }
 
+  private async fetchAlerts(bypassCache: boolean = false): Promise<void> {
+    if (this.alertsAbortController) {
+      this.alertsAbortController.abort();
+    }
+    const controller = new AbortController();
+    this.alertsAbortController = controller;
+    this.isFetchingAlerts = true;
+    this.syncAlertsView();
+
+    try {
+      const feed = await fetchServiceAlerts(bypassCache, controller.signal);
+      if (this.alertsAbortController !== controller || controller.signal.aborted) {
+        return;
+      }
+      this.activeAlerts = feed.alerts;
+      this.alertsUpdatedAt = feed.updatedAt;
+      this.alertsError = null;
+    } catch (err) {
+      if (err instanceof Error && err.name === 'AbortError') {
+        return;
+      }
+      if (this.alertsAbortController !== controller || controller.signal.aborted) {
+        return;
+      }
+      this.alertsError =
+        err instanceof Error && err.message
+          ? err.message
+          : 'Unable to reach Sound Transit service alerts feed.';
+    } finally {
+      if (this.alertsAbortController === controller) {
+        this.alertsAbortController = undefined;
+      }
+      this.isFetchingAlerts = false;
+      this.syncAlertsUI();
+    }
+  }
+
+  private syncAlertsUI() {
+    this.renderAlertsButtonIndicator();
+    this.renderDisruptionBanner();
+    this.syncAlertsView();
+  }
+
+  private renderAlertsButtonIndicator() {
+    if (!this.alertsBtn) return;
+
+    const count = this.activeAlerts.length;
+    const hasSevere = this.activeAlerts.some((alert) => alert.severity === 'SEVERE');
+    const hasWarning = count > 0 && !hasSevere;
+
+    this.alertsBtn.classList.toggle('has-severe', hasSevere);
+    this.alertsBtn.classList.toggle('has-warning', hasWarning);
+    this.alertsBtn.setAttribute(
+      'aria-label',
+      count > 0 ? `Alerts, ${count} active` : 'Alerts'
+    );
+
+    const label = document.createElement('span');
+    label.textContent = 'Alerts';
+
+    if (count > 0) {
+      const dot = createElement('span', 'alert-indicator-dot');
+      dot.setAttribute('aria-hidden', 'true');
+
+      const badge = createElement('span', 'alert-count-badge');
+      badge.textContent = String(count);
+
+      this.alertsBtn.replaceChildren(dot, label, badge);
+    } else {
+      this.alertsBtn.replaceChildren(label);
+    }
+  }
+
+  private getLeadAlertForBanner(): ServiceAlert | undefined {
+    if (this.activeAlerts.length === 0) return undefined;
+    const severityRank = { SEVERE: 0, WARNING: 1, INFO: 2 } as const;
+    return [...this.activeAlerts].sort((a, b) => {
+      const sevDiff = severityRank[a.severity] - severityRank[b.severity];
+      if (sevDiff !== 0) return sevDiff;
+      const aMatch = a.lines.includes(this.activeLine) ? 0 : 1;
+      const bMatch = b.lines.includes(this.activeLine) ? 0 : 1;
+      return aMatch - bMatch;
+    })[0];
+  }
+
+  private renderDisruptionBanner() {
+    if (!this.disruptionBannerEl) return;
+
+    const count = this.activeAlerts.length;
+    if (count === 0 || this.viewMode === 'alerts') {
+      this.disruptionBannerEl.className = 'disruption-banner hidden';
+      return;
+    }
+
+    const lead = this.getLeadAlertForBanner();
+    const isSevere = lead?.severity === 'SEVERE';
+    this.disruptionBannerEl.className = `disruption-banner ${
+      isSevere ? 'severity-severe' : 'severity-warning'
+    }`;
+
+    const mainWrap = createElement('span', 'disruption-banner-main');
+    const icon = createElement('span', 'disruption-banner-icon');
+    icon.setAttribute('aria-hidden', 'true');
+    icon.innerHTML = ICONS.alertTriangle;
+
+    const text = createElement('span', 'disruption-banner-text');
+    text.textContent = lead?.header || 'Active Link service alert';
+    mainWrap.append(icon, text);
+
+    const cta = createElement('span', 'disruption-banner-cta');
+    cta.textContent = count > 1 ? `View alerts (${count})` : 'View alert';
+
+    this.disruptionBannerEl.replaceChildren(mainWrap, cta);
+  }
+
+  private syncAlertsView() {
+    if (!this.alertsView) return;
+    this.alertsView.update({
+      alerts: this.activeAlerts,
+      activeLine: this.activeLine,
+      updatedAt: this.alertsUpdatedAt,
+      isLoading: this.isFetchingAlerts,
+      error: this.alertsError,
+      timeFormat24Hour: this.settings.timeFormat24Hour,
+    });
+  }
+
   private syncSecondTicker() {
-    if (this.cardComponents.size === 0 || document.hidden) {
+    if (this.viewMode === 'alerts' || this.cardComponents.size === 0 || document.hidden) {
       this.stopSecondTicker();
       return;
     }
@@ -847,6 +1044,10 @@ export class TransitTrackerApp {
     if (this.fetchController) {
       this.fetchController.abort();
       this.fetchController = undefined;
+    }
+    if (this.alertsAbortController) {
+      this.alertsAbortController.abort();
+      this.alertsAbortController = undefined;
     }
     document.removeEventListener('visibilitychange', this.handleVisibilityChange);
     this.cardComponents.forEach((card) => card.destroy());

@@ -1,6 +1,8 @@
-import { describe, it, expect, vi } from 'vitest';
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { AlertsViewComponent } from '../src/components/AlertsView';
-import { ST_ALERTS_WEB_URL } from '../src/services/alerts-api';
+import { ST_ALERTS_FEED_URL, ST_ALERTS_WEB_URL, clearAlertsCache } from '../src/services/alerts-api';
+import { clearArrivalsCache } from '../src/services/oba-api';
+import { clearStorageCache } from '../src/services/storage';
 import type { ServiceAlert } from '../src/types/transit';
 
 function makeAlert(overrides: Partial<ServiceAlert> = {}): ServiceAlert {
@@ -180,5 +182,215 @@ describe('AlertsViewComponent', () => {
     expect(externalLink?.href).toBe('https://www.soundtransit.org/alerts/major');
     expect(externalLink?.target).toBe('_blank');
     expect(externalLink?.rel).toBe('noopener noreferrer');
+  });
+});
+
+describe('TransitTrackerApp Service Alerts Integration', () => {
+  beforeEach(() => {
+    document.body.innerHTML = '<div id="app"></div>';
+    localStorage.clear();
+    localStorage.setItem('seattle_transit_pinned_stations', JSON.stringify(['westlake']));
+    clearStorageCache();
+    clearArrivalsCache();
+    clearAlertsCache();
+  });
+
+  afterEach(() => {
+    vi.restoreAllMocks();
+    vi.unstubAllGlobals();
+  });
+
+  function mockNetwork(options: {
+    alertsEntities?: unknown[];
+    alertsFail?: boolean;
+  }) {
+    const nowSec = Math.floor(Date.now() / 1000);
+    const fetchMock = vi.fn(async (url: string) => {
+      if (String(url) === ST_ALERTS_FEED_URL) {
+        if (options.alertsFail) {
+          return { ok: false, status: 503, statusText: 'Service Unavailable' };
+        }
+        return {
+          ok: true,
+          status: 200,
+          json: async () => ({
+            header: { timestamp: nowSec },
+            entity: options.alertsEntities ?? [],
+          }),
+        };
+      }
+
+      return {
+        ok: true,
+        status: 200,
+        json: async () => ({
+          code: 200,
+          data: {
+            entry: {
+              stopId: '40_1121',
+              arrivalsAndDepartures: [
+                {
+                  tripId: 'T1',
+                  routeId: '40_100479',
+                  routeShortName: '1 Line',
+                  tripHeadsign: 'Lynnwood City Center',
+                  scheduledDepartureTime: Date.now() + 5 * 60 * 1000,
+                  predictedDepartureTime: Date.now() + 5 * 60 * 1000,
+                  predicted: true,
+                },
+              ],
+            },
+          },
+        }),
+      };
+    });
+
+    vi.stubGlobal('fetch', fetchMock);
+    return fetchMock;
+  }
+
+  it('keeps Alerts tab quiet and disruption banner hidden when 0 alerts exist, and opens empty state on click', async () => {
+    mockNetwork({ alertsEntities: [] });
+
+    const { TransitTrackerApp } = await import('../src/main');
+    const app = new TransitTrackerApp();
+    await new Promise((r) => setTimeout(r, 25));
+
+    const alertsTabBtn = document.querySelector<HTMLButtonElement>('.alerts-tab-btn');
+    expect(alertsTabBtn).not.toBeNull();
+    expect(alertsTabBtn?.classList.contains('has-warning')).toBe(false);
+    expect(alertsTabBtn?.classList.contains('has-severe')).toBe(false);
+    expect(alertsTabBtn?.querySelector('.alert-count-badge')).toBeNull();
+    expect(alertsTabBtn?.getAttribute('aria-label')).toBe('Alerts');
+
+    const banner = document.querySelector<HTMLElement>('.disruption-banner');
+    expect(banner?.classList.contains('hidden')).toBe(true);
+
+    alertsTabBtn?.click();
+    const stationsGrid = document.querySelector<HTMLElement>('.stations-grid');
+    expect(stationsGrid?.classList.contains('hidden')).toBe(true);
+    expect(document.querySelector('.alerts-empty-card')?.textContent).toContain(
+      'No active Link service alerts'
+    );
+
+    const viewButtons = document.querySelectorAll<HTMLButtonElement>('.toolbar-controls .view-mode-btn');
+    viewButtons[0]?.click(); // ★ My Stations
+    expect(stationsGrid?.classList.contains('hidden')).toBe(false);
+
+    app.destroy();
+  });
+
+  it('highlights Alerts tab and displays clickable disruption banner when WARNING and SEVERE alerts are active', async () => {
+    const nowSec = Math.floor(Date.now() / 1000);
+    mockNetwork({
+      alertsEntities: [
+        {
+          id: 'severe-1',
+          alert: {
+            severity_level: 'SEVERE',
+            active_period: [{ start: nowSec - 120 }],
+            informed_entity: [{ route_id: '100479' }],
+            header_text: { translation: [{ language: 'en', text: 'Signal issue at SODO' }] },
+          },
+        },
+        {
+          id: 'warn-1',
+          alert: {
+            severity_level: 'WARNING',
+            active_period: [{ start: nowSec - 60 }],
+            informed_entity: [{ route_id: '2LINE' }],
+            header_text: { translation: [{ language: 'en', text: '2 Line escalator maintenance' }] },
+          },
+        },
+      ],
+    });
+
+    const { TransitTrackerApp } = await import('../src/main');
+    const app = new TransitTrackerApp();
+    await new Promise((r) => setTimeout(r, 25));
+
+    const alertsTabBtn = document.querySelector<HTMLButtonElement>('.alerts-tab-btn');
+    expect(alertsTabBtn?.classList.contains('has-severe')).toBe(true);
+    expect(alertsTabBtn?.classList.contains('has-warning')).toBe(false);
+    expect(alertsTabBtn?.querySelector('.alert-count-badge')?.textContent).toBe('2');
+    expect(alertsTabBtn?.getAttribute('aria-label')).toBe('Alerts, 2 active');
+
+    const banner = document.querySelector<HTMLButtonElement>('.disruption-banner');
+    expect(banner).not.toBeNull();
+    expect(banner?.classList.contains('hidden')).toBe(false);
+    expect(banner?.classList.contains('severity-severe')).toBe(true);
+    expect(banner?.textContent).toContain('Signal issue at SODO');
+
+    banner?.click();
+    expect(document.querySelector('.stations-grid')?.classList.contains('hidden')).toBe(true);
+    expect(banner?.classList.contains('hidden')).toBe(true);
+    expect(document.querySelectorAll('.alert-card')).toHaveLength(2);
+
+    app.destroy();
+  });
+
+  it('restores station cards and pauses/resumes 1s ticker cleanly across view and line switches', async () => {
+    const setIntervalSpy = vi.spyOn(window, 'setInterval');
+    const clearIntervalSpy = vi.spyOn(window, 'clearInterval');
+
+    const nowSec = Math.floor(Date.now() / 1000);
+    mockNetwork({
+      alertsEntities: [
+        {
+          id: 'warn-1',
+          alert: {
+            severity_level: 'WARNING',
+            active_period: [{ start: nowSec - 60 }],
+            informed_entity: [{ route_id: '100479' }],
+            header_text: { translation: [{ language: 'en', text: '1 Line single-tracking' }] },
+          },
+        },
+      ],
+    });
+
+    const { TransitTrackerApp } = await import('../src/main');
+    const app = new TransitTrackerApp();
+    await new Promise((r) => setTimeout(r, 25));
+
+    expect(document.querySelector('#station-westlake')?.textContent).toContain('Lynnwood City Center');
+    const initial1sIntervals = setIntervalSpy.mock.calls.filter((c) => c[1] === 1000).length;
+    expect(initial1sIntervals).toBeGreaterThanOrEqual(1);
+
+    const alertsTabBtn = document.querySelector<HTMLButtonElement>('.alerts-tab-btn');
+    alertsTabBtn?.click();
+    expect(clearIntervalSpy).toHaveBeenCalled();
+
+    // Return to My Stations
+    const viewButtons = document.querySelectorAll<HTMLButtonElement>('.toolbar-controls .view-mode-btn');
+    viewButtons[0]?.click();
+    expect(document.querySelector('.stations-grid')?.classList.contains('hidden')).toBe(false);
+    expect(document.querySelector('#station-westlake')?.textContent).toContain('Lynnwood City Center');
+
+    // Open Alerts again then switch to Line 2
+    alertsTabBtn?.click();
+    const line2Btn = document.querySelector<HTMLButtonElement>('[data-line="line-2"]');
+    line2Btn?.click();
+    expect(document.querySelector('.alerts-tab-btn')?.classList.contains('has-warning')).toBe(true);
+
+    app.destroy();
+  });
+
+  it('isolates alerts feed failures from healthy station arrival cards and supports retry in AlertsView', async () => {
+    mockNetwork({ alertsFail: true });
+
+    const { TransitTrackerApp } = await import('../src/main');
+    const app = new TransitTrackerApp();
+    await new Promise((r) => setTimeout(r, 25));
+
+    // OBA arrivals succeeded -> station card shows departures, and main staleBannerEl stays hidden
+    expect(document.querySelector('#station-westlake')?.textContent).toContain('Lynnwood City Center');
+    expect(document.querySelector('.status-banner')?.classList.contains('hidden')).toBe(true);
+
+    const alertsTabBtn = document.querySelector<HTMLButtonElement>('.alerts-tab-btn');
+    alertsTabBtn?.click();
+    expect(document.querySelector('.alerts-error-card')).not.toBeNull();
+    expect(document.querySelector('.alerts-retry-btn')).not.toBeNull();
+
+    app.destroy();
   });
 });

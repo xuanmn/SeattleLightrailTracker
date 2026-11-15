@@ -234,9 +234,14 @@ describe('Mobile Performance Optimizations', () => {
       // Let initial poll settle
       await new Promise((r) => setTimeout(r, 20));
 
-      // Only 1 platform (Northbound 40_1121) should have been fetched!
-      expect(fetchMock).toHaveBeenCalledTimes(1);
-      expect(String(fetchMock.mock.calls[0]?.[0])).toContain('40_1121');
+      // Only 1 OBA platform (Northbound 40_1121) should have been fetched!
+      const getObaUrls = () =>
+        fetchMock.mock.calls
+          .map((call) => String(call[0]))
+          .filter((url) => url.includes('onebusaway.org'));
+
+      expect(getObaUrls()).toHaveLength(1);
+      expect(getObaUrls()[0]).toContain('40_1121');
 
       // Clicking Southbound ('dir2') lazily fetches the previously skipped Southbound platform (40_1108)
       const dirBtns = document.querySelectorAll<HTMLButtonElement>('#station-westlake .direction-segment-btn');
@@ -244,8 +249,8 @@ describe('Mobile Performance Optimizations', () => {
       dirBtns[2].click();
       await new Promise((r) => setTimeout(r, 20));
 
-      expect(fetchMock).toHaveBeenCalledTimes(2);
-      expect(String(fetchMock.mock.calls[1]?.[0])).toContain('40_1108');
+      expect(getObaUrls()).toHaveLength(2);
+      expect(getObaUrls()[1]).toContain('40_1108');
 
       appWithCard.destroy();
       expect(clearIntervalSpy).toHaveBeenCalled();
