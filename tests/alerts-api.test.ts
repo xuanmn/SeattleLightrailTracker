@@ -344,4 +344,25 @@ describe('fetchServiceAlerts', () => {
     expect(fetchMock).toHaveBeenCalledTimes(2);
     expect(recovered.alerts).toEqual([]);
   });
+
+  it('rejects with a non-AbortError timeout error after 6000ms without caching', async () => {
+    const fetchMock = vi.fn().mockImplementation(
+      (_url: string, init?: RequestInit) =>
+        new Promise((_resolve, reject) => {
+          init?.signal?.addEventListener('abort', () => {
+            reject(new DOMException('Aborted', 'AbortError'));
+          });
+        })
+    );
+    vi.stubGlobal('fetch', fetchMock);
+
+    const promise = fetchServiceAlerts();
+    const assertion = promise.catch((err) => err);
+    await vi.advanceTimersByTimeAsync(6000);
+
+    const err = await assertion;
+    expect(err).toBeInstanceOf(Error);
+    expect(err.name).not.toBe('AbortError');
+    expect(err.message).toMatch(/timed out/i);
+  });
 });

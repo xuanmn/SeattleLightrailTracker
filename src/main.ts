@@ -906,10 +906,10 @@ export class TransitTrackerApp {
       this.alertsUpdatedAt = feed.updatedAt;
       this.alertsError = null;
     } catch (err) {
-      if (err instanceof Error && err.name === 'AbortError') {
-        return;
-      }
-      if (this.alertsAbortController !== controller || controller.signal.aborted) {
+      if (
+        this.alertsAbortController !== controller ||
+        controller.signal.aborted
+      ) {
         return;
       }
       this.alertsError =
@@ -919,9 +919,9 @@ export class TransitTrackerApp {
     } finally {
       if (this.alertsAbortController === controller) {
         this.alertsAbortController = undefined;
+        this.isFetchingAlerts = false;
+        this.syncAlertsUI();
       }
-      this.isFetchingAlerts = false;
-      this.syncAlertsUI();
     }
   }
 

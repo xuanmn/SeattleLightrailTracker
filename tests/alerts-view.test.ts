@@ -393,4 +393,117 @@ describe('TransitTrackerApp Service Alerts Integration', () => {
 
     app.destroy();
   });
+
+  it('surfaces an error card when the alerts feed times out rather than showing false good service', async () => {
+    vi.useFakeTimers();
+    try {
+      const fetchMock = vi.fn((url: string, init?: RequestInit) => {
+        if (String(url) === ST_ALERTS_FEED_URL) {
+          return new Promise((_resolve, reject) => {
+            init?.signal?.addEventListener('abort', () => {
+              reject(new DOMException('Aborted', 'AbortError'));
+            });
+          });
+        }
+        return Promise.resolve({
+          ok: true,
+          status: 200,
+          json: async () => ({
+            code: 200,
+            data: { entry: { stopId: '40_1121', arrivalsAndDepartures: [] } },
+          }),
+        });
+      });
+      vi.stubGlobal('fetch', fetchMock);
+
+      const { TransitTrackerApp } = await import('../src/main');
+      const app = new TransitTrackerApp();
+
+      // Advance past alerts 6s request timeout
+      await vi.advanceTimersByTimeAsync(6000);
+
+      document.querySelector<HTMLButtonElement>('.alerts-tab-btn')?.click();
+      expect(document.querySelector('.alerts-error-card')).not.toBeNull();
+      expect(document.querySelector('.alerts-empty-card')).toBeNull();
+
+      app.destroy();
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it('keeps loading skeleton visible when an older in-flight alerts request is superseded', async () => {
+    let resolveSecond!: () => void;
+    let rejectFirstOnAbort!: (reason?: unknown) => void;
+    let alertAttempt = 0;
+
+    const fetchMock = vi.fn((url: string, init?: RequestInit) => {
+      if (String(url) === ST_ALERTS_FEED_URL) {
+        alertAttempt++;
+        if (alertAttempt === 1) {
+          // Fails on first try so user gets Retry button
+          return Promise.resolve({ ok: false, status: 503, statusText: 'Service Unavailable' });
+        }
+        if (alertAttempt === 2) {
+          return new Promise((_resolve, reject) => {
+            rejectFirstOnAbort = reject;
+            init?.signal?.addEventListener('abort', () => {
+              // Simulate a microtask delay before settling after abort
+              queueMicrotask(() => reject(new DOMException('Aborted', 'AbortError')));
+            });
+          });
+        }
+        return new Promise((resolve) => {
+          resolveSecond = () =>
+            resolve({
+              ok: true,
+              status: 200,
+              json: async () => ({
+                header: { timestamp: Math.floor(Date.now() / 1000) },
+                entity: [],
+              }),
+            });
+        });
+      }
+      return Promise.resolve({
+        ok: true,
+        status: 200,
+        json: async () => ({
+          code: 200,
+          data: { entry: { stopId: '40_1121', arrivalsAndDepartures: [] } },
+        }),
+      });
+    });
+    vi.stubGlobal('fetch', fetchMock);
+
+    const { TransitTrackerApp } = await import('../src/main');
+    const app = new TransitTrackerApp();
+    await new Promise((r) => setTimeout(r, 15));
+
+    // Open Alerts view (attempt 1 failed -> shows error card + Retry)
+    document.querySelector<HTMLButtonElement>('.alerts-tab-btn')?.click();
+    const retryBtn = document.querySelector<HTMLButtonElement>('.alerts-retry-btn');
+    expect(retryBtn).not.toBeNull();
+
+    // Start attempt 2 (hangs), wait one tick so attempt 2 is actively waiting, then supersede with attempt 3
+    retryBtn?.click();
+    expect(document.querySelector('.alerts-loading-skeleton')).not.toBeNull();
+    await new Promise((r) => setTimeout(r, 5));
+
+    const triggerRetry = (app as unknown as { fetchAlerts: (b: boolean) => Promise<void> }).fetchAlerts(true);
+    // Wait until attempt 2's abort rejection microtask settles while attempt 3 stays pending
+    await new Promise((r) => setTimeout(r, 5));
+
+    // Loading skeleton must STILL be visible while attempt 3 is in flight!
+    expect(document.querySelector('.alerts-loading-skeleton')).not.toBeNull();
+    expect(document.querySelector('.alerts-empty-card')).toBeNull();
+
+    expect(typeof resolveSecond).toBe('function');
+    resolveSecond();
+    await triggerRetry;
+    expect(document.querySelector('.alerts-empty-card')).not.toBeNull();
+
+    void rejectFirstOnAbort;
+    app.destroy();
+  });
 });

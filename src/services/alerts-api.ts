@@ -246,7 +246,11 @@ function getOrStartAlertsRequest(): InFlightAlertsEntry {
   }
 
   const controller = new AbortController();
-  const timer = setTimeout(() => controller.abort(), REQUEST_TIMEOUT_MS);
+  let timedOut = false;
+  const timer = setTimeout(() => {
+    timedOut = true;
+    controller.abort();
+  }, REQUEST_TIMEOUT_MS);
 
   const entry: InFlightAlertsEntry = {
     promise: Promise.resolve({ alerts: [], updatedAt: 0 }),
@@ -270,6 +274,11 @@ function getOrStartAlertsRequest(): InFlightAlertsEntry {
       };
       cachedAlerts = { timestamp: now, feed };
       return feed;
+    } catch (err) {
+      if (timedOut) {
+        throw new Error('Service alerts request timed out');
+      }
+      throw err;
     } finally {
       clearTimeout(timer);
       if (inFlightAlerts === entry) {
@@ -307,9 +316,25 @@ export async function fetchServiceAlerts(
     }
   }
 
+  let subscriberReleased = false;
+  const releaseSubscriber = () => {
+    if (subscriberReleased) return;
+    subscriberReleased = true;
+    entry.subscribers--;
+    if (signal.aborted && entry.subscribers === 0) {
+      entry.controller.abort();
+      if (inFlightAlerts === entry) {
+        inFlightAlerts = null;
+      }
+    }
+  };
+
   let onAbort!: () => void;
   const abortPromise = new Promise<never>((_, reject) => {
-    onAbort = () => reject(createAbortError());
+    onAbort = () => {
+      releaseSubscriber();
+      reject(createAbortError());
+    };
     signal.addEventListener('abort', onAbort, { once: true });
   });
 
@@ -317,10 +342,7 @@ export async function fetchServiceAlerts(
     return await Promise.race([entry.promise, abortPromise]);
   } finally {
     signal.removeEventListener('abort', onAbort);
-    entry.subscribers--;
-    if (signal.aborted && entry.subscribers === 0) {
-      entry.controller.abort();
-    }
+    releaseSubscriber();
   }
 }
 
