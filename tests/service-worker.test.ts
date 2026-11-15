@@ -242,6 +242,14 @@ describe("Service worker fetch routing", () => {
     expect(res).toBeUndefined();
   });
 
+  it("never intercepts Sound Transit GTFS-RT service alerts requests", async () => {
+    const sw = loadServiceWorker(BUILT_SW, okFetch);
+    await sw.runLifecycle("install");
+    await sw.runLifecycle("activate");
+    const res = sw.dispatchFetch("https://s3.amazonaws.com/st-service-alerts-prod/alerts_pb.json");
+    expect(res).toBeUndefined();
+  });
+
   it("clears the navigation fallback timeout once the network navigation succeeds", async () => {
     vi.useFakeTimers();
     try {
