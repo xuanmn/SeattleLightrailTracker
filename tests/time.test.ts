@@ -1,6 +1,11 @@
 import { describe, expect, it } from "vitest";
 import { formatSimpleDestination } from "../src/utils/format";
-import { formatClockTime, formatCountdownBadge, formatDelayStatus } from "../src/utils/time";
+import {
+  formatAlertTimestamp,
+  formatClockTime,
+  formatCountdownBadge,
+  formatDelayStatus,
+} from "../src/utils/time";
 
 describe("Time and Countdown Utilities", () => {
   const baseTime = 1700000000000; // Fixed timestamp reference
@@ -79,5 +84,23 @@ describe("Time and Countdown Utilities", () => {
     expect(formatSimpleDestination("South Bellevue")).toBe("To South Bellevue");
     expect(formatSimpleDestination("Downtown Redmond")).toBe("To Redmond");
     expect(formatSimpleDestination("")).toBe("To Terminal");
+  });
+
+  it("formats alert timestamps with dates only when crossing calendar days or years in Seattle time", () => {
+    // 2026-11-17T17:00:00Z = Nov 17, 2026 9:00 AM PST
+    const refNow = Date.UTC(2026, 10, 17, 17, 0, 0);
+    // Same Seattle day: Nov 17, 2026 2:05 PM PST (22:05Z)
+    const sameDay = Date.UTC(2026, 10, 17, 22, 5, 0);
+    expect(formatAlertTimestamp(sameDay, false, refNow)).toMatch(/^2:05\s*PM$/i);
+    expect(formatAlertTimestamp(sameDay, true, refNow)).toBe("14:05");
+
+    // Different day same year: Nov 3, 2026 5:00 AM PST (13:00Z)
+    const diffDay = Date.UTC(2026, 10, 3, 13, 0, 0);
+    expect(formatAlertTimestamp(diffDay, false, refNow)).toMatch(/Nov 3,\s*5:00\s*AM/i);
+    expect(formatAlertTimestamp(diffDay, true, refNow)).toBe("Nov 3, 05:00");
+
+    // Different year: Jan 29, 2027 4:00 PM PST (2027-01-30T00:00:00Z)
+    const diffYear = Date.UTC(2027, 0, 30, 0, 0, 0);
+    expect(formatAlertTimestamp(diffYear, false, refNow)).toMatch(/Jan 29, 2027,\s*4:00\s*PM/i);
   });
 });

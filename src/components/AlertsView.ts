@@ -1,7 +1,7 @@
 import type { AlertSeverity, ServiceAlert, TransitLineId } from '../types/transit';
 import { ST_ALERTS_WEB_URL } from '../services/alerts-api';
 import { createElement, ICONS } from '../utils/dom';
-import { formatClockTime } from '../utils/time';
+import { formatAlertTimestamp, formatClockTime } from '../utils/time';
 
 export interface AlertsViewCallbacks {
   onBackToStations: () => void;
@@ -15,6 +15,7 @@ export interface AlertsRenderState {
   isLoading: boolean;
   error: string | null;
   timeFormat24Hour: boolean;
+  nowEpochMs?: number;
 }
 
 const SEVERITY_RANK: Record<AlertSeverity, number> = {
@@ -34,6 +35,24 @@ const LINE_LABELS: Record<TransitLineId, string> = {
   'line-2': '2 Line',
 };
 
+const EFFECT_LABELS: Record<string, string> = {
+  NO_SERVICE: 'Service Suspended',
+  REDUCED_SERVICE: 'Reduced Service',
+  SIGNIFICANT_DELAYS: 'Significant Delays',
+  DETOUR: 'Shuttle / Detour',
+  ADDITIONAL_SERVICE: 'Additional Service',
+  MODIFIED_SERVICE: 'Modified Service',
+  STOP_MOVED: 'Stop Relocated',
+  ACCESSIBILITY_ISSUE: 'Elevator / Access',
+};
+
+const IGNORED_ENUM_VALUES = new Set([
+  'UNKNOWN_EFFECT',
+  'UNKNOWN_CAUSE',
+  'OTHER_EFFECT',
+  'OTHER_CAUSE',
+]);
+
 /** Create an element with plain text assigned safely via textContent (never innerHTML). */
 function createTextElement<K extends keyof HTMLElementTagNameMap>(
   tag: K,
@@ -47,10 +66,13 @@ function createTextElement<K extends keyof HTMLElementTagNameMap>(
   return el;
 }
 
-function formatEnumLabel(raw: string): string {
-  const cleaned = raw.trim();
-  if (!cleaned || cleaned === 'UNKNOWN_EFFECT' || cleaned === 'UNKNOWN_CAUSE') {
+function formatEffectLabel(raw: string): string {
+  const cleaned = raw.trim().toUpperCase();
+  if (!cleaned || IGNORED_ENUM_VALUES.has(cleaned)) {
     return '';
+  }
+  if (EFFECT_LABELS[cleaned]) {
+    return EFFECT_LABELS[cleaned];
   }
   return cleaned
     .toLowerCase()
@@ -81,28 +103,86 @@ function sortAlertsForLine(alerts: ServiceAlert[], activeLine: TransitLineId): S
   });
 }
 
-function buildDescriptionFragment(text: string): DocumentFragment {
-  const frag = document.createDocumentFragment();
-  const paragraphs = text
+function buildDescriptionElements(text: string): HTMLElement[] {
+  const elements: HTMLElement[] = [];
+  const rawBlocks = text
     .split(/\n\s*\n+/)
     .map((block) => block.trim())
     .filter(Boolean);
 
-  for (const block of paragraphs) {
-    const p = document.createElement('p');
-    p.textContent = block;
-    frag.appendChild(p);
+  for (const block of rawBlocks) {
+    const lines = block
+      .split('\n')
+      .map((line) => line.trim())
+      .filter(Boolean);
+
+    let listEl: HTMLUListElement | HTMLOListElement | null = null;
+    let listType: 'ul' | 'ol' | null = null;
+    let proseLines: string[] = [];
+
+    const flushProse = () => {
+      if (proseLines.length === 0) return;
+      const p = document.createElement('p');
+      p.textContent = proseLines.join('\n');
+      elements.push(p);
+      proseLines = [];
+    };
+
+    const flushList = () => {
+      if (!listEl) return;
+      elements.push(listEl);
+      listEl = null;
+      listType = null;
+    };
+
+    for (const line of lines) {
+      const unorderedMatch = line.match(/^(?:\*|-|•)\s*(.+)$/);
+      const orderedMatch = line.match(/^\d+[.)]\s+(.+)$/);
+
+      if (unorderedMatch) {
+        flushProse();
+        if (listType !== 'ul') {
+          flushList();
+          listEl = createElement('ul', 'alert-card-list');
+          listType = 'ul';
+        }
+        const li = document.createElement('li');
+        li.textContent = unorderedMatch[1].trim();
+        listEl!.appendChild(li);
+      } else if (orderedMatch) {
+        flushProse();
+        if (listType !== 'ol') {
+          flushList();
+          listEl = createElement('ol', 'alert-card-list alert-card-list--ordered');
+          listType = 'ol';
+        }
+        const li = document.createElement('li');
+        li.textContent = orderedMatch[1].trim();
+        listEl!.appendChild(li);
+      } else {
+        flushList();
+        proseLines.push(line);
+      }
+    }
+
+    flushProse();
+    flushList();
   }
-  return frag;
+
+  return elements;
 }
 
-function formatActiveWindow(alert: ServiceAlert, is24Hour: boolean): string {
+function formatActiveWindow(
+  alert: ServiceAlert,
+  is24Hour: boolean,
+  nowEpochMs: number
+): string {
   const parts: string[] = [];
   if (alert.activeStartMs !== null) {
-    parts.push(`Since ${formatClockTime(alert.activeStartMs, is24Hour)}`);
+    parts.push(`Since ${formatAlertTimestamp(alert.activeStartMs, is24Hour, nowEpochMs)}`);
   }
   if (alert.activeEndMs !== null) {
-    parts.push(`Until ${formatClockTime(alert.activeEndMs, is24Hour)}`);
+    parts.push(`Until ${formatAlertTimestamp(alert.activeEndMs, is24Hour, nowEpochMs)}`);
   }
   return parts.join(' · ');
 }
@@ -122,8 +202,8 @@ export class AlertsViewComponent {
   }
 
   public update(state: AlertsRenderState): void {
+    const nowEpochMs = state.nowEpochMs ?? Date.now();
     const fragment = document.createDocumentFragment();
-    fragment.appendChild(this.renderHeader(state));
 
     if (state.isLoading && state.updatedAt === null) {
       fragment.appendChild(this.renderLoadingSkeleton());
@@ -150,40 +230,11 @@ export class AlertsViewComponent {
     if (state.alerts.length === 0) {
       fragment.appendChild(this.renderEmptyCard(state));
     } else {
-      fragment.appendChild(this.renderAlertList(state));
+      fragment.appendChild(this.renderAlertList(state.alerts, state, nowEpochMs));
     }
 
-    fragment.appendChild(this.renderFooter());
+    fragment.appendChild(this.renderFooter(state));
     this.rootEl.replaceChildren(fragment);
-  }
-
-  private renderHeader(state: AlertsRenderState): HTMLElement {
-    const header = createElement('div', 'alerts-view-header');
-
-    const titleGroup = createElement('div', 'alerts-view-title-group');
-    const heading = createTextElement('h2', 'alerts-view-title', 'Link Service Alerts');
-    titleGroup.appendChild(heading);
-
-    const statusText =
-      state.updatedAt !== null
-        ? `Official Sound Transit feed · Last checked ${formatClockTime(
-            state.updatedAt,
-            state.timeFormat24Hour
-          )}`
-        : 'Official Sound Transit GTFS-RT alerts feed';
-    titleGroup.appendChild(createTextElement('p', 'alerts-view-subtitle', statusText));
-
-    const actions = createElement('div', 'alerts-view-actions');
-    actions.appendChild(
-      createExternalLink(
-        ST_ALERTS_WEB_URL,
-        'soundtransit.org',
-        'alerts-official-link'
-      )
-    );
-
-    header.append(titleGroup, actions);
-    return header;
   }
 
   private renderLoadingSkeleton(): HTMLElement {
@@ -266,9 +317,13 @@ export class AlertsViewComponent {
     return card;
   }
 
-  private renderAlertList(state: AlertsRenderState): HTMLElement {
+  private renderAlertList(
+    alerts: ServiceAlert[],
+    state: AlertsRenderState,
+    nowEpochMs: number
+  ): HTMLElement {
     const list = createElement('ul', 'alerts-list');
-    const ordered = sortAlertsForLine(state.alerts, state.activeLine);
+    const ordered = sortAlertsForLine(alerts, state.activeLine);
 
     for (const alert of ordered) {
       const item = createElement(
@@ -292,7 +347,7 @@ export class AlertsViewComponent {
         );
       }
 
-      const effectLabel = formatEnumLabel(alert.effect);
+      const effectLabel = formatEffectLabel(alert.effect);
       if (effectLabel) {
         metaRow.appendChild(createTextElement('span', 'alert-effect-tag', effectLabel));
       }
@@ -306,15 +361,22 @@ export class AlertsViewComponent {
       );
       item.appendChild(headline);
 
-      const windowText = formatActiveWindow(alert, state.timeFormat24Hour);
+      const windowText = formatActiveWindow(alert, state.timeFormat24Hour, nowEpochMs);
       if (windowText) {
         item.appendChild(createTextElement('p', 'alert-card-window', windowText));
       }
 
-      if (alert.description) {
-        const desc = createElement('div', 'alert-card-description');
-        desc.appendChild(buildDescriptionFragment(alert.description));
-        item.appendChild(desc);
+      const trimmedDesc = alert.description.trim();
+      const trimmedHeader = alert.header.trim();
+      if (trimmedDesc && trimmedDesc.toLowerCase() !== trimmedHeader.toLowerCase()) {
+        const blockElements = buildDescriptionElements(trimmedDesc);
+        if (blockElements.length > 0) {
+          const desc = createElement('div', 'alert-card-description');
+          for (const blockEl of blockElements) {
+            desc.appendChild(blockEl);
+          }
+          item.appendChild(desc);
+        }
       }
 
       if (alert.url) {
@@ -331,12 +393,16 @@ export class AlertsViewComponent {
     return list;
   }
 
-  private renderFooter(): HTMLElement {
+  private renderFooter(state: AlertsRenderState): HTMLElement {
     const footer = createElement('div', 'alerts-view-footer');
+    const updated =
+      state.updatedAt !== null
+        ? ` · Updated ${formatClockTime(state.updatedAt, state.timeFormat24Hour)}`
+        : '';
     const note = createTextElement(
       'span',
       'alerts-source-note',
-      'Source: Sound Transit GTFS-RT alerts feed.'
+      `Source: Sound Transit GTFS-RT alerts feed${updated}.`
     );
     const link = createExternalLink(
       ST_ALERTS_WEB_URL,

@@ -183,6 +183,92 @@ describe('AlertsViewComponent', () => {
     expect(externalLink?.target).toBe('_blank');
     expect(externalLink?.rel).toBe('noopener noreferrer');
   });
+
+  it('filters noisy OTHER_EFFECT tags, maps ACCESSIBILITY_ISSUE, deduplicates identical descriptions, and includes dates on multi-day windows', () => {
+    const refNow = Date.UTC(2026, 10, 17, 17, 0, 0);
+    const view = new AlertsViewComponent({
+      onBackToStations: vi.fn(),
+      onRetry: vi.fn(),
+    });
+
+    view.update({
+      alerts: [
+        makeAlert({
+          id: 'garage-long',
+          effect: 'OTHER_EFFECT',
+          lines: ['line-1'],
+          header: 'Northgate Parking Garage reduced capacity',
+          description: 'Northgate Parking Garage reduced capacity',
+          activeStartMs: Date.UTC(2026, 10, 3, 13, 0, 0),
+          activeEndMs: Date.UTC(2027, 0, 30, 0, 0, 0),
+        }),
+        makeAlert({
+          id: 'elevator-long',
+          effect: 'ACCESSIBILITY_ISSUE',
+          lines: ['line-1', 'line-2'],
+          header: 'UW Station Elevator 2 unavailable',
+          description: 'Block one.\n\nBlock two.\n\nBlock three extra step.\n\nBlock four extra step.',
+          activeStartMs: refNow - 60 * 60 * 1000,
+          activeEndMs: null,
+        }),
+      ],
+      activeLine: 'line-1',
+      updatedAt: refNow,
+      isLoading: false,
+      error: null,
+      timeFormat24Hour: false,
+      nowEpochMs: refNow,
+    });
+
+    const el = view.getElement();
+    const cards = el.querySelectorAll<HTMLElement>('.alert-card');
+    expect(cards).toHaveLength(2);
+
+    const garageCard = el.querySelector<HTMLElement>('[data-alert-id="garage-long"]')!;
+    const elevatorCard = el.querySelector<HTMLElement>('[data-alert-id="elevator-long"]')!;
+
+    // OTHER_EFFECT is suppressed; identical header/description is not duplicated
+    expect(garageCard.textContent).not.toContain('Other Effect');
+    expect(garageCard.querySelector('.alert-card-description')).toBeNull();
+    expect(garageCard.querySelector('.alert-card-window')?.textContent).toMatch(/Nov 3.*Jan 29, 2027/);
+
+    // ACCESSIBILITY_ISSUE maps to Elevator / Access; all blocks render inline without click-to-expand truncation
+    expect(elevatorCard.querySelector('.alert-effect-tag')?.textContent).toBe('Elevator / Access');
+    const inlineParas = elevatorCard.querySelectorAll('.alert-card-description > p');
+    expect(inlineParas).toHaveLength(4);
+    expect(elevatorCard.querySelector('details.alert-more-details')).toBeNull();
+    expect(elevatorCard.textContent).toContain('Block four extra step.');
+  });
+
+  it('omits secondary filter and header bar while still prioritizing activeLine and linking to soundtransit.org in footer', () => {
+    const view = new AlertsViewComponent({
+      onBackToStations: vi.fn(),
+      onRetry: vi.fn(),
+    });
+
+    view.update({
+      alerts: [
+        makeAlert({ id: 'a-line1', lines: ['line-1'], header: '1 Line advisory' }),
+        makeAlert({ id: 'a-line2', lines: ['line-2'], header: '2 Line advisory' }),
+      ],
+      activeLine: 'line-2',
+      updatedAt: Date.UTC(2026, 10, 17, 17, 0, 0),
+      isLoading: false,
+      error: null,
+      timeFormat24Hour: false,
+    });
+
+    const el = view.getElement();
+    expect(el.querySelector('.alerts-view-header')).toBeNull();
+    expect(el.querySelector('.alerts-filter-group')).toBeNull();
+    expect(el.querySelector('.alerts-refresh-btn')).toBeNull();
+
+    const cards = Array.from(el.querySelectorAll<HTMLElement>('.alert-card'));
+    expect(cards.map((c) => c.dataset.alertId)).toEqual(['a-line2', 'a-line1']);
+    expect(el.querySelector<HTMLAnchorElement>('.alerts-footer-link')?.href).toBe(
+      ST_ALERTS_WEB_URL
+    );
+  });
 });
 
 describe('TransitTrackerApp Service Alerts Integration', () => {
@@ -504,6 +590,97 @@ describe('TransitTrackerApp Service Alerts Integration', () => {
     expect(document.querySelector('.alerts-empty-card')).not.toBeNull();
 
     void rejectFirstOnAbort;
+    app.destroy();
+  });
+
+  it('updates top toolbar header cleanly for Alerts view and restores line title on return', async () => {
+    mockNetwork({ alertsEntities: [] });
+
+    const { TransitTrackerApp } = await import('../src/main');
+    const app = new TransitTrackerApp();
+    await new Promise((r) => setTimeout(r, 25));
+
+    const titleEl = document.querySelector('.dashboard-toolbar .section-title');
+    expect(titleEl?.textContent).toContain('1 Line Live Departures');
+
+    document.querySelector<HTMLButtonElement>('.alerts-tab-btn')?.click();
+    expect(titleEl?.textContent).toContain('Service Alerts');
+    expect(titleEl?.textContent).not.toContain('Live Departures');
+    // AlertsView should not render a duplicate h2 title under the toolbar header
+    expect(document.querySelector('.alerts-view-title')).toBeNull();
+
+    document.querySelectorAll<HTMLButtonElement>('.toolbar-controls .view-mode-btn')[0]?.click();
+    expect(titleEl?.textContent).toContain('1 Line Live Departures');
+
+    app.destroy();
+  });
+
+  it('prioritizes transit disruptions over facility advisories in the banner and allows dismissing for the session', async () => {
+    const nowSec = Math.floor(Date.now() / 1000);
+    mockNetwork({
+      alertsEntities: [
+        {
+          id: 'elevator-out',
+          alert: {
+            severity_level: 'WARNING',
+            effect: 'ACCESSIBILITY_ISSUE',
+            active_period: [{ start: nowSec - 10 }],
+            informed_entity: [{ route_id: '100479' }],
+            header_text: { translation: [{ language: 'en', text: 'Westlake Elevator 305 unavailable' }] },
+          },
+        },
+        {
+          id: 'delay-1',
+          alert: {
+            severity_level: 'WARNING',
+            effect: 'SIGNIFICANT_DELAYS',
+            active_period: [{ start: nowSec - 120 }],
+            informed_entity: [{ route_id: '100479' }],
+            header_text: { translation: [{ language: 'en', text: '1 Line trains delayed 15 minutes' }] },
+          },
+        },
+      ],
+    });
+
+    const { TransitTrackerApp } = await import('../src/main');
+    const app = new TransitTrackerApp();
+    await new Promise((r) => setTimeout(r, 25));
+
+    const banner = document.querySelector<HTMLElement>('.disruption-banner');
+    expect(banner?.classList.contains('hidden')).toBe(false);
+    expect(banner?.textContent).toContain('1 Line trains delayed 15 minutes');
+
+    const dismissBtn = document.querySelector<HTMLButtonElement>('.disruption-banner-dismiss');
+    expect(dismissBtn).not.toBeNull();
+    dismissBtn?.click();
+
+    expect(banner?.classList.contains('hidden')).toBe(true);
+    // Alerts tab pill retains its active count badge after banner dismissal
+    expect(document.querySelector('.alerts-tab-btn .alert-count-badge')?.textContent).toBe('2');
+
+    app.destroy();
+  });
+
+  it('refreshes alerts once automatically when opening the Alerts tab', async () => {
+    const fetchMock = mockNetwork({ alertsEntities: [] });
+
+    const { TransitTrackerApp } = await import('../src/main');
+    const app = new TransitTrackerApp();
+    await new Promise((r) => setTimeout(r, 25));
+
+    const alertsCallsBefore = fetchMock.mock.calls.filter(
+      (call) => String(call[0]) === ST_ALERTS_FEED_URL
+    ).length;
+    expect(alertsCallsBefore).toBe(1);
+
+    document.querySelector<HTMLButtonElement>('.alerts-tab-btn')?.click();
+    await new Promise((r) => setTimeout(r, 25));
+
+    const alertsCallsAfter = fetchMock.mock.calls.filter(
+      (call) => String(call[0]) === ST_ALERTS_FEED_URL
+    ).length;
+    expect(alertsCallsAfter).toBe(2);
+
     app.destroy();
   });
 });
