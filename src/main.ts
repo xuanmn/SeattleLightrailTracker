@@ -37,6 +37,7 @@ import {
 type DashboardViewMode = 'pinned' | 'all' | 'alerts';
 import { createLazySingleton, runWithConcurrency } from './utils/concurrency';
 import { createElement, ICONS } from './utils/dom';
+import { formatClockTime } from './utils/time';
 
 const SYNC_INTERVAL_MS = 60 * 1000; // Fixed 60-second real-time sync cycle
 const MAX_CONCURRENT_STATION_FETCHES = 6; // Each station fetches 2 platforms
@@ -92,12 +93,13 @@ export class TransitTrackerApp {
   private alertsError: string | null = null;
   private isFetchingAlerts: boolean = false;
   private alertsAbortController?: AbortController;
+  private dismissedBannerSignature: string | null = null;
 
   private stationsGridEl!: HTMLElement;
   private lineTitleEl!: HTMLElement;
   private lineSubtitleEl!: HTMLElement;
   private staleBannerEl!: HTMLElement;
-  private disruptionBannerEl!: HTMLButtonElement;
+  private disruptionBannerEl!: HTMLElement;
   private alertsView!: AlertsViewComponent;
   private viewModePillWrap!: HTMLElement;
   private toastEl!: HTMLElement;
@@ -176,9 +178,11 @@ export class TransitTrackerApp {
     container.appendChild(this.staleBannerEl);
 
     // Clickable Disruption Summary Strip (visible on station views when Link alerts are active)
-    this.disruptionBannerEl = createElement('button', 'disruption-banner hidden') as HTMLButtonElement;
-    this.disruptionBannerEl.type = 'button';
-    this.disruptionBannerEl.addEventListener('click', () => this.setViewMode('alerts'));
+    this.disruptionBannerEl = createElement('div', 'disruption-banner hidden');
+    this.disruptionBannerEl.addEventListener('click', (e) => {
+      if ((e.target as Element | null)?.closest('.disruption-banner-dismiss')) return;
+      this.setViewMode('alerts');
+    });
     container.appendChild(this.disruptionBannerEl);
 
     // Dashboard Toolbar
@@ -208,6 +212,7 @@ export class TransitTrackerApp {
     this.alertsView = new AlertsViewComponent({
       onBackToStations: () => this.setViewMode('pinned'),
       onRetry: () => void this.fetchAlerts(true),
+      onRefresh: () => void this.fetchAlerts(true),
     });
     this.alertsView.getElement().classList.add('hidden');
     container.appendChild(this.alertsView.getElement());

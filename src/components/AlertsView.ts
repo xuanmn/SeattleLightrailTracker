@@ -1,11 +1,12 @@
 import type { AlertSeverity, ServiceAlert, TransitLineId } from '../types/transit';
 import { ST_ALERTS_WEB_URL } from '../services/alerts-api';
 import { createElement, ICONS } from '../utils/dom';
-import { formatClockTime } from '../utils/time';
+import { formatAlertTimestamp, formatClockTime } from '../utils/time';
 
 export interface AlertsViewCallbacks {
   onBackToStations: () => void;
   onRetry: () => void;
+  onRefresh?: () => void;
 }
 
 export interface AlertsRenderState {
@@ -15,7 +16,10 @@ export interface AlertsRenderState {
   isLoading: boolean;
   error: string | null;
   timeFormat24Hour: boolean;
+  nowEpochMs?: number;
 }
+
+type AlertsLineFilter = 'all' | TransitLineId;
 
 const SEVERITY_RANK: Record<AlertSeverity, number> = {
   SEVERE: 0,
@@ -34,6 +38,24 @@ const LINE_LABELS: Record<TransitLineId, string> = {
   'line-2': '2 Line',
 };
 
+const EFFECT_LABELS: Record<string, string> = {
+  NO_SERVICE: 'Service Suspended',
+  REDUCED_SERVICE: 'Reduced Service',
+  SIGNIFICANT_DELAYS: 'Significant Delays',
+  DETOUR: 'Shuttle / Detour',
+  ADDITIONAL_SERVICE: 'Additional Service',
+  MODIFIED_SERVICE: 'Modified Service',
+  STOP_MOVED: 'Stop Relocated',
+  ACCESSIBILITY_ISSUE: 'Elevator / Access',
+};
+
+const IGNORED_ENUM_VALUES = new Set([
+  'UNKNOWN_EFFECT',
+  'UNKNOWN_CAUSE',
+  'OTHER_EFFECT',
+  'OTHER_CAUSE',
+]);
+
 /** Create an element with plain text assigned safely via textContent (never innerHTML). */
 function createTextElement<K extends keyof HTMLElementTagNameMap>(
   tag: K,
@@ -47,10 +69,13 @@ function createTextElement<K extends keyof HTMLElementTagNameMap>(
   return el;
 }
 
-function formatEnumLabel(raw: string): string {
-  const cleaned = raw.trim();
-  if (!cleaned || cleaned === 'UNKNOWN_EFFECT' || cleaned === 'UNKNOWN_CAUSE') {
+function formatEffectLabel(raw: string): string {
+  const cleaned = raw.trim().toUpperCase();
+  if (!cleaned || IGNORED_ENUM_VALUES.has(cleaned)) {
     return '';
+  }
+  if (EFFECT_LABELS[cleaned]) {
+    return EFFECT_LABELS[cleaned];
   }
   return cleaned
     .toLowerCase()
@@ -81,28 +106,86 @@ function sortAlertsForLine(alerts: ServiceAlert[], activeLine: TransitLineId): S
   });
 }
 
-function buildDescriptionFragment(text: string): DocumentFragment {
-  const frag = document.createDocumentFragment();
-  const paragraphs = text
+function buildDescriptionElements(text: string): HTMLElement[] {
+  const elements: HTMLElement[] = [];
+  const rawBlocks = text
     .split(/\n\s*\n+/)
     .map((block) => block.trim())
     .filter(Boolean);
 
-  for (const block of paragraphs) {
-    const p = document.createElement('p');
-    p.textContent = block;
-    frag.appendChild(p);
+  for (const block of rawBlocks) {
+    const lines = block
+      .split('\n')
+      .map((line) => line.trim())
+      .filter(Boolean);
+
+    let listEl: HTMLUListElement | HTMLOListElement | null = null;
+    let listType: 'ul' | 'ol' | null = null;
+    let proseLines: string[] = [];
+
+    const flushProse = () => {
+      if (proseLines.length === 0) return;
+      const p = document.createElement('p');
+      p.textContent = proseLines.join(' ');
+      elements.push(p);
+      proseLines = [];
+    };
+
+    const flushList = () => {
+      if (!listEl) return;
+      elements.push(listEl);
+      listEl = null;
+      listType = null;
+    };
+
+    for (const line of lines) {
+      const unorderedMatch = line.match(/^(?:\*|-|•)\s*(.+)$/);
+      const orderedMatch = line.match(/^\d+[.)]\s+(.+)$/);
+
+      if (unorderedMatch) {
+        flushProse();
+        if (listType !== 'ul') {
+          flushList();
+          listEl = createElement('ul', 'alert-card-list');
+          listType = 'ul';
+        }
+        const li = document.createElement('li');
+        li.textContent = unorderedMatch[1].trim();
+        listEl!.appendChild(li);
+      } else if (orderedMatch) {
+        flushProse();
+        if (listType !== 'ol') {
+          flushList();
+          listEl = createElement('ol', 'alert-card-list alert-card-list--ordered');
+          listType = 'ol';
+        }
+        const li = document.createElement('li');
+        li.textContent = orderedMatch[1].trim();
+        listEl!.appendChild(li);
+      } else {
+        flushList();
+        proseLines.push(line);
+      }
+    }
+
+    flushProse();
+    flushList();
   }
-  return frag;
+
+  return elements;
 }
 
-function formatActiveWindow(alert: ServiceAlert, is24Hour: boolean): string {
+function formatActiveWindow(
+  alert: ServiceAlert,
+  is24Hour: boolean,
+  nowEpochMs: number
+): string {
   const parts: string[] = [];
   if (alert.activeStartMs !== null) {
-    parts.push(`Since ${formatClockTime(alert.activeStartMs, is24Hour)}`);
+    parts.push(`Since ${formatAlertTimestamp(alert.activeStartMs, is24Hour, nowEpochMs)}`);
   }
   if (alert.activeEndMs !== null) {
-    parts.push(`Until ${formatClockTime(alert.activeEndMs, is24Hour)}`);
+    parts.push(`Until ${formatAlertTimestamp(alert.activeEndMs, is24Hour, nowEpochMs)}`);
   }
   return parts.join(' · ');
 }
@@ -110,6 +193,8 @@ function formatActiveWindow(alert: ServiceAlert, is24Hour: boolean): string {
 export class AlertsViewComponent {
   private rootEl: HTMLElement;
   private callbacks: AlertsViewCallbacks;
+  private lineFilter: AlertsLineFilter = 'all';
+  private lastState: AlertsRenderState | null = null;
 
   constructor(callbacks: AlertsViewCallbacks) {
     this.callbacks = callbacks;
@@ -122,8 +207,10 @@ export class AlertsViewComponent {
   }
 
   public update(state: AlertsRenderState): void {
+    this.lastState = state;
+    const nowEpochMs = state.nowEpochMs ?? Date.now();
     const fragment = document.createDocumentFragment();
-    fragment.appendChild(this.renderHeader(state));
+    fragment.appendChild(this.renderControlsBar(state));
 
     if (state.isLoading && state.updatedAt === null) {
       fragment.appendChild(this.renderLoadingSkeleton());
@@ -150,31 +237,97 @@ export class AlertsViewComponent {
     if (state.alerts.length === 0) {
       fragment.appendChild(this.renderEmptyCard(state));
     } else {
-      fragment.appendChild(this.renderAlertList(state));
+      const visibleAlerts = this.getFilteredAlerts(state.alerts);
+      if (visibleAlerts.length === 0) {
+        fragment.appendChild(this.renderFilteredEmptyCard());
+      } else {
+        fragment.appendChild(this.renderAlertList(visibleAlerts, state, nowEpochMs));
+      }
     }
 
-    fragment.appendChild(this.renderFooter());
+    fragment.appendChild(this.renderFooter(state));
     this.rootEl.replaceChildren(fragment);
   }
 
-  private renderHeader(state: AlertsRenderState): HTMLElement {
+  private getFilteredAlerts(alerts: ServiceAlert[]): ServiceAlert[] {
+    if (this.lineFilter === 'all') return alerts;
+    const filter = this.lineFilter;
+    return alerts.filter((alert) => alert.lines.includes(filter));
+  }
+
+  private setLineFilter(filter: AlertsLineFilter) {
+    if (this.lineFilter === filter) return;
+    this.lineFilter = filter;
+    if (this.lastState) {
+      this.update(this.lastState);
+    }
+  }
+
+  private renderControlsBar(state: AlertsRenderState): HTMLElement {
     const header = createElement('div', 'alerts-view-header');
 
-    const titleGroup = createElement('div', 'alerts-view-title-group');
-    const heading = createTextElement('h2', 'alerts-view-title', 'Link Service Alerts');
-    titleGroup.appendChild(heading);
+    const filterGroup = createElement('div', 'alerts-filter-group');
+    filterGroup.setAttribute('role', 'group');
+    filterGroup.setAttribute('aria-label', 'Filter alerts by line');
 
-    const statusText =
-      state.updatedAt !== null
-        ? `Official Sound Transit feed · Last checked ${formatClockTime(
-            state.updatedAt,
-            state.timeFormat24Hour
-          )}`
-        : 'Official Sound Transit GTFS-RT alerts feed';
-    titleGroup.appendChild(createTextElement('p', 'alerts-view-subtitle', statusText));
+    const countAll = state.alerts.length;
+    const countLine1 = state.alerts.filter((a) => a.lines.includes('line-1')).length;
+    const countLine2 = state.alerts.filter((a) => a.lines.includes('line-2')).length;
+
+    const filterOptions: { key: AlertsLineFilter; label: string; count: number }[] = [
+      { key: 'all', label: 'All Lines', count: countAll },
+      { key: 'line-1', label: '1 Line', count: countLine1 },
+      { key: 'line-2', label: '2 Line', count: countLine2 },
+    ];
+
+    for (const option of filterOptions) {
+      const btn = createElement('button', 'alerts-filter-btn') as HTMLButtonElement;
+      btn.type = 'button';
+      btn.dataset.alertLineFilter = option.key;
+      const isSelected = this.lineFilter === option.key;
+      btn.classList.toggle('active', isSelected);
+      if (option.key === 'line-1') btn.classList.add('line-1');
+      if (option.key === 'line-2') btn.classList.add('line-2');
+      btn.setAttribute('aria-pressed', String(isSelected));
+
+      const labelSpan = document.createElement('span');
+      labelSpan.textContent = option.label;
+      btn.appendChild(labelSpan);
+
+      if (countAll > 0) {
+        const countSpan = createTextElement('span', 'alerts-filter-count', String(option.count));
+        btn.appendChild(countSpan);
+      }
+
+      btn.addEventListener('click', () => this.setLineFilter(option.key));
+      filterGroup.appendChild(btn);
+    }
 
     const actions = createElement('div', 'alerts-view-actions');
-    actions.appendChild(
+
+    const refreshBtn = createElement('button', 'alerts-refresh-btn') as HTMLButtonElement;
+    refreshBtn.type = 'button';
+    refreshBtn.setAttribute('aria-label', 'Refresh service alerts');
+    if (state.isLoading) {
+      refreshBtn.classList.add('is-loading');
+      refreshBtn.setAttribute('aria-busy', 'true');
+    }
+    const refreshIcon = createElement('span', 'alerts-refresh-icon');
+    refreshIcon.setAttribute('aria-hidden', 'true');
+    refreshIcon.innerHTML = ICONS.refresh;
+    const refreshLabel = document.createElement('span');
+    refreshLabel.textContent = state.isLoading ? 'Checking' : 'Refresh';
+    refreshBtn.append(refreshIcon, refreshLabel);
+    refreshBtn.addEventListener('click', () => {
+      if (this.callbacks.onRefresh) {
+        this.callbacks.onRefresh();
+      } else {
+        this.callbacks.onRetry();
+      }
+    });
+
+    actions.append(
+      refreshBtn,
       createExternalLink(
         ST_ALERTS_WEB_URL,
         'soundtransit.org',
@@ -182,7 +335,7 @@ export class AlertsViewComponent {
       )
     );
 
-    header.append(titleGroup, actions);
+    header.append(filterGroup, actions);
     return header;
   }
 
@@ -266,9 +419,44 @@ export class AlertsViewComponent {
     return card;
   }
 
-  private renderAlertList(state: AlertsRenderState): HTMLElement {
+  private renderFilteredEmptyCard(): HTMLElement {
+    const lineLabel = this.lineFilter === 'all' ? 'Link' : LINE_LABELS[this.lineFilter];
+    const card = createElement('div', 'alerts-empty-card');
+
+    const dot = createElement('span', 'alerts-good-dot');
+    dot.setAttribute('aria-hidden', 'true');
+
+    const titleRow = createElement('div', 'alerts-empty-title-row');
+    const title = createTextElement(
+      'h3',
+      'alerts-state-title',
+      `No active ${lineLabel} service alerts`
+    );
+    titleRow.append(dot, title);
+
+    const message = createTextElement(
+      'p',
+      'alerts-state-message',
+      'Other Link lines have active notices. Switch back to All Lines to view them.'
+    );
+
+    const actions = createElement('div', 'alerts-state-actions');
+    const resetBtn = createTextElement('button', 'alerts-back-btn', 'Show All Lines');
+    resetBtn.type = 'button';
+    resetBtn.addEventListener('click', () => this.setLineFilter('all'));
+
+    actions.appendChild(resetBtn);
+    card.append(titleRow, message, actions);
+    return card;
+  }
+
+  private renderAlertList(
+    alerts: ServiceAlert[],
+    state: AlertsRenderState,
+    nowEpochMs: number
+  ): HTMLElement {
     const list = createElement('ul', 'alerts-list');
-    const ordered = sortAlertsForLine(state.alerts, state.activeLine);
+    const ordered = sortAlertsForLine(alerts, state.activeLine);
 
     for (const alert of ordered) {
       const item = createElement(
@@ -292,7 +480,7 @@ export class AlertsViewComponent {
         );
       }
 
-      const effectLabel = formatEnumLabel(alert.effect);
+      const effectLabel = formatEffectLabel(alert.effect);
       if (effectLabel) {
         metaRow.appendChild(createTextElement('span', 'alert-effect-tag', effectLabel));
       }
@@ -306,15 +494,41 @@ export class AlertsViewComponent {
       );
       item.appendChild(headline);
 
-      const windowText = formatActiveWindow(alert, state.timeFormat24Hour);
+      const windowText = formatActiveWindow(alert, state.timeFormat24Hour, nowEpochMs);
       if (windowText) {
         item.appendChild(createTextElement('p', 'alert-card-window', windowText));
       }
 
-      if (alert.description) {
-        const desc = createElement('div', 'alert-card-description');
-        desc.appendChild(buildDescriptionFragment(alert.description));
-        item.appendChild(desc);
+      const trimmedDesc = alert.description.trim();
+      const trimmedHeader = alert.header.trim();
+      if (trimmedDesc && trimmedDesc.toLowerCase() !== trimmedHeader.toLowerCase()) {
+        const blockElements = buildDescriptionElements(trimmedDesc);
+        if (blockElements.length > 0) {
+          const desc = createElement('div', 'alert-card-description');
+          const visibleBlocks = blockElements.slice(0, 2);
+          const extraBlocks = blockElements.slice(2);
+
+          for (const blockEl of visibleBlocks) {
+            desc.appendChild(blockEl);
+          }
+
+          if (extraBlocks.length > 0) {
+            const details = createElement('details', 'alert-more-details');
+            const summary = createTextElement(
+              'summary',
+              'alert-more-summary',
+              `More details (${extraBlocks.length} more)`
+            );
+            const extraWrap = createElement('div', 'alert-more-body');
+            for (const blockEl of extraBlocks) {
+              extraWrap.appendChild(blockEl);
+            }
+            details.append(summary, extraWrap);
+            desc.appendChild(details);
+          }
+
+          item.appendChild(desc);
+        }
       }
 
       if (alert.url) {
@@ -331,12 +545,16 @@ export class AlertsViewComponent {
     return list;
   }
 
-  private renderFooter(): HTMLElement {
+  private renderFooter(state: AlertsRenderState): HTMLElement {
     const footer = createElement('div', 'alerts-view-footer');
+    const updated =
+      state.updatedAt !== null
+        ? ` · Updated ${formatClockTime(state.updatedAt, state.timeFormat24Hour)}`
+        : '';
     const note = createTextElement(
       'span',
       'alerts-source-note',
-      'Source: Sound Transit GTFS-RT alerts feed.'
+      `Source: Sound Transit GTFS-RT alerts feed${updated}.`
     );
     const link = createExternalLink(
       ST_ALERTS_WEB_URL,
