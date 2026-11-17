@@ -77,7 +77,52 @@ const formatter24h = new Intl.DateTimeFormat('en-US', {
   timeZone: 'America/Los_Angeles',
 });
 
+const seattleDayFormatter = new Intl.DateTimeFormat('en-CA', {
+  year: 'numeric',
+  month: '2-digit',
+  day: '2-digit',
+  timeZone: 'America/Los_Angeles',
+});
+
+const seattleMonthDayFormatter = new Intl.DateTimeFormat('en-US', {
+  month: 'short',
+  day: 'numeric',
+  timeZone: 'America/Los_Angeles',
+});
+
+const seattleMonthDayYearFormatter = new Intl.DateTimeFormat('en-US', {
+  month: 'short',
+  day: 'numeric',
+  year: 'numeric',
+  timeZone: 'America/Los_Angeles',
+});
+
 export function formatClockTime(epochMs: number, is24Hour: boolean = false): string {
   const formatter = is24Hour ? formatter24h : formatter12h;
   return formatter.format(epochMs);
+}
+
+/**
+ * Format an alert boundary timestamp in Seattle time, omitting the calendar date
+ * when it falls on the same local day as `nowEpochMs`.
+ */
+export function formatAlertTimestamp(
+  epochMs: number,
+  is24Hour: boolean = false,
+  nowEpochMs: number = Date.now()
+): string {
+  const clock = formatClockTime(epochMs, is24Hour);
+  const targetDay = seattleDayFormatter.format(epochMs);
+  const todayDay = seattleDayFormatter.format(nowEpochMs);
+  if (targetDay === todayDay) {
+    return clock;
+  }
+
+  const targetYear = targetDay.slice(0, 4);
+  const currentYear = todayDay.slice(0, 4);
+  const dateLabel =
+    targetYear === currentYear
+      ? seattleMonthDayFormatter.format(epochMs)
+      : seattleMonthDayYearFormatter.format(epochMs);
+  return `${dateLabel}, ${clock}`;
 }
