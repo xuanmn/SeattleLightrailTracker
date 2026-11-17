@@ -6,7 +6,6 @@ import { formatAlertTimestamp, formatClockTime } from '../utils/time';
 export interface AlertsViewCallbacks {
   onBackToStations: () => void;
   onRetry: () => void;
-  onRefresh?: () => void;
 }
 
 export interface AlertsRenderState {
@@ -18,8 +17,6 @@ export interface AlertsRenderState {
   timeFormat24Hour: boolean;
   nowEpochMs?: number;
 }
-
-type AlertsLineFilter = 'all' | TransitLineId;
 
 const SEVERITY_RANK: Record<AlertSeverity, number> = {
   SEVERE: 0,
@@ -193,8 +190,6 @@ function formatActiveWindow(
 export class AlertsViewComponent {
   private rootEl: HTMLElement;
   private callbacks: AlertsViewCallbacks;
-  private lineFilter: AlertsLineFilter = 'all';
-  private lastState: AlertsRenderState | null = null;
 
   constructor(callbacks: AlertsViewCallbacks) {
     this.callbacks = callbacks;
@@ -207,10 +202,8 @@ export class AlertsViewComponent {
   }
 
   public update(state: AlertsRenderState): void {
-    this.lastState = state;
     const nowEpochMs = state.nowEpochMs ?? Date.now();
     const fragment = document.createDocumentFragment();
-    fragment.appendChild(this.renderControlsBar(state));
 
     if (state.isLoading && state.updatedAt === null) {
       fragment.appendChild(this.renderLoadingSkeleton());
@@ -237,106 +230,11 @@ export class AlertsViewComponent {
     if (state.alerts.length === 0) {
       fragment.appendChild(this.renderEmptyCard(state));
     } else {
-      const visibleAlerts = this.getFilteredAlerts(state.alerts);
-      if (visibleAlerts.length === 0) {
-        fragment.appendChild(this.renderFilteredEmptyCard());
-      } else {
-        fragment.appendChild(this.renderAlertList(visibleAlerts, state, nowEpochMs));
-      }
+      fragment.appendChild(this.renderAlertList(state.alerts, state, nowEpochMs));
     }
 
     fragment.appendChild(this.renderFooter(state));
     this.rootEl.replaceChildren(fragment);
-  }
-
-  private getFilteredAlerts(alerts: ServiceAlert[]): ServiceAlert[] {
-    if (this.lineFilter === 'all') return alerts;
-    const filter = this.lineFilter;
-    return alerts.filter((alert) => alert.lines.includes(filter));
-  }
-
-  private setLineFilter(filter: AlertsLineFilter) {
-    if (this.lineFilter === filter) return;
-    this.lineFilter = filter;
-    if (this.lastState) {
-      this.update(this.lastState);
-    }
-  }
-
-  private renderControlsBar(state: AlertsRenderState): HTMLElement {
-    const header = createElement('div', 'alerts-view-header');
-
-    const filterGroup = createElement('div', 'alerts-filter-group');
-    filterGroup.setAttribute('role', 'group');
-    filterGroup.setAttribute('aria-label', 'Filter alerts by line');
-
-    const countAll = state.alerts.length;
-    const countLine1 = state.alerts.filter((a) => a.lines.includes('line-1')).length;
-    const countLine2 = state.alerts.filter((a) => a.lines.includes('line-2')).length;
-
-    const filterOptions: { key: AlertsLineFilter; label: string; count: number }[] = [
-      { key: 'all', label: 'All Lines', count: countAll },
-      { key: 'line-1', label: '1 Line', count: countLine1 },
-      { key: 'line-2', label: '2 Line', count: countLine2 },
-    ];
-
-    for (const option of filterOptions) {
-      const btn = createElement('button', 'alerts-filter-btn') as HTMLButtonElement;
-      btn.type = 'button';
-      btn.dataset.alertLineFilter = option.key;
-      const isSelected = this.lineFilter === option.key;
-      btn.classList.toggle('active', isSelected);
-      if (option.key === 'line-1') btn.classList.add('line-1');
-      if (option.key === 'line-2') btn.classList.add('line-2');
-      btn.setAttribute('aria-pressed', String(isSelected));
-
-      const labelSpan = document.createElement('span');
-      labelSpan.textContent = option.label;
-      btn.appendChild(labelSpan);
-
-      if (countAll > 0) {
-        const countSpan = createTextElement('span', 'alerts-filter-count', String(option.count));
-        btn.appendChild(countSpan);
-      }
-
-      btn.addEventListener('click', () => this.setLineFilter(option.key));
-      filterGroup.appendChild(btn);
-    }
-
-    const actions = createElement('div', 'alerts-view-actions');
-
-    const refreshBtn = createElement('button', 'alerts-refresh-btn') as HTMLButtonElement;
-    refreshBtn.type = 'button';
-    refreshBtn.setAttribute('aria-label', 'Refresh service alerts');
-    if (state.isLoading) {
-      refreshBtn.classList.add('is-loading');
-      refreshBtn.setAttribute('aria-busy', 'true');
-    }
-    const refreshIcon = createElement('span', 'alerts-refresh-icon');
-    refreshIcon.setAttribute('aria-hidden', 'true');
-    refreshIcon.innerHTML = ICONS.refresh;
-    const refreshLabel = document.createElement('span');
-    refreshLabel.textContent = state.isLoading ? 'Checking' : 'Refresh';
-    refreshBtn.append(refreshIcon, refreshLabel);
-    refreshBtn.addEventListener('click', () => {
-      if (this.callbacks.onRefresh) {
-        this.callbacks.onRefresh();
-      } else {
-        this.callbacks.onRetry();
-      }
-    });
-
-    actions.append(
-      refreshBtn,
-      createExternalLink(
-        ST_ALERTS_WEB_URL,
-        'soundtransit.org',
-        'alerts-official-link'
-      )
-    );
-
-    header.append(filterGroup, actions);
-    return header;
   }
 
   private renderLoadingSkeleton(): HTMLElement {
@@ -415,37 +313,6 @@ export class AlertsViewComponent {
     );
 
     actions.append(backBtn, officialLink);
-    card.append(titleRow, message, actions);
-    return card;
-  }
-
-  private renderFilteredEmptyCard(): HTMLElement {
-    const lineLabel = this.lineFilter === 'all' ? 'Link' : LINE_LABELS[this.lineFilter];
-    const card = createElement('div', 'alerts-empty-card');
-
-    const dot = createElement('span', 'alerts-good-dot');
-    dot.setAttribute('aria-hidden', 'true');
-
-    const titleRow = createElement('div', 'alerts-empty-title-row');
-    const title = createTextElement(
-      'h3',
-      'alerts-state-title',
-      `No active ${lineLabel} service alerts`
-    );
-    titleRow.append(dot, title);
-
-    const message = createTextElement(
-      'p',
-      'alerts-state-message',
-      'Other Link lines have active notices. Switch back to All Lines to view them.'
-    );
-
-    const actions = createElement('div', 'alerts-state-actions');
-    const resetBtn = createTextElement('button', 'alerts-back-btn', 'Show All Lines');
-    resetBtn.type = 'button';
-    resetBtn.addEventListener('click', () => this.setLineFilter('all'));
-
-    actions.appendChild(resetBtn);
     card.append(titleRow, message, actions);
     return card;
   }

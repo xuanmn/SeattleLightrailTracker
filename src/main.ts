@@ -212,7 +212,6 @@ export class TransitTrackerApp {
     this.alertsView = new AlertsViewComponent({
       onBackToStations: () => this.setViewMode('pinned'),
       onRetry: () => void this.fetchAlerts(true),
-      onRefresh: () => void this.fetchAlerts(true),
     });
     this.alertsView.getElement().classList.add('hidden');
     container.appendChild(this.alertsView.getElement());
@@ -308,8 +307,12 @@ export class TransitTrackerApp {
         this.renderViewModePills();
         this.syncAlertsUI();
       });
-      if (!this.alertsError && this.alertsUpdatedAt === null && !this.isFetchingAlerts) {
-        void this.fetchAlerts(false);
+      if (!this.isFetchingAlerts) {
+        if (this.alertsUpdatedAt !== null) {
+          void this.fetchAlerts(true);
+        } else if (!this.alertsError) {
+          void this.fetchAlerts(false);
+        }
       }
       return;
     }
