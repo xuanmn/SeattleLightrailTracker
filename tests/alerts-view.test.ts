@@ -241,12 +241,10 @@ describe('AlertsViewComponent', () => {
     expect(moreDetails?.querySelectorAll('p')).toHaveLength(2);
   });
 
-  it('supports filtering alerts by line and triggering manual refresh in header', () => {
-    const onRefresh = vi.fn();
+  it('omits secondary filter and header bar while still prioritizing activeLine and linking to soundtransit.org in footer', () => {
     const view = new AlertsViewComponent({
       onBackToStations: vi.fn(),
       onRetry: vi.fn(),
-      onRefresh,
     });
 
     view.update({
@@ -254,7 +252,7 @@ describe('AlertsViewComponent', () => {
         makeAlert({ id: 'a-line1', lines: ['line-1'], header: '1 Line advisory' }),
         makeAlert({ id: 'a-line2', lines: ['line-2'], header: '2 Line advisory' }),
       ],
-      activeLine: 'line-1',
+      activeLine: 'line-2',
       updatedAt: Date.UTC(2026, 10, 17, 17, 0, 0),
       isLoading: false,
       error: null,
@@ -262,20 +260,15 @@ describe('AlertsViewComponent', () => {
     });
 
     const el = view.getElement();
-    expect(el.querySelectorAll('.alert-card')).toHaveLength(2);
+    expect(el.querySelector('.alerts-view-header')).toBeNull();
+    expect(el.querySelector('.alerts-filter-group')).toBeNull();
+    expect(el.querySelector('.alerts-refresh-btn')).toBeNull();
 
-    const line2FilterBtn = el.querySelector<HTMLButtonElement>('[data-alert-line-filter="line-2"]');
-    expect(line2FilterBtn).not.toBeNull();
-    line2FilterBtn?.click();
-
-    const filteredCards = el.querySelectorAll<HTMLElement>('.alert-card');
-    expect(filteredCards).toHaveLength(1);
-    expect(filteredCards[0].dataset.alertId).toBe('a-line2');
-
-    const refreshBtn = el.querySelector<HTMLButtonElement>('.alerts-refresh-btn');
-    expect(refreshBtn).not.toBeNull();
-    refreshBtn?.click();
-    expect(onRefresh).toHaveBeenCalledTimes(1);
+    const cards = Array.from(el.querySelectorAll<HTMLElement>('.alert-card'));
+    expect(cards.map((c) => c.dataset.alertId)).toEqual(['a-line2', 'a-line1']);
+    expect(el.querySelector<HTMLAnchorElement>('.alerts-footer-link')?.href).toBe(
+      ST_ALERTS_WEB_URL
+    );
   });
 });
 
@@ -665,6 +658,29 @@ describe('TransitTrackerApp Service Alerts Integration', () => {
     expect(banner?.classList.contains('hidden')).toBe(true);
     // Alerts tab pill retains its active count badge after banner dismissal
     expect(document.querySelector('.alerts-tab-btn .alert-count-badge')?.textContent).toBe('2');
+
+    app.destroy();
+  });
+
+  it('refreshes alerts once automatically when opening the Alerts tab', async () => {
+    const fetchMock = mockNetwork({ alertsEntities: [] });
+
+    const { TransitTrackerApp } = await import('../src/main');
+    const app = new TransitTrackerApp();
+    await new Promise((r) => setTimeout(r, 25));
+
+    const alertsCallsBefore = fetchMock.mock.calls.filter(
+      (call) => String(call[0]) === ST_ALERTS_FEED_URL
+    ).length;
+    expect(alertsCallsBefore).toBe(1);
+
+    document.querySelector<HTMLButtonElement>('.alerts-tab-btn')?.click();
+    await new Promise((r) => setTimeout(r, 25));
+
+    const alertsCallsAfter = fetchMock.mock.calls.filter(
+      (call) => String(call[0]) === ST_ALERTS_FEED_URL
+    ).length;
+    expect(alertsCallsAfter).toBe(2);
 
     app.destroy();
   });
