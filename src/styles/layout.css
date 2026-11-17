@@ -496,6 +496,12 @@
   .brand-subtitle {
     display: none;
   }
+
+  .toolbar-controls .view-mode-btn {
+    padding: 0.3rem 0.45rem;
+    font-size: 0.78rem;
+    gap: 0.3rem;
+  }
 }
 
 /* Floating Micro-Toast Notification */

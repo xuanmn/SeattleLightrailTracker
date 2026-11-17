@@ -224,16 +224,19 @@ describe('AlertsViewComponent', () => {
     const cards = el.querySelectorAll<HTMLElement>('.alert-card');
     expect(cards).toHaveLength(2);
 
+    const garageCard = el.querySelector<HTMLElement>('[data-alert-id="garage-long"]')!;
+    const elevatorCard = el.querySelector<HTMLElement>('[data-alert-id="elevator-long"]')!;
+
     // OTHER_EFFECT is suppressed; identical header/description is not duplicated
-    expect(cards[0].textContent).not.toContain('Other Effect');
-    expect(cards[0].querySelector('.alert-card-description')).toBeNull();
-    expect(cards[0].querySelector('.alert-card-window')?.textContent).toMatch(/Nov 3.*Jan 29, 2027/);
+    expect(garageCard.textContent).not.toContain('Other Effect');
+    expect(garageCard.querySelector('.alert-card-description')).toBeNull();
+    expect(garageCard.querySelector('.alert-card-window')?.textContent).toMatch(/Nov 3.*Jan 29, 2027/);
 
     // ACCESSIBILITY_ISSUE maps to Elevator / Access; >2 blocks collapse into native <details>
-    expect(cards[1].querySelector('.alert-effect-tag')?.textContent).toBe('Elevator / Access');
-    const inlineParas = cards[1].querySelectorAll('.alert-card-description > p');
+    expect(elevatorCard.querySelector('.alert-effect-tag')?.textContent).toBe('Elevator / Access');
+    const inlineParas = elevatorCard.querySelectorAll('.alert-card-description > p');
     expect(inlineParas).toHaveLength(2);
-    const moreDetails = cards[1].querySelector('details.alert-more-details');
+    const moreDetails = elevatorCard.querySelector('details.alert-more-details');
     expect(moreDetails).not.toBeNull();
     expect(moreDetails?.querySelectorAll('p')).toHaveLength(2);
   });
