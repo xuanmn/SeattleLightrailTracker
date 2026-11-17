@@ -123,7 +123,7 @@ function buildDescriptionElements(text: string): HTMLElement[] {
     const flushProse = () => {
       if (proseLines.length === 0) return;
       const p = document.createElement('p');
-      p.textContent = proseLines.join(' ');
+      p.textContent = proseLines.join('\n');
       elements.push(p);
       proseLines = [];
     };
@@ -372,28 +372,9 @@ export class AlertsViewComponent {
         const blockElements = buildDescriptionElements(trimmedDesc);
         if (blockElements.length > 0) {
           const desc = createElement('div', 'alert-card-description');
-          const visibleBlocks = blockElements.slice(0, 2);
-          const extraBlocks = blockElements.slice(2);
-
-          for (const blockEl of visibleBlocks) {
+          for (const blockEl of blockElements) {
             desc.appendChild(blockEl);
           }
-
-          if (extraBlocks.length > 0) {
-            const details = createElement('details', 'alert-more-details');
-            const summary = createTextElement(
-              'summary',
-              'alert-more-summary',
-              `More details (${extraBlocks.length} more)`
-            );
-            const extraWrap = createElement('div', 'alert-more-body');
-            for (const blockEl of extraBlocks) {
-              extraWrap.appendChild(blockEl);
-            }
-            details.append(summary, extraWrap);
-            desc.appendChild(details);
-          }
-
           item.appendChild(desc);
         }
       }

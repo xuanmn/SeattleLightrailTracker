@@ -232,13 +232,12 @@ describe('AlertsViewComponent', () => {
     expect(garageCard.querySelector('.alert-card-description')).toBeNull();
     expect(garageCard.querySelector('.alert-card-window')?.textContent).toMatch(/Nov 3.*Jan 29, 2027/);
 
-    // ACCESSIBILITY_ISSUE maps to Elevator / Access; >2 blocks collapse into native <details>
+    // ACCESSIBILITY_ISSUE maps to Elevator / Access; all blocks render inline without click-to-expand truncation
     expect(elevatorCard.querySelector('.alert-effect-tag')?.textContent).toBe('Elevator / Access');
     const inlineParas = elevatorCard.querySelectorAll('.alert-card-description > p');
-    expect(inlineParas).toHaveLength(2);
-    const moreDetails = elevatorCard.querySelector('details.alert-more-details');
-    expect(moreDetails).not.toBeNull();
-    expect(moreDetails?.querySelectorAll('p')).toHaveLength(2);
+    expect(inlineParas).toHaveLength(4);
+    expect(elevatorCard.querySelector('details.alert-more-details')).toBeNull();
+    expect(elevatorCard.textContent).toContain('Block four extra step.');
   });
 
   it('omits secondary filter and header bar while still prioritizing activeLine and linking to soundtransit.org in footer', () => {
