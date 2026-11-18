@@ -96,7 +96,6 @@
   background-color: rgba(245, 158, 11, 0.1);
   color: var(--text-primary);
   box-shadow: var(--shadow-sm);
-  cursor: pointer;
   transition: background-color var(--transition-fast), border-color var(--transition-fast);
 }
 

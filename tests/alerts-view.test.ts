@@ -240,6 +240,56 @@ describe('AlertsViewComponent', () => {
     expect(elevatorCard.textContent).toContain('Block four extra step.');
   });
 
+  it('preserves prose newlines, parses Sound Transit bullets cleanly without corrupting hyphens, keeps ordered list start numbers, and escapes XSS in lists', () => {
+    const view = new AlertsViewComponent({
+      onBackToStations: vi.fn(),
+      onRetry: vi.fn(),
+    });
+
+    view.update({
+      alerts: [
+        makeAlert({
+          id: 'structured-text',
+          header: 'Northgate & Elevator updates',
+          description: [
+            'Line one\nLine two',
+            '*On Monday, work pauses.\n- Regular bullet with <script>alert(1)</script>',
+            '-- Important note --\n-1 Line shuttle bay B\n**Bold header**',
+            '3. Continue to Exit C2.\n4. Take elevator up.',
+          ].join('\n\n'),
+        }),
+      ],
+      activeLine: 'line-1',
+      updatedAt: Date.UTC(2026, 10, 17, 17, 0, 0),
+      isLoading: false,
+      error: null,
+      timeFormat24Hour: false,
+    });
+
+    const el = view.getElement();
+    const desc = el.querySelector('.alert-card-description')!;
+    expect(desc.querySelector('script')).toBeNull();
+
+    const paras = desc.querySelectorAll('p');
+    expect(paras).toHaveLength(2);
+    expect(paras[0].textContent).toBe('Line one\nLine two');
+    expect(paras[1].textContent).toBe('-- Important note --\n-1 Line shuttle bay B\n**Bold header**');
+
+    const ulItems = desc.querySelectorAll(':scope > ul > li');
+    expect(Array.from(ulItems).map((li) => li.textContent)).toEqual([
+      'On Monday, work pauses.',
+      'Regular bullet with <script>alert(1)</script>',
+    ]);
+
+    const ol = desc.querySelector(':scope > ol') as HTMLOListElement;
+    expect(ol).not.toBeNull();
+    expect(ol.start).toBe(3);
+    expect(Array.from(ol.querySelectorAll(':scope > li')).map((li) => li.textContent)).toEqual([
+      'Continue to Exit C2.',
+      'Take elevator up.',
+    ]);
+  });
+
   it('omits secondary filter and header bar while still prioritizing activeLine and linking to soundtransit.org in footer', () => {
     const view = new AlertsViewComponent({
       onBackToStations: vi.fn(),

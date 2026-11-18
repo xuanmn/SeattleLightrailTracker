@@ -136,8 +136,8 @@ function buildDescriptionElements(text: string): HTMLElement[] {
     };
 
     for (const line of lines) {
-      const unorderedMatch = line.match(/^(?:\*|-|•)\s*(.+)$/);
-      const orderedMatch = line.match(/^\d+[.)]\s+(.+)$/);
+      const unorderedMatch = line.match(/^(?:\*(?!\*)\s*|-\s+|•\s+)(.+)$/);
+      const orderedMatch = line.match(/^(\d+)[.)]\s+(.+)$/);
 
       if (unorderedMatch) {
         flushProse();
@@ -153,11 +153,16 @@ function buildDescriptionElements(text: string): HTMLElement[] {
         flushProse();
         if (listType !== 'ol') {
           flushList();
-          listEl = createElement('ol', 'alert-card-list alert-card-list--ordered');
+          const ol = createElement('ol', 'alert-card-list alert-card-list--ordered');
+          const startNum = Number(orderedMatch[1]);
+          if (startNum !== 1) {
+            ol.start = startNum;
+          }
+          listEl = ol;
           listType = 'ol';
         }
         const li = document.createElement('li');
-        li.textContent = orderedMatch[1].trim();
+        li.textContent = orderedMatch[2].trim();
         listEl!.appendChild(li);
       } else {
         flushList();
