@@ -51,6 +51,7 @@ const IGNORED_ENUM_VALUES = new Set([
   'UNKNOWN_CAUSE',
   'OTHER_EFFECT',
   'OTHER_CAUSE',
+  'NO_EFFECT',
 ]);
 
 /** Create an element with plain text assigned safely via textContent (never innerHTML). */
@@ -118,6 +119,7 @@ function buildDescriptionElements(text: string): HTMLElement[] {
 
     let listEl: HTMLUListElement | HTMLOListElement | null = null;
     let listType: 'ul' | 'ol' | null = null;
+    let expectedOrderNum = 1;
     let proseLines: string[] = [];
 
     const flushProse = () => {
@@ -133,11 +135,12 @@ function buildDescriptionElements(text: string): HTMLElement[] {
       elements.push(listEl);
       listEl = null;
       listType = null;
+      expectedOrderNum = 1;
     };
 
     for (const line of lines) {
       const unorderedMatch = line.match(/^(?:\*(?!\*)\s*|-\s+|•\s+)(.+)$/);
-      const orderedMatch = line.match(/^(\d+)[.)]\s+(.+)$/);
+      const orderedMatch = line.match(/^(\d{1,2})[.)]\s+(.+)$/);
 
       if (unorderedMatch) {
         flushProse();
@@ -151,17 +154,22 @@ function buildDescriptionElements(text: string): HTMLElement[] {
         listEl!.appendChild(li);
       } else if (orderedMatch) {
         flushProse();
+        const itemNum = Number(orderedMatch[1]);
         if (listType !== 'ol') {
           flushList();
           const ol = createElement('ol', 'alert-card-list alert-card-list--ordered');
-          const startNum = Number(orderedMatch[1]);
-          if (startNum !== 1) {
-            ol.start = startNum;
+          if (itemNum !== 1) {
+            ol.start = itemNum;
           }
+          expectedOrderNum = itemNum;
           listEl = ol;
           listType = 'ol';
         }
         const li = document.createElement('li');
+        if (itemNum !== expectedOrderNum) {
+          li.value = itemNum;
+        }
+        expectedOrderNum = itemNum + 1;
         li.textContent = orderedMatch[2].trim();
         listEl!.appendChild(li);
       } else {
@@ -359,10 +367,11 @@ export class AlertsViewComponent {
 
       item.appendChild(metaRow);
 
+      const trimmedHeader = alert.header.trim();
       const headline = createTextElement(
         'h3',
         'alert-card-title',
-        alert.header || 'Link Service Alert'
+        trimmedHeader || 'Link Service Alert'
       );
       item.appendChild(headline);
 
@@ -372,7 +381,6 @@ export class AlertsViewComponent {
       }
 
       const trimmedDesc = alert.description.trim();
-      const trimmedHeader = alert.header.trim();
       if (trimmedDesc && trimmedDesc.toLowerCase() !== trimmedHeader.toLowerCase()) {
         const blockElements = buildDescriptionElements(trimmedDesc);
         if (blockElements.length > 0) {

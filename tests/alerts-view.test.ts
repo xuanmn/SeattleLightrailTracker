@@ -254,9 +254,10 @@ describe('AlertsViewComponent', () => {
           description: [
             'Line one\nLine two',
             '*On Monday, work pauses.\n- Regular bullet with <script>alert(1)</script>',
-            '-- Important note --\n-1 Line shuttle bay B\n**Bold header**',
-            '3. Continue to Exit C2.\n4. Take elevator up.',
+            '-- Important note --\n-1 Line shuttle bay B\n**Bold header**\n2026. Year stays prose.',
+            '3. Continue to Exit C2.\n5. Take elevator up.',
           ].join('\n\n'),
+          effect: 'NO_EFFECT',
         }),
       ],
       activeLine: 'line-1',
@@ -267,13 +268,16 @@ describe('AlertsViewComponent', () => {
     });
 
     const el = view.getElement();
+    expect(el.querySelector('.alert-effect-tag')).toBeNull();
     const desc = el.querySelector('.alert-card-description')!;
     expect(desc.querySelector('script')).toBeNull();
 
     const paras = desc.querySelectorAll('p');
     expect(paras).toHaveLength(2);
     expect(paras[0].textContent).toBe('Line one\nLine two');
-    expect(paras[1].textContent).toBe('-- Important note --\n-1 Line shuttle bay B\n**Bold header**');
+    expect(paras[1].textContent).toBe(
+      '-- Important note --\n-1 Line shuttle bay B\n**Bold header**\n2026. Year stays prose.'
+    );
 
     const ulItems = desc.querySelectorAll(':scope > ul > li');
     expect(Array.from(ulItems).map((li) => li.textContent)).toEqual([
@@ -284,10 +288,12 @@ describe('AlertsViewComponent', () => {
     const ol = desc.querySelector(':scope > ol') as HTMLOListElement;
     expect(ol).not.toBeNull();
     expect(ol.start).toBe(3);
-    expect(Array.from(ol.querySelectorAll(':scope > li')).map((li) => li.textContent)).toEqual([
+    const olItems = Array.from(ol.querySelectorAll<HTMLLIElement>(':scope > li'));
+    expect(olItems.map((li) => li.textContent)).toEqual([
       'Continue to Exit C2.',
       'Take elevator up.',
     ]);
+    expect(olItems[1].value).toBe(5);
   });
 
   it('omits secondary filter and header bar while still prioritizing activeLine and linking to soundtransit.org in footer', () => {
@@ -730,6 +736,93 @@ describe('TransitTrackerApp Service Alerts Integration', () => {
       (call) => String(call[0]) === ST_ALERTS_FEED_URL
     ).length;
     expect(alertsCallsAfter).toBe(2);
+
+    app.destroy();
+  });
+
+  it('keeps banner dismissed when a secondary alert clears, resurfaces on in-place headline update, and restores focus to Alerts tab on dismiss', async () => {
+    const nowSec = Math.floor(Date.now() / 1000);
+    let currentEntities = [
+      {
+        id: 'incident-1',
+        alert: {
+          severity_level: 'WARNING',
+          effect: 'SIGNIFICANT_DELAYS',
+          active_period: [{ start: nowSec - 120 }],
+          informed_entity: [{ route_id: '100479' }],
+          header_text: { translation: [{ language: 'en', text: '1 Line 10-minute delays' }] },
+        },
+      },
+      {
+        id: 'elevator-2',
+        alert: {
+          severity_level: 'WARNING',
+          effect: 'ACCESSIBILITY_ISSUE',
+          active_period: [{ start: nowSec - 60 }],
+          informed_entity: [{ route_id: '100479' }],
+          header_text: { translation: [{ language: 'en', text: 'Capitol Hill elevator out' }] },
+        },
+      },
+    ];
+
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async (url: string) => {
+        if (String(url) === ST_ALERTS_FEED_URL) {
+          return {
+            ok: true,
+            status: 200,
+            json: async () => ({
+              header: { timestamp: nowSec },
+              entity: currentEntities,
+            }),
+          };
+        }
+        return {
+          ok: true,
+          status: 200,
+          json: async () => ({
+            code: 200,
+            data: { entry: { stopId: '40_1121', arrivalsAndDepartures: [] } },
+          }),
+        };
+      })
+    );
+
+    const { TransitTrackerApp } = await import('../src/main');
+    const app = new TransitTrackerApp();
+    await new Promise((r) => setTimeout(r, 25));
+
+    const triggerBtn = document.querySelector<HTMLButtonElement>('.disruption-banner-trigger');
+    expect(triggerBtn?.getAttribute('aria-label')).toContain('1 Line 10-minute delays');
+
+    const dismissBtn = document.querySelector<HTMLButtonElement>('.disruption-banner-dismiss')!;
+    dismissBtn.focus();
+    dismissBtn.click();
+
+    expect(document.querySelector('.disruption-banner')?.classList.contains('hidden')).toBe(true);
+    expect(document.activeElement).toBe(document.querySelector('.alerts-tab-btn'));
+
+    // Secondary alert clears while already-dismissed primary alert remains unchanged -> stay dismissed
+    currentEntities = [currentEntities[0]];
+    await (app as unknown as { fetchAlerts: (b: boolean) => Promise<void> }).fetchAlerts(true);
+    expect(document.querySelector('.disruption-banner')?.classList.contains('hidden')).toBe(true);
+
+    // Primary alert updates its headline in-place under same ID -> banner must resurface
+    currentEntities = [
+      {
+        ...currentEntities[0],
+        alert: {
+          ...currentEntities[0].alert,
+          header_text: { translation: [{ language: 'en', text: '1 Line 25-minute delays — bus shuttle active' }] },
+        },
+      },
+    ];
+    await (app as unknown as { fetchAlerts: (b: boolean) => Promise<void> }).fetchAlerts(true);
+    expect(document.querySelector('.disruption-banner')?.classList.contains('hidden')).toBe(false);
+    expect(document.querySelector('.disruption-banner')?.textContent).toContain(
+      '1 Line 25-minute delays — bus shuttle active'
+    );
 
     app.destroy();
   });

@@ -42,6 +42,15 @@ import { formatClockTime } from './utils/time';
 const SYNC_INTERVAL_MS = 60 * 1000; // Fixed 60-second real-time sync cycle
 const MAX_CONCURRENT_STATION_FETCHES = 6; // Each station fetches 2 platforms
 
+const TRANSIT_DISRUPTION_EFFECTS = new Set([
+  'NO_SERVICE',
+  'REDUCED_SERVICE',
+  'SIGNIFICANT_DELAYS',
+  'DETOUR',
+  'MODIFIED_SERVICE',
+  'STOP_MOVED',
+]);
+
 const NETWORK_INTERRUPTED_MESSAGE =
   'Network connection interrupted. Unable to reach live transit servers while reconnecting...';
 const OFFLINE_MESSAGE =
@@ -93,7 +102,8 @@ export class TransitTrackerApp {
   private alertsError: string | null = null;
   private isFetchingAlerts: boolean = false;
   private alertsAbortController?: AbortController;
-  private dismissedBannerSignature: string | null = null;
+  private dismissedAlertFingerprints: Set<string> = new Set();
+  private lastBannerRenderKey: string = '';
 
   private stationsGridEl!: HTMLElement;
   private lineTitleEl!: HTMLElement;
@@ -996,16 +1006,7 @@ export class TransitTrackerApp {
 
   private getAlertBannerPriorityRank(alert: ServiceAlert): number {
     if (alert.severity === 'SEVERE') return 0;
-    const transitEffects = new Set([
-      'NO_SERVICE',
-      'REDUCED_SERVICE',
-      'SIGNIFICANT_DELAYS',
-      'DETOUR',
-      'MODIFIED_SERVICE',
-      'ADDITIONAL_SERVICE',
-      'STOP_MOVED',
-    ]);
-    return transitEffects.has(alert.effect.trim().toUpperCase()) ? 0 : 1;
+    return TRANSIT_DISRUPTION_EFFECTS.has(alert.effect.trim().toUpperCase()) ? 0 : 1;
   }
 
   private getLeadAlertForBanner(): ServiceAlert | undefined {
@@ -1025,11 +1026,8 @@ export class TransitTrackerApp {
     })[0];
   }
 
-  private getAlertsSignature(): string {
-    return this.activeAlerts
-      .map((alert) => `${alert.id}:${alert.severity}`)
-      .sort()
-      .join('|');
+  private getAlertFingerprint(alert: ServiceAlert): string {
+    return `${alert.id}:${alert.severity}:${alert.effect}:${alert.header}`;
   }
 
   private renderDisruptionBanner() {
@@ -1037,29 +1035,55 @@ export class TransitTrackerApp {
 
     const count = this.activeAlerts.length;
     if (count === 0) {
-      this.dismissedBannerSignature = null;
+      this.dismissedAlertFingerprints.clear();
+      this.lastBannerRenderKey = '';
       this.disruptionBannerEl.className = 'disruption-banner hidden';
       return;
     }
 
-    const signature = this.getAlertsSignature();
-    if (this.dismissedBannerSignature !== null && this.dismissedBannerSignature !== signature) {
-      this.dismissedBannerSignature = null;
+    const activeFingerprints = this.activeAlerts.map((alert) => this.getAlertFingerprint(alert));
+    const activeFingerprintSet = new Set(activeFingerprints);
+    for (const stored of this.dismissedAlertFingerprints) {
+      if (!activeFingerprintSet.has(stored)) {
+        this.dismissedAlertFingerprints.delete(stored);
+      }
     }
 
-    if (this.viewMode === 'alerts' || this.dismissedBannerSignature === signature) {
+    const allDismissed = activeFingerprints.every((fp) =>
+      this.dismissedAlertFingerprints.has(fp)
+    );
+
+    if (this.viewMode === 'alerts' || allDismissed) {
+      const activeEl = document.activeElement;
+      if (activeEl instanceof Node && this.disruptionBannerEl.contains(activeEl)) {
+        this.alertsBtn?.focus();
+      }
+      this.lastBannerRenderKey = '';
       this.disruptionBannerEl.className = 'disruption-banner hidden';
       return;
     }
 
     const lead = this.getLeadAlertForBanner();
     const isSevere = lead?.severity === 'SEVERE';
+    const headlineText = lead?.header.trim() || 'Active Link service alert';
+    const ctaText = count > 1 ? `View alerts (${count})` : 'View alert';
+    const nextRenderKey = `${isSevere ? 'severe' : 'warning'}|${headlineText}|${ctaText}|${activeFingerprints.join('|')}`;
+
+    if (
+      this.lastBannerRenderKey === nextRenderKey &&
+      !this.disruptionBannerEl.classList.contains('hidden')
+    ) {
+      return;
+    }
+    this.lastBannerRenderKey = nextRenderKey;
+
     this.disruptionBannerEl.className = `disruption-banner ${
       isSevere ? 'severity-severe' : 'severity-warning'
     }`;
 
     const triggerBtn = createElement('button', 'disruption-banner-trigger') as HTMLButtonElement;
     triggerBtn.type = 'button';
+    triggerBtn.setAttribute('aria-label', `${headlineText} — ${ctaText}`);
 
     const mainWrap = createElement('span', 'disruption-banner-main');
     const icon = createElement('span', 'disruption-banner-icon');
@@ -1067,11 +1091,11 @@ export class TransitTrackerApp {
     icon.innerHTML = ICONS.alertTriangle;
 
     const text = createElement('span', 'disruption-banner-text');
-    text.textContent = lead?.header || 'Active Link service alert';
+    text.textContent = headlineText;
     mainWrap.append(icon, text);
 
     const cta = createElement('span', 'disruption-banner-cta');
-    cta.textContent = count > 1 ? `View alerts (${count})` : 'View alert';
+    cta.textContent = ctaText;
     triggerBtn.append(mainWrap, cta);
 
     const dismissBtn = createElement('button', 'disruption-banner-dismiss') as HTMLButtonElement;
@@ -1080,8 +1104,11 @@ export class TransitTrackerApp {
     dismissBtn.innerHTML = ICONS.close;
     dismissBtn.addEventListener('click', (e) => {
       e.stopPropagation();
-      this.dismissedBannerSignature = signature;
+      for (const fp of activeFingerprints) {
+        this.dismissedAlertFingerprints.add(fp);
+      }
       this.renderDisruptionBanner();
+      this.alertsBtn?.focus();
     });
 
     this.disruptionBannerEl.replaceChildren(triggerBtn, dismissBtn);
