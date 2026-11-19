@@ -325,6 +325,30 @@ describe('AlertsViewComponent', () => {
       ST_ALERTS_WEB_URL
     );
   });
+
+  it('skips rebuilding DOM nodes when update receives an unchanged render state', () => {
+    const view = new AlertsViewComponent({
+      onBackToStations: vi.fn(),
+      onRetry: vi.fn(),
+    });
+
+    const state = {
+      alerts: [makeAlert({ id: 'stable-1', header: 'Stable advisory' })],
+      activeLine: 'line-1' as const,
+      updatedAt: Date.UTC(2026, 10, 18, 20, 0, 0),
+      isLoading: false,
+      error: null,
+      timeFormat24Hour: false,
+      nowEpochMs: Date.UTC(2026, 10, 18, 20, 0, 0),
+    };
+
+    view.update(state);
+    const firstListNode = view.getElement().querySelector('.alerts-list');
+    expect(firstListNode).not.toBeNull();
+
+    view.update({ ...state, alerts: [makeAlert({ id: 'stable-1', header: 'Stable advisory' })] });
+    expect(view.getElement().querySelector('.alerts-list')).toBe(firstListNode);
+  });
 });
 
 describe('TransitTrackerApp Service Alerts Integration', () => {
@@ -391,7 +415,7 @@ describe('TransitTrackerApp Service Alerts Integration', () => {
     return fetchMock;
   }
 
-  it('keeps Alerts tab quiet and disruption banner hidden when 0 alerts exist, and opens empty state on click', async () => {
+  it('keeps Alerts tab quiet without a homepage banner when 0 alerts exist, and opens empty state on click', async () => {
     mockNetwork({ alertsEntities: [] });
 
     const { TransitTrackerApp } = await import('../src/main');
@@ -405,8 +429,9 @@ describe('TransitTrackerApp Service Alerts Integration', () => {
     expect(alertsTabBtn?.querySelector('.alert-count-badge')).toBeNull();
     expect(alertsTabBtn?.getAttribute('aria-label')).toBe('Alerts');
 
-    const banner = document.querySelector<HTMLElement>('.disruption-banner');
-    expect(banner?.classList.contains('hidden')).toBe(true);
+    expect(document.querySelector('.disruption-banner')).toBeNull();
+    expect(document.querySelector('.dashboard-view-stage .stations-grid')).not.toBeNull();
+    expect(document.querySelector('.dashboard-view-stage .alerts-view')).not.toBeNull();
 
     alertsTabBtn?.click();
     const stationsGrid = document.querySelector<HTMLElement>('.stations-grid');
@@ -422,7 +447,7 @@ describe('TransitTrackerApp Service Alerts Integration', () => {
     app.destroy();
   });
 
-  it('highlights Alerts tab and displays clickable disruption banner when WARNING and SEVERE alerts are active', async () => {
+  it('highlights Alerts tab without rendering a homepage banner when WARNING and SEVERE alerts are active, preserving pill badge DOM on click', async () => {
     const nowSec = Math.floor(Date.now() / 1000);
     mockNetwork({
       alertsEntities: [
@@ -454,19 +479,18 @@ describe('TransitTrackerApp Service Alerts Integration', () => {
     const alertsTabBtn = document.querySelector<HTMLButtonElement>('.alerts-tab-btn');
     expect(alertsTabBtn?.classList.contains('has-severe')).toBe(true);
     expect(alertsTabBtn?.classList.contains('has-warning')).toBe(false);
-    expect(alertsTabBtn?.querySelector('.alert-count-badge')?.textContent).toBe('2');
+    const badgeBeforeClick = alertsTabBtn?.querySelector('.alert-count-badge');
+    expect(badgeBeforeClick?.textContent).toBe('2');
     expect(alertsTabBtn?.getAttribute('aria-label')).toBe('Alerts, 2 active');
 
-    const banner = document.querySelector<HTMLButtonElement>('.disruption-banner');
-    expect(banner).not.toBeNull();
-    expect(banner?.classList.contains('hidden')).toBe(false);
-    expect(banner?.classList.contains('severity-severe')).toBe(true);
-    expect(banner?.textContent).toContain('Signal issue at SODO');
+    // No disruption banner on the homepage
+    expect(document.querySelector('.disruption-banner')).toBeNull();
 
-    banner?.click();
+    alertsTabBtn?.click();
     expect(document.querySelector('.stations-grid')?.classList.contains('hidden')).toBe(true);
-    expect(banner?.classList.contains('hidden')).toBe(true);
     expect(document.querySelectorAll('.alert-card')).toHaveLength(2);
+    // Pill child node should be preserved across active toggle so CSS transitions run smoothly
+    expect(alertsTabBtn?.querySelector('.alert-count-badge')).toBe(badgeBeforeClick);
 
     app.destroy();
   });
@@ -671,159 +695,51 @@ describe('TransitTrackerApp Service Alerts Integration', () => {
     app.destroy();
   });
 
-  it('prioritizes transit disruptions over facility advisories in the banner and allows dismissing for the session', async () => {
-    const nowSec = Math.floor(Date.now() / 1000);
-    mockNetwork({
-      alertsEntities: [
-        {
-          id: 'elevator-out',
-          alert: {
-            severity_level: 'WARNING',
-            effect: 'ACCESSIBILITY_ISSUE',
-            active_period: [{ start: nowSec - 10 }],
-            informed_entity: [{ route_id: '100479' }],
-            header_text: { translation: [{ language: 'en', text: 'Westlake Elevator 305 unavailable' }] },
-          },
-        },
-        {
-          id: 'delay-1',
-          alert: {
-            severity_level: 'WARNING',
-            effect: 'SIGNIFICANT_DELAYS',
-            active_period: [{ start: nowSec - 120 }],
-            informed_entity: [{ route_id: '100479' }],
-            header_text: { translation: [{ language: 'en', text: '1 Line trains delayed 15 minutes' }] },
-          },
-        },
-      ],
-    });
-
-    const { TransitTrackerApp } = await import('../src/main');
-    const app = new TransitTrackerApp();
-    await new Promise((r) => setTimeout(r, 25));
-
-    const banner = document.querySelector<HTMLElement>('.disruption-banner');
-    expect(banner?.classList.contains('hidden')).toBe(false);
-    expect(banner?.textContent).toContain('1 Line trains delayed 15 minutes');
-
-    const dismissBtn = document.querySelector<HTMLButtonElement>('.disruption-banner-dismiss');
-    expect(dismissBtn).not.toBeNull();
-    dismissBtn?.click();
-
-    expect(banner?.classList.contains('hidden')).toBe(true);
-    // Alerts tab pill retains its active count badge after banner dismissal
-    expect(document.querySelector('.alerts-tab-btn .alert-count-badge')?.textContent).toBe('2');
-
-    app.destroy();
-  });
-
-  it('refreshes alerts once automatically when opening the Alerts tab', async () => {
+  it('refreshes alerts after the view transition finishes when opening the Alerts tab', async () => {
     const fetchMock = mockNetwork({ alertsEntities: [] });
 
-    const { TransitTrackerApp } = await import('../src/main');
-    const app = new TransitTrackerApp();
-    await new Promise((r) => setTimeout(r, 25));
+    let finishTransition!: () => void;
+    const finished = new Promise<void>((resolve) => {
+      finishTransition = resolve;
+    });
+    const startViewTransitionSpy = vi.fn((cb: () => void) => {
+      cb();
+      return { finished };
+    });
+    const docWithTransition = document as unknown as {
+      startViewTransition?: (cb: () => void) => { finished: Promise<void> };
+    };
+    const originalStartViewTransition = docWithTransition.startViewTransition;
+    docWithTransition.startViewTransition = startViewTransitionSpy;
 
-    const alertsCallsBefore = fetchMock.mock.calls.filter(
-      (call) => String(call[0]) === ST_ALERTS_FEED_URL
-    ).length;
-    expect(alertsCallsBefore).toBe(1);
+    try {
+      const { TransitTrackerApp } = await import('../src/main');
+      const app = new TransitTrackerApp();
+      await new Promise((r) => setTimeout(r, 25));
 
-    document.querySelector<HTMLButtonElement>('.alerts-tab-btn')?.click();
-    await new Promise((r) => setTimeout(r, 25));
+      const countAlertCalls = () =>
+        fetchMock.mock.calls.filter((call) => String(call[0]) === ST_ALERTS_FEED_URL).length;
 
-    const alertsCallsAfter = fetchMock.mock.calls.filter(
-      (call) => String(call[0]) === ST_ALERTS_FEED_URL
-    ).length;
-    expect(alertsCallsAfter).toBe(2);
+      expect(countAlertCalls()).toBe(1);
 
-    app.destroy();
-  });
+      document.querySelector<HTMLButtonElement>('.alerts-tab-btn')?.click();
+      await new Promise((r) => setTimeout(r, 10));
 
-  it('keeps banner dismissed when a secondary alert clears, resurfaces on in-place headline update, and restores focus to Alerts tab on dismiss', async () => {
-    const nowSec = Math.floor(Date.now() / 1000);
-    let currentEntities = [
-      {
-        id: 'incident-1',
-        alert: {
-          severity_level: 'WARNING',
-          effect: 'SIGNIFICANT_DELAYS',
-          active_period: [{ start: nowSec - 120 }],
-          informed_entity: [{ route_id: '100479' }],
-          header_text: { translation: [{ language: 'en', text: '1 Line 10-minute delays' }] },
-        },
-      },
-      {
-        id: 'elevator-2',
-        alert: {
-          severity_level: 'WARNING',
-          effect: 'ACCESSIBILITY_ISSUE',
-          active_period: [{ start: nowSec - 60 }],
-          informed_entity: [{ route_id: '100479' }],
-          header_text: { translation: [{ language: 'en', text: 'Capitol Hill elevator out' }] },
-        },
-      },
-    ];
+      // Background refresh waits for the view transition to complete so DOM updates never interrupt it
+      expect(startViewTransitionSpy).toHaveBeenCalledTimes(1);
+      expect(countAlertCalls()).toBe(1);
 
-    vi.stubGlobal(
-      'fetch',
-      vi.fn(async (url: string) => {
-        if (String(url) === ST_ALERTS_FEED_URL) {
-          return {
-            ok: true,
-            status: 200,
-            json: async () => ({
-              header: { timestamp: nowSec },
-              entity: currentEntities,
-            }),
-          };
-        }
-        return {
-          ok: true,
-          status: 200,
-          json: async () => ({
-            code: 200,
-            data: { entry: { stopId: '40_1121', arrivalsAndDepartures: [] } },
-          }),
-        };
-      })
-    );
+      finishTransition();
+      await new Promise((r) => setTimeout(r, 25));
+      expect(countAlertCalls()).toBe(2);
 
-    const { TransitTrackerApp } = await import('../src/main');
-    const app = new TransitTrackerApp();
-    await new Promise((r) => setTimeout(r, 25));
-
-    const triggerBtn = document.querySelector<HTMLButtonElement>('.disruption-banner-trigger');
-    expect(triggerBtn?.getAttribute('aria-label')).toContain('1 Line 10-minute delays');
-
-    const dismissBtn = document.querySelector<HTMLButtonElement>('.disruption-banner-dismiss')!;
-    dismissBtn.focus();
-    dismissBtn.click();
-
-    expect(document.querySelector('.disruption-banner')?.classList.contains('hidden')).toBe(true);
-    expect(document.activeElement).toBe(document.querySelector('.alerts-tab-btn'));
-
-    // Secondary alert clears while already-dismissed primary alert remains unchanged -> stay dismissed
-    currentEntities = [currentEntities[0]];
-    await (app as unknown as { fetchAlerts: (b: boolean) => Promise<void> }).fetchAlerts(true);
-    expect(document.querySelector('.disruption-banner')?.classList.contains('hidden')).toBe(true);
-
-    // Primary alert updates its headline in-place under same ID -> banner must resurface
-    currentEntities = [
-      {
-        ...currentEntities[0],
-        alert: {
-          ...currentEntities[0].alert,
-          header_text: { translation: [{ language: 'en', text: '1 Line 25-minute delays — bus shuttle active' }] },
-        },
-      },
-    ];
-    await (app as unknown as { fetchAlerts: (b: boolean) => Promise<void> }).fetchAlerts(true);
-    expect(document.querySelector('.disruption-banner')?.classList.contains('hidden')).toBe(false);
-    expect(document.querySelector('.disruption-banner')?.textContent).toContain(
-      '1 Line 25-minute delays — bus shuttle active'
-    );
-
-    app.destroy();
+      app.destroy();
+    } finally {
+      if (originalStartViewTransition === undefined) {
+        delete docWithTransition.startViewTransition;
+      } else {
+        docWithTransition.startViewTransition = originalStartViewTransition;
+      }
+    }
   });
 });

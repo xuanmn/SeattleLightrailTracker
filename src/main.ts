@@ -42,15 +42,6 @@ import { formatClockTime } from './utils/time';
 const SYNC_INTERVAL_MS = 60 * 1000; // Fixed 60-second real-time sync cycle
 const MAX_CONCURRENT_STATION_FETCHES = 6; // Each station fetches 2 platforms
 
-const TRANSIT_DISRUPTION_EFFECTS = new Set([
-  'NO_SERVICE',
-  'REDUCED_SERVICE',
-  'SIGNIFICANT_DELAYS',
-  'DETOUR',
-  'MODIFIED_SERVICE',
-  'STOP_MOVED',
-]);
-
 const NETWORK_INTERRUPTED_MESSAGE =
   'Network connection interrupted. Unable to reach live transit servers while reconnecting...';
 const OFFLINE_MESSAGE =
@@ -102,14 +93,13 @@ export class TransitTrackerApp {
   private alertsError: string | null = null;
   private isFetchingAlerts: boolean = false;
   private alertsAbortController?: AbortController;
-  private dismissedAlertFingerprints: Set<string> = new Set();
-  private lastBannerRenderKey: string = '';
+  private lastAlertsPillKey: string = '';
+  private isDestroyed: boolean = false;
 
   private stationsGridEl!: HTMLElement;
   private lineTitleEl!: HTMLElement;
   private lineSubtitleEl!: HTMLElement;
   private staleBannerEl!: HTMLElement;
-  private disruptionBannerEl!: HTMLElement;
   private alertsView!: AlertsViewComponent;
   private viewModePillWrap!: HTMLElement;
   private toastEl!: HTMLElement;
@@ -187,14 +177,6 @@ export class TransitTrackerApp {
     this.staleBannerEl.setAttribute('aria-live', 'polite');
     container.appendChild(this.staleBannerEl);
 
-    // Clickable Disruption Summary Strip (visible on station views when Link alerts are active)
-    this.disruptionBannerEl = createElement('div', 'disruption-banner hidden');
-    this.disruptionBannerEl.addEventListener('click', (e) => {
-      if ((e.target as Element | null)?.closest('.disruption-banner-dismiss')) return;
-      this.setViewMode('alerts');
-    });
-    container.appendChild(this.disruptionBannerEl);
-
     // Dashboard Toolbar
     const toolbar = createElement('div', 'dashboard-toolbar');
     const heading = createElement('div', 'toolbar-heading');
@@ -214,9 +196,12 @@ export class TransitTrackerApp {
     toolbar.appendChild(controls);
     container.appendChild(toolbar);
 
+    // Shared View Transition Stage for Station Grid & Alerts View
+    const viewStage = createElement('div', 'dashboard-view-stage');
+
     // Stations Grid
     this.stationsGridEl = createElement('div', 'stations-grid');
-    container.appendChild(this.stationsGridEl);
+    viewStage.appendChild(this.stationsGridEl);
 
     // Service Alerts View (hidden by default)
     this.alertsView = new AlertsViewComponent({
@@ -224,7 +209,9 @@ export class TransitTrackerApp {
       onRetry: () => void this.fetchAlerts(true),
     });
     this.alertsView.getElement().classList.add('hidden');
-    container.appendChild(this.alertsView.getElement());
+    viewStage.appendChild(this.alertsView.getElement());
+
+    container.appendChild(viewStage);
 
     main.appendChild(container);
     this.appEl.appendChild(main);
@@ -234,18 +221,23 @@ export class TransitTrackerApp {
     this.syncAlertsUI();
   }
 
-  private performViewTransition(updateFn: () => void) {
+  private performViewTransition(updateFn: () => void): Promise<void> {
     const doc = document as Document & {
-      startViewTransition?: (callback: () => void) => void;
+      startViewTransition?: (callback: () => void) => { finished?: Promise<unknown> };
     };
-    if (
-      typeof doc.startViewTransition === 'function' &&
-      !window.matchMedia('(prefers-reduced-motion: reduce)').matches
-    ) {
-      doc.startViewTransition(updateFn);
-    } else {
-      updateFn();
+    const prefersReducedMotion =
+      typeof window.matchMedia === 'function' &&
+      window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+
+    if (typeof doc.startViewTransition === 'function' && !prefersReducedMotion) {
+      const transition = doc.startViewTransition(updateFn);
+      return Promise.resolve(transition?.finished)
+        .then(() => undefined)
+        .catch(() => undefined);
     }
+
+    updateFn();
+    return Promise.resolve();
   }
 
   private renderViewModePills() {
@@ -310,31 +302,33 @@ export class TransitTrackerApp {
 
     if (nextMode === 'alerts') {
       this.stopSecondTicker();
-      this.performViewTransition(() => {
+      const transitionDone = this.performViewTransition(() => {
         this.stationsGridEl.classList.add('hidden');
         this.alertsView.getElement().classList.remove('hidden');
         this.updateToolbarHeader();
         this.renderViewModePills();
-        this.syncAlertsUI();
+        this.syncAlertsView();
       });
-      if (!this.isFetchingAlerts) {
+      void transitionDone.then(() => {
+        if (this.isDestroyed || this.viewMode !== 'alerts' || this.isFetchingAlerts) {
+          return;
+        }
         if (this.alertsUpdatedAt !== null) {
           void this.fetchAlerts(true);
         } else if (!this.alertsError) {
           void this.fetchAlerts(false);
         }
-      }
+      });
       return;
     }
 
-    this.performViewTransition(() => {
+    void this.performViewTransition(() => {
       if (previousMode === 'alerts') {
         this.alertsView.getElement().classList.add('hidden');
         this.stationsGridEl.classList.remove('hidden');
       }
       this.updateToolbarHeader();
       this.renderViewModePills();
-      this.renderDisruptionBanner();
       this.renderStationCards();
       this.syncSecondTicker();
     });
@@ -353,13 +347,12 @@ export class TransitTrackerApp {
     document.body.dataset.activeLine = line;
     setActiveLine(line);
     this.header.setActiveLine(line);
-    this.performViewTransition(() => {
+    void this.performViewTransition(() => {
       this.updateToolbarHeader();
       this.renderViewModePills();
       if (this.viewMode === 'alerts') {
-        this.syncAlertsUI();
+        this.syncAlertsView();
       } else {
-        this.renderDisruptionBanner();
         this.renderStationCards();
       }
     });
@@ -970,7 +963,6 @@ export class TransitTrackerApp {
       this.updateToolbarHeader();
     }
     this.renderAlertsButtonIndicator();
-    this.renderDisruptionBanner();
     this.syncAlertsView();
   }
 
@@ -980,6 +972,7 @@ export class TransitTrackerApp {
     const count = this.activeAlerts.length;
     const hasSevere = this.activeAlerts.some((alert) => alert.severity === 'SEVERE');
     const hasWarning = count > 0 && !hasSevere;
+    const nextPillKey = `${count}|${hasSevere ? '1' : '0'}|${hasWarning ? '1' : '0'}`;
 
     this.alertsBtn.classList.toggle('has-severe', hasSevere);
     this.alertsBtn.classList.toggle('has-warning', hasWarning);
@@ -987,6 +980,11 @@ export class TransitTrackerApp {
       'aria-label',
       count > 0 ? `Alerts, ${count} active` : 'Alerts'
     );
+
+    if (this.lastAlertsPillKey === nextPillKey) {
+      return;
+    }
+    this.lastAlertsPillKey = nextPillKey;
 
     const label = document.createElement('span');
     label.textContent = 'Alerts';
@@ -1002,116 +1000,6 @@ export class TransitTrackerApp {
     } else {
       this.alertsBtn.replaceChildren(label);
     }
-  }
-
-  private getAlertBannerPriorityRank(alert: ServiceAlert): number {
-    if (alert.severity === 'SEVERE') return 0;
-    return TRANSIT_DISRUPTION_EFFECTS.has(alert.effect.trim().toUpperCase()) ? 0 : 1;
-  }
-
-  private getLeadAlertForBanner(): ServiceAlert | undefined {
-    if (this.activeAlerts.length === 0) return undefined;
-    const severityRank = { SEVERE: 0, WARNING: 1, INFO: 2 } as const;
-    return [...this.activeAlerts].sort((a, b) => {
-      const disruptionDiff =
-        this.getAlertBannerPriorityRank(a) - this.getAlertBannerPriorityRank(b);
-      if (disruptionDiff !== 0) return disruptionDiff;
-
-      const sevDiff = severityRank[a.severity] - severityRank[b.severity];
-      if (sevDiff !== 0) return sevDiff;
-
-      const aMatch = a.lines.includes(this.activeLine) ? 0 : 1;
-      const bMatch = b.lines.includes(this.activeLine) ? 0 : 1;
-      return aMatch - bMatch;
-    })[0];
-  }
-
-  private getAlertFingerprint(alert: ServiceAlert): string {
-    return `${alert.id}:${alert.severity}:${alert.effect}:${alert.header}`;
-  }
-
-  private renderDisruptionBanner() {
-    if (!this.disruptionBannerEl) return;
-
-    const count = this.activeAlerts.length;
-    if (count === 0) {
-      this.dismissedAlertFingerprints.clear();
-      this.lastBannerRenderKey = '';
-      this.disruptionBannerEl.className = 'disruption-banner hidden';
-      return;
-    }
-
-    const activeFingerprints = this.activeAlerts.map((alert) => this.getAlertFingerprint(alert));
-    const activeFingerprintSet = new Set(activeFingerprints);
-    for (const stored of this.dismissedAlertFingerprints) {
-      if (!activeFingerprintSet.has(stored)) {
-        this.dismissedAlertFingerprints.delete(stored);
-      }
-    }
-
-    const allDismissed = activeFingerprints.every((fp) =>
-      this.dismissedAlertFingerprints.has(fp)
-    );
-
-    if (this.viewMode === 'alerts' || allDismissed) {
-      const activeEl = document.activeElement;
-      if (activeEl instanceof Node && this.disruptionBannerEl.contains(activeEl)) {
-        this.alertsBtn?.focus();
-      }
-      this.lastBannerRenderKey = '';
-      this.disruptionBannerEl.className = 'disruption-banner hidden';
-      return;
-    }
-
-    const lead = this.getLeadAlertForBanner();
-    const isSevere = lead?.severity === 'SEVERE';
-    const headlineText = lead?.header.trim() || 'Active Link service alert';
-    const ctaText = count > 1 ? `View alerts (${count})` : 'View alert';
-    const nextRenderKey = `${isSevere ? 'severe' : 'warning'}|${headlineText}|${ctaText}|${activeFingerprints.join('|')}`;
-
-    if (
-      this.lastBannerRenderKey === nextRenderKey &&
-      !this.disruptionBannerEl.classList.contains('hidden')
-    ) {
-      return;
-    }
-    this.lastBannerRenderKey = nextRenderKey;
-
-    this.disruptionBannerEl.className = `disruption-banner ${
-      isSevere ? 'severity-severe' : 'severity-warning'
-    }`;
-
-    const triggerBtn = createElement('button', 'disruption-banner-trigger') as HTMLButtonElement;
-    triggerBtn.type = 'button';
-    triggerBtn.setAttribute('aria-label', `${headlineText} — ${ctaText}`);
-
-    const mainWrap = createElement('span', 'disruption-banner-main');
-    const icon = createElement('span', 'disruption-banner-icon');
-    icon.setAttribute('aria-hidden', 'true');
-    icon.innerHTML = ICONS.alertTriangle;
-
-    const text = createElement('span', 'disruption-banner-text');
-    text.textContent = headlineText;
-    mainWrap.append(icon, text);
-
-    const cta = createElement('span', 'disruption-banner-cta');
-    cta.textContent = ctaText;
-    triggerBtn.append(mainWrap, cta);
-
-    const dismissBtn = createElement('button', 'disruption-banner-dismiss') as HTMLButtonElement;
-    dismissBtn.type = 'button';
-    dismissBtn.setAttribute('aria-label', 'Dismiss service alert banner');
-    dismissBtn.innerHTML = ICONS.close;
-    dismissBtn.addEventListener('click', (e) => {
-      e.stopPropagation();
-      for (const fp of activeFingerprints) {
-        this.dismissedAlertFingerprints.add(fp);
-      }
-      this.renderDisruptionBanner();
-      this.alertsBtn?.focus();
-    });
-
-    this.disruptionBannerEl.replaceChildren(triggerBtn, dismissBtn);
   }
 
   private syncAlertsView() {
@@ -1146,6 +1034,7 @@ export class TransitTrackerApp {
   }
 
   public destroy() {
+    this.isDestroyed = true;
     this.pollScheduler.stop();
     this.stopSecondTicker();
     if (this.toastTimeout) {

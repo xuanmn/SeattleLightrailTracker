@@ -24,6 +24,7 @@
   position: sticky;
   top: 0;
   z-index: 50;
+  view-transition-name: app-header;
   background: var(--bg-glass-heavy);
   backdrop-filter: blur(16px);
   -webkit-backdrop-filter: blur(16px);
@@ -361,6 +362,16 @@
   display: flex;
   align-items: center;
   gap: 0.75rem;
+}
+
+.dashboard-view-stage {
+  view-transition-name: dashboard-stage;
+}
+
+::view-transition-old(dashboard-stage),
+::view-transition-new(dashboard-stage) {
+  animation-duration: 200ms;
+  animation-timing-function: cubic-bezier(0.2, 0, 0, 1);
 }
 
 /* Status Banner / Stale Banner */

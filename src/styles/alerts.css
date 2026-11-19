@@ -1,5 +1,5 @@
 /* ==========================================================================
-   Service Alerts View, Tab Indicator & Disruption Banner
+   Service Alerts View & Tab Indicator
    ========================================================================== */
 
 .toolbar-alert-icon {
@@ -42,16 +42,17 @@
   border-radius: 50%;
   flex-shrink: 0;
   background-color: var(--status-delayed);
+  transition:
+    background-color 0.2s cubic-bezier(0.16, 1, 0.3, 1),
+    box-shadow 0.2s cubic-bezier(0.16, 1, 0.3, 1);
 }
 
-.alerts-tab-btn.has-severe .alert-indicator-dot,
-.disruption-banner.severity-severe .alert-indicator-dot {
+.alerts-tab-btn.has-severe .alert-indicator-dot {
   background-color: var(--status-delayed-severe);
   box-shadow: 0 0 8px rgba(239, 68, 68, 0.55);
 }
 
-.alerts-tab-btn.has-warning .alert-indicator-dot,
-.disruption-banner.severity-warning .alert-indicator-dot {
+.alerts-tab-btn.has-warning .alert-indicator-dot {
   background-color: var(--status-delayed);
   box-shadow: 0 0 8px rgba(245, 158, 11, 0.45);
 }
@@ -70,6 +71,9 @@
   font-variant-numeric: tabular-nums;
   background-color: var(--status-delayed-bg);
   color: var(--status-delayed);
+  transition:
+    background-color 0.2s cubic-bezier(0.16, 1, 0.3, 1),
+    color 0.2s cubic-bezier(0.16, 1, 0.3, 1);
 }
 
 .alerts-tab-btn.has-severe .alert-count-badge {
@@ -80,124 +84,6 @@
 .alerts-tab-btn.active .alert-count-badge {
   background-color: rgba(255, 255, 255, 0.18);
   color: var(--text-primary);
-}
-
-/* Clickable Disruption Summary Strip on Station Views */
-.disruption-banner {
-  width: 100%;
-  display: flex;
-  align-items: center;
-  gap: 0.35rem;
-  min-height: 44px;
-  padding: 0.25rem 0.45rem 0.25rem 0.9rem;
-  margin-bottom: 1rem;
-  border-radius: var(--radius-md);
-  border: 1px solid rgba(245, 158, 11, 0.35);
-  background-color: rgba(245, 158, 11, 0.1);
-  color: var(--text-primary);
-  box-shadow: var(--shadow-sm);
-  transition: background-color var(--transition-fast), border-color var(--transition-fast);
-}
-
-.disruption-banner.severity-severe {
-  border-color: rgba(239, 68, 68, 0.45);
-  background-color: rgba(239, 68, 68, 0.12);
-}
-
-.disruption-banner:hover {
-  background-color: rgba(245, 158, 11, 0.16);
-}
-
-.disruption-banner.severity-severe:hover {
-  background-color: rgba(239, 68, 68, 0.18);
-}
-
-.disruption-banner-trigger {
-  flex: 1;
-  min-width: 0;
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 0.75rem;
-  min-height: 38px;
-  padding: 0.25rem 0;
-  border: none;
-  background: transparent;
-  color: inherit;
-  font-family: var(--font-body);
-  font-size: 0.875rem;
-  text-align: left;
-  cursor: pointer;
-}
-
-.disruption-banner-trigger:focus-visible,
-.disruption-banner-dismiss:focus-visible {
-  outline: 2px solid var(--border-focus);
-  outline-offset: 2px;
-  border-radius: 8px;
-}
-
-.disruption-banner-main {
-  display: flex;
-  align-items: center;
-  gap: 0.6rem;
-  min-width: 0;
-  flex: 1;
-}
-
-.disruption-banner-icon {
-  display: inline-flex;
-  width: 18px;
-  height: 18px;
-  flex-shrink: 0;
-  color: var(--status-delayed);
-}
-
-.disruption-banner.severity-severe .disruption-banner-icon {
-  color: var(--status-delayed-severe);
-}
-
-.disruption-banner-text {
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-  font-weight: 500;
-}
-
-.disruption-banner-cta {
-  flex-shrink: 0;
-  font-size: 0.8rem;
-  font-weight: 600;
-  color: var(--status-delayed);
-}
-
-.disruption-banner.severity-severe .disruption-banner-cta {
-  color: var(--status-delayed-severe);
-}
-
-.disruption-banner-dismiss {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  min-width: 36px;
-  min-height: 36px;
-  border: none;
-  border-radius: 8px;
-  background: transparent;
-  color: var(--text-secondary);
-  cursor: pointer;
-  flex-shrink: 0;
-  transition: background-color var(--transition-fast), color var(--transition-fast);
-}
-
-.disruption-banner-dismiss:hover {
-  background-color: rgba(255, 255, 255, 0.1);
-  color: var(--text-primary);
-}
-
-.disruption-banner-dismiss svg {
-  width: 15px;
-  height: 15px;
 }
 
 /* Alerts View Container */
@@ -504,10 +390,6 @@
 }
 
 @media (max-width: 768px) {
-  .disruption-banner {
-    padding: 0.25rem 0.35rem 0.25rem 0.75rem;
-  }
-
   .alert-card,
   .alerts-empty-card,
   .alerts-error-card {

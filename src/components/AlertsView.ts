@@ -203,6 +203,7 @@ function formatActiveWindow(
 export class AlertsViewComponent {
   private rootEl: HTMLElement;
   private callbacks: AlertsViewCallbacks;
+  private lastRenderKey: string = '';
 
   constructor(callbacks: AlertsViewCallbacks) {
     this.callbacks = callbacks;
@@ -214,8 +215,41 @@ export class AlertsViewComponent {
     return this.rootEl;
   }
 
+  private buildRenderKey(state: AlertsRenderState, nowEpochMs: number): string {
+    const ordered = sortAlertsForLine(state.alerts, state.activeLine);
+    const alertsKey = ordered
+      .map((alert) =>
+        [
+          alert.id,
+          alert.severity,
+          alert.effect,
+          alert.lines.join(','),
+          alert.header,
+          alert.description,
+          alert.url ?? '',
+          formatActiveWindow(alert, state.timeFormat24Hour, nowEpochMs),
+        ].join('\u001f')
+      )
+      .join('\u001e');
+
+    return [
+      state.activeLine,
+      state.updatedAt ?? '',
+      state.isLoading ? '1' : '0',
+      state.error ?? '',
+      state.timeFormat24Hour ? '24' : '12',
+      alertsKey,
+    ].join('|');
+  }
+
   public update(state: AlertsRenderState): void {
     const nowEpochMs = state.nowEpochMs ?? Date.now();
+    const nextRenderKey = this.buildRenderKey(state, nowEpochMs);
+    if (this.lastRenderKey === nextRenderKey && this.rootEl.childNodes.length > 0) {
+      return;
+    }
+    this.lastRenderKey = nextRenderKey;
+
     const fragment = document.createDocumentFragment();
 
     if (state.isLoading && state.updatedAt === null) {
