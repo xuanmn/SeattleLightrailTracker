@@ -706,8 +706,11 @@ describe('TransitTrackerApp Service Alerts Integration', () => {
       cb();
       return { finished };
     });
-    (document as Document & { startViewTransition?: typeof startViewTransitionSpy }).startViewTransition =
-      startViewTransitionSpy;
+    const docWithTransition = document as unknown as {
+      startViewTransition?: (cb: () => void) => { finished: Promise<void> };
+    };
+    const originalStartViewTransition = docWithTransition.startViewTransition;
+    docWithTransition.startViewTransition = startViewTransitionSpy;
 
     try {
       const { TransitTrackerApp } = await import('../src/main');
@@ -732,7 +735,11 @@ describe('TransitTrackerApp Service Alerts Integration', () => {
 
       app.destroy();
     } finally {
-      delete (document as Document & { startViewTransition?: unknown }).startViewTransition;
+      if (originalStartViewTransition === undefined) {
+        delete docWithTransition.startViewTransition;
+      } else {
+        docWithTransition.startViewTransition = originalStartViewTransition;
+      }
     }
   });
 });
