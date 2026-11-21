@@ -1,4 +1,5 @@
-import type { AlertSeverity, ServiceAlert, TransitLineId } from '../types/transit';
+import type { AlertSeverity, ServiceAlert, Station, TransitLineId } from '../types/transit';
+import { getStationById } from '../data/stations';
 import { ST_ALERTS_WEB_URL } from '../services/alerts-api';
 import { createElement, ICONS } from '../utils/dom';
 import { formatAlertTimestamp, formatClockTime } from '../utils/time';
@@ -6,6 +7,7 @@ import { formatAlertTimestamp, formatClockTime } from '../utils/time';
 export interface AlertsViewCallbacks {
   onBackToStations: () => void;
   onRetry: () => void;
+  onRefresh?: () => void;
 }
 
 export interface AlertsRenderState {
@@ -16,7 +18,10 @@ export interface AlertsRenderState {
   error: string | null;
   timeFormat24Hour: boolean;
   nowEpochMs?: number;
+  pinnedStationIds?: ReadonlySet<string>;
 }
+
+const MAX_VISIBLE_STATION_PILLS = 8;
 
 const SEVERITY_RANK: Record<AlertSeverity, number> = {
   SEVERE: 0,
@@ -204,6 +209,8 @@ export class AlertsViewComponent {
   private rootEl: HTMLElement;
   private callbacks: AlertsViewCallbacks;
   private lastRenderKey: string = '';
+  private refreshBtnEl?: HTMLButtonElement;
+  private refreshBtnLabelEl?: HTMLElement;
 
   constructor(callbacks: AlertsViewCallbacks) {
     this.callbacks = callbacks;
@@ -215,25 +222,40 @@ export class AlertsViewComponent {
     return this.rootEl;
   }
 
+  private syncRefreshButtonState(isLoading: boolean): void {
+    if (!this.refreshBtnEl) return;
+    this.refreshBtnEl.disabled = isLoading;
+    this.refreshBtnEl.classList.toggle('is-loading', isLoading);
+    this.refreshBtnEl.setAttribute('aria-busy', String(isLoading));
+    if (this.refreshBtnLabelEl) {
+      this.refreshBtnLabelEl.textContent = isLoading ? 'Refreshing…' : 'Refresh';
+    }
+  }
+
   private buildRenderKey(
     ordered: ServiceAlert[],
     state: AlertsRenderState,
     nowEpochMs: number
   ): string {
     const showLoadingSkeleton = state.isLoading && state.updatedAt === null;
+    const pinned = state.pinnedStationIds;
     const alertsKey = ordered
-      .map((alert) =>
-        [
+      .map((alert) => {
+        const stationKey = alert.stationIds
+          .map((id) => (pinned?.has(id) ? `*${id}` : id))
+          .join(',');
+        return [
           alert.id,
           alert.severity,
           alert.effect,
           alert.lines.join(','),
+          stationKey,
           alert.header,
           alert.description,
           alert.url ?? '',
           formatActiveWindow(alert, state.timeFormat24Hour, nowEpochMs),
-        ].join('\u001f')
-      )
+        ].join('\u001f');
+      })
       .join('\u001e');
 
     return [
@@ -251,9 +273,12 @@ export class AlertsViewComponent {
     const ordered = sortAlertsForLine(state.alerts, state.activeLine);
     const nextRenderKey = this.buildRenderKey(ordered, state, nowEpochMs);
     if (this.lastRenderKey === nextRenderKey && this.rootEl.childNodes.length > 0) {
+      this.syncRefreshButtonState(state.isLoading);
       return;
     }
     this.lastRenderKey = nextRenderKey;
+    this.refreshBtnEl = undefined;
+    this.refreshBtnLabelEl = undefined;
 
     const fragment = document.createDocumentFragment();
 
@@ -413,6 +438,11 @@ export class AlertsViewComponent {
       );
       item.appendChild(headline);
 
+      const stationsRow = this.renderAffectedStations(alert.stationIds, state.pinnedStationIds);
+      if (stationsRow) {
+        item.appendChild(stationsRow);
+      }
+
       const windowText = formatActiveWindow(alert, state.timeFormat24Hour, nowEpochMs);
       if (windowText) {
         item.appendChild(createTextElement('p', 'alert-card-window', windowText));
@@ -444,6 +474,78 @@ export class AlertsViewComponent {
     return list;
   }
 
+  private renderAffectedStations(
+    stationIds: string[],
+    pinnedStationIds?: ReadonlySet<string>
+  ): HTMLElement | null {
+    if (!stationIds || stationIds.length === 0) return null;
+
+    const resolved: Station[] = [];
+    for (const id of stationIds) {
+      const station = getStationById(id);
+      if (station) resolved.push(station);
+    }
+    if (resolved.length === 0) return null;
+
+    let visibleStations: Station[];
+    let hiddenCount = 0;
+
+    if (resolved.length <= MAX_VISIBLE_STATION_PILLS) {
+      visibleStations = resolved;
+    } else {
+      const pinnedStations = resolved.filter((s) => pinnedStationIds?.has(s.id));
+      const unpinnedStations = resolved.filter((s) => !pinnedStationIds?.has(s.id));
+      const remainingSlots = Math.max(0, MAX_VISIBLE_STATION_PILLS - pinnedStations.length);
+      visibleStations = [...pinnedStations, ...unpinnedStations.slice(0, remainingSlots)];
+      hiddenCount = resolved.length - visibleStations.length;
+    }
+
+    const row = createElement('div', 'alert-card-stations');
+    row.setAttribute('aria-label', 'Affected stations');
+
+    const label = createElement('span', 'alert-stations-label');
+    const pinIcon = createElement('span', 'alert-stations-icon');
+    pinIcon.setAttribute('aria-hidden', 'true');
+    pinIcon.innerHTML = ICONS.mapPin;
+    label.append(pinIcon, document.createTextNode('Affected:'));
+
+    const pillList = createElement('ul', 'alert-station-pills');
+    for (const station of visibleStations) {
+      const isPinned = Boolean(pinnedStationIds?.has(station.id));
+      const pill = createElement(
+        'li',
+        isPinned ? 'alert-station-pill is-pinned' : 'alert-station-pill'
+      );
+      pill.dataset.stationId = station.id;
+
+      if (isPinned) {
+        pill.title = 'Saved in My Stations';
+        const star = createElement('span', 'alert-station-star');
+        star.setAttribute('aria-hidden', 'true');
+        star.innerHTML = ICONS.starFilled;
+        const nameEl = createTextElement('span', '', station.name);
+        const srNote = createTextElement('span', 'sr-only', ' (saved station)');
+        pill.append(star, nameEl, srNote);
+      } else {
+        pill.textContent = station.name;
+      }
+
+      pillList.appendChild(pill);
+    }
+
+    if (hiddenCount > 0) {
+      const morePill = createTextElement(
+        'li',
+        'alert-station-pill alert-station-pill--more',
+        `+${hiddenCount} more`
+      );
+      pillList.appendChild(morePill);
+    }
+
+    row.append(label, pillList);
+    return row;
+  }
+
   private renderFooter(state: AlertsRenderState): HTMLElement {
     const footer = createElement('div', 'alerts-view-footer');
     const updated =
@@ -455,12 +557,37 @@ export class AlertsViewComponent {
       'alerts-source-note',
       `Source: Sound Transit GTFS-RT alerts feed${updated}.`
     );
+
+    const actions = createElement('div', 'alerts-footer-actions');
+
+    const refreshBtn = createElement('button', 'alerts-refresh-btn') as HTMLButtonElement;
+    refreshBtn.type = 'button';
+    refreshBtn.setAttribute('aria-label', 'Refresh service alerts');
+    const refreshIcon = createElement('span', 'alerts-refresh-icon');
+    refreshIcon.setAttribute('aria-hidden', 'true');
+    refreshIcon.innerHTML = ICONS.refreshCw;
+    const refreshLabel = createTextElement('span', 'alerts-refresh-label', 'Refresh');
+    refreshBtn.append(refreshIcon, refreshLabel);
+    refreshBtn.addEventListener('click', () => {
+      if (this.callbacks.onRefresh) {
+        this.callbacks.onRefresh();
+      } else {
+        this.callbacks.onRetry();
+      }
+    });
+
+    this.refreshBtnEl = refreshBtn;
+    this.refreshBtnLabelEl = refreshLabel;
+    this.syncRefreshButtonState(state.isLoading);
+
     const link = createExternalLink(
       ST_ALERTS_WEB_URL,
       'Full Sound Transit advisory board',
       'alerts-footer-link'
     );
-    footer.append(note, link);
+
+    actions.append(refreshBtn, link);
+    footer.append(note, actions);
     return footer;
   }
 }

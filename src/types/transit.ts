@@ -62,6 +62,7 @@ export interface ServiceAlert {
   effect: string;
   cause: string;
   lines: TransitLineId[];
+  stationIds: string[];
   header: string;
   description: string;
   url: string | null;

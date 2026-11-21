@@ -4,6 +4,7 @@ import type {
   ServiceAlertsFeed,
   TransitLineId,
 } from '../types/transit';
+import { STATIONS } from '../data/stations';
 
 export const ST_ALERTS_FEED_URL =
   'https://s3.amazonaws.com/st-service-alerts-prod/alerts_pb.json';
@@ -30,6 +31,88 @@ const SEVERITY_RANK: Record<AlertSeverity, number> = {
   WARNING: 1,
   INFO: 2,
 };
+
+const FACILITY_PREFIX_RE = /^([NSE]\d{2})-/;
+
+function normalizeStopId(raw: string): string {
+  return raw.trim().replace(/^\d+_/, '').toUpperCase();
+}
+
+const STATION_ORDER = new Map<string, number>();
+const STOP_ID_TO_STATION_ID = new Map<string, string>();
+const FACILITY_CODE_TO_STATION_ID = new Map<string, string>();
+
+STATIONS.forEach((station, index) => {
+  STATION_ORDER.set(station.id, index);
+  const platforms = [
+    station.platforms.northbound,
+    station.platforms.southbound,
+    station.platforms.eastbound,
+    station.platforms.westbound,
+  ];
+  for (const platform of platforms) {
+    if (!platform?.stopId) continue;
+    const normalized = normalizeStopId(platform.stopId);
+    STOP_ID_TO_STATION_ID.set(normalized, station.id);
+    const prefixMatch = normalized.match(FACILITY_PREFIX_RE);
+    if (prefixMatch) {
+      FACILITY_CODE_TO_STATION_ID.set(prefixMatch[1], station.id);
+    }
+  }
+});
+
+/**
+ * Fallback station-name matchers applied ONLY to alert headers when Sound Transit
+ * omits `stop_id` entries from `informed_entity`. Ordered canonically by STATIONS.
+ */
+const STATION_HEADER_PATTERNS: Record<string, RegExp> = {
+  'lynnwood-city-center': /\blynnwood\s+city\s+center\b/i,
+  'mountlake-terrace': /\bmountlake\s+terrace\b/i,
+  'shoreline-north-185th': /\bshoreline\s+north\b/i,
+  'shoreline-south-148th': /\bshoreline\s+south\b/i,
+  pinehurst: /\bpinehurst\b/i,
+  northgate: /\bnorthgate\b/i,
+  roosevelt: /\broosevelt\b/i,
+  'u-district': /\bu[\s-]+district\b/i,
+  'university-of-washington': /\buniversity\s+of\s+washington\b|\buw\s+station\b/i,
+  'capitol-hill': /\bcapitol\s+hill\b/i,
+  westlake: /\bwestlake\b/i,
+  symphony: /\bsymphony\b|\buniversity\s+st(?:reet)?\s+station\b/i,
+  'pioneer-square': /\bpioneer\s+square\b/i,
+  'international-district-chinatown':
+    /\b(?:int['’]?l\.?|international)\s+district(?:\s*[/&-]\s*chinatown)?\b|\bchinatown\s+station\b|\bid\s*\/\s*chinatown\b/i,
+  stadium: /\bstadium\b/i,
+  sodo: /\bsodo\b/i,
+  'beacon-hill': /\bbeacon\s+hill\b/i,
+  'mount-baker': /\b(?:mount|mt\.?)\s+baker\b/i,
+  'columbia-city': /\bcolumbia\s+city\b/i,
+  othello: /\bothello\b/i,
+  'rainier-beach': /\brainier\s+beach\b/i,
+  'tukwila-intl-blvd':
+    /\btukwila\s+(?:int['’]?l\.?|international)\s+(?:blvd\.?|boulevard)\b|\btukwila\s+station\b/i,
+  'seatac-airport': /\bsea-?tac(?:\s*\/\s*airport)?\b/i,
+  'angle-lake': /\bangle\s+lake\b/i,
+  'kent-des-moines': /\bkent[\s/-]+des\s+moines\b/i,
+  'star-lake': /\bstar\s+lake\b/i,
+  'federal-way-downtown': /\bfederal\s+way\s+(?:downtown|transit\s+center|station)\b/i,
+  'downtown-redmond': /\bdowntown\s+redmond\b/i,
+  'marymoor-village': /\bmarymoor\s+village\b/i,
+  'redmond-technology': /\bredmond\s+tech(?:nology)?\b/i,
+  'overlake-village': /\boverlake\s+village\b/i,
+  'bel-red': /\bbel-?red\b/i,
+  'spring-district': /\bspring\s+district\b/i,
+  wilburton: /\bwilburton\b/i,
+  'bellevue-downtown': /\bbellevue\s+downtown\b/i,
+  'east-main': /\beast\s+main\b/i,
+  'south-bellevue': /\bsouth\s+bellevue\b/i,
+  'mercer-island': /\bmercer\s+island\b/i,
+  'judkins-park': /\bjudkins\s+park\b/i,
+};
+
+const STATION_HEADER_MATCHERS = STATIONS.flatMap((station) => {
+  const pattern = STATION_HEADER_PATTERNS[station.id];
+  return pattern ? [{ id: station.id, pattern }] : [];
+});
 
 export interface RawTranslatedTextEntry {
   text?: string;
@@ -164,6 +247,52 @@ function extractLinkLines(informed?: RawInformedEntity[]): TransitLineId[] {
   return Array.from(lines).sort((a, b) => LINE_ORDER[a] - LINE_ORDER[b]);
 }
 
+function extractAffectedStationIds(
+  informed: RawInformedEntity[] | undefined,
+  header: string
+): string[] {
+  const matched = new Set<string>();
+
+  if (informed && informed.length > 0) {
+    for (const item of informed) {
+      const rawStopId = item.stop_id?.trim();
+      if (!rawStopId) continue;
+      const normalized = normalizeStopId(rawStopId);
+      const exactStationId = STOP_ID_TO_STATION_ID.get(normalized);
+      if (exactStationId) {
+        matched.add(exactStationId);
+        continue;
+      }
+      const prefixMatch = normalized.match(FACILITY_PREFIX_RE);
+      if (prefixMatch) {
+        const facilityStationId = FACILITY_CODE_TO_STATION_ID.get(prefixMatch[1]);
+        if (facilityStationId) {
+          matched.add(facilityStationId);
+        }
+      }
+    }
+  }
+
+  if (matched.size > 0) {
+    return Array.from(matched).sort(
+      (a, b) => (STATION_ORDER.get(a) ?? Infinity) - (STATION_ORDER.get(b) ?? Infinity)
+    );
+  }
+
+  if (!header) return [];
+
+  // Strip "Husky Stadium" before checking station names so it never false-matches Stadium station
+  const sanitizedHeader = header.replace(/\bhusky\s+stadium\b/gi, '');
+  const fallbackIds: string[] = [];
+  for (const matcher of STATION_HEADER_MATCHERS) {
+    const targetText = matcher.id === 'stadium' ? sanitizedHeader : header;
+    if (matcher.pattern.test(targetText)) {
+      fallbackIds.push(matcher.id);
+    }
+  }
+  return fallbackIds;
+}
+
 function normalizeSeverity(raw?: string): AlertSeverity {
   if (raw === 'SEVERE' || raw === 'WARNING' || raw === 'INFO') {
     return raw;
@@ -216,6 +345,8 @@ export function transformGtfsAlerts(
     const periodMatch = findMatchingPeriod(alert.active_period, nowEpochMs);
     if (!periodMatch.matched) continue;
 
+    const header = extractTranslatedText(alert.header_text);
+    const stationIds = extractAffectedStationIds(alert.informed_entity, header);
     const rawUrl = extractTranslatedText(alert.url);
     alerts.push({
       id: entity.id?.trim() || `alert-${i}`,
@@ -223,7 +354,8 @@ export function transformGtfsAlerts(
       effect: normalizeText(alert.effect ?? ''),
       cause: normalizeText(alert.cause ?? ''),
       lines,
-      header: extractTranslatedText(alert.header_text),
+      stationIds,
+      header,
       description: extractTranslatedText(alert.description_text),
       url: sanitizeAlertUrl(rawUrl),
       activeStartMs: periodMatch.activeStartMs,

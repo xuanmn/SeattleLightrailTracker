@@ -40,6 +40,7 @@ import { createElement, ICONS } from './utils/dom';
 import { formatClockTime } from './utils/time';
 
 const SYNC_INTERVAL_MS = 60 * 1000; // Fixed 60-second real-time sync cycle
+const ALERTS_POLL_INTERVAL_MS = 60 * 60 * 1000; // 1-hour background service alerts sync cycle
 const MAX_CONCURRENT_STATION_FETCHES = 6; // Each station fetches 2 platforms
 
 const NETWORK_INTERRUPTED_MESSAGE =
@@ -90,6 +91,7 @@ export class TransitTrackerApp {
 
   private activeAlerts: ServiceAlert[] = [];
   private alertsUpdatedAt: number | null = null;
+  private lastAlertsFetchAt: number | null = null;
   private alertsError: string | null = null;
   private isFetchingAlerts: boolean = false;
   private alertsAbortController?: AbortController;
@@ -137,7 +139,13 @@ export class TransitTrackerApp {
       onPoll: (reason) => {
         const bypassCache = reason === 'reconnect';
         this.fetchVisibleArrivals(bypassCache);
-        void this.fetchAlerts(bypassCache);
+        if (reason === 'start') {
+          void this.fetchAlerts(false);
+        } else if (reason === 'reconnect') {
+          void this.fetchAlerts(true);
+        } else if (this.isAlertsStale()) {
+          void this.fetchAlerts(true);
+        }
       },
       onConnectivityChange: (isOnline) => {
         if (!isOnline) this.showStatusBanner(OFFLINE_MESSAGE);
@@ -208,6 +216,7 @@ export class TransitTrackerApp {
     this.alertsView = new AlertsViewComponent({
       onBackToStations: () => this.setViewMode('pinned'),
       onRetry: () => void this.fetchAlerts(true),
+      onRefresh: () => void this.fetchAlerts(true),
     });
     this.alertsView.getElement().classList.add('hidden');
     viewStage.appendChild(this.alertsView.getElement());
@@ -333,10 +342,10 @@ export class TransitTrackerApp {
         ) {
           return;
         }
-        if (this.alertsUpdatedAt !== null) {
-          void this.fetchAlerts(true);
-        } else if (!this.alertsError) {
+        if (this.alertsUpdatedAt === null && !this.alertsError) {
           void this.fetchAlerts(false);
+        } else if (this.alertsUpdatedAt !== null && this.isAlertsStale()) {
+          void this.fetchAlerts(true);
         }
       });
       return;
@@ -684,6 +693,8 @@ export class TransitTrackerApp {
       }
     }
 
+    this.syncAlertsView();
+
     this.showToast(
       isNowPinned ? `Saved "${stationName}" to Favorites` : `Removed "${stationName}" from Favorites`,
       isNowPinned
@@ -941,6 +952,13 @@ export class TransitTrackerApp {
     }
   }
 
+  private isAlertsStale(): boolean {
+    return (
+      this.lastAlertsFetchAt === null ||
+      Date.now() - this.lastAlertsFetchAt >= ALERTS_POLL_INTERVAL_MS
+    );
+  }
+
   private async fetchAlerts(bypassCache: boolean = false): Promise<void> {
     if (this.alertsAbortController) {
       this.alertsAbortController.abort();
@@ -957,6 +975,7 @@ export class TransitTrackerApp {
       }
       this.activeAlerts = feed.alerts;
       this.alertsUpdatedAt = feed.updatedAt;
+      this.lastAlertsFetchAt = Date.now();
       this.alertsError = null;
     } catch (err) {
       if (
@@ -965,6 +984,7 @@ export class TransitTrackerApp {
       ) {
         return;
       }
+      this.lastAlertsFetchAt = Date.now();
       this.alertsError =
         err instanceof Error && err.message
           ? err.message
@@ -1031,6 +1051,7 @@ export class TransitTrackerApp {
       isLoading: this.isFetchingAlerts,
       error: this.alertsError,
       timeFormat24Hour: this.settings.timeFormat24Hour,
+      pinnedStationIds: this.pinnedIds,
     });
   }
 

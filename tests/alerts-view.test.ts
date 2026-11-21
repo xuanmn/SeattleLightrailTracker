@@ -891,11 +891,11 @@ describe('TransitTrackerApp Service Alerts Integration', () => {
       await vi.advanceTimersByTimeAsync(59 * 60 * 1000);
       expect(countAlertCalls()).toBe(2);
 
-      // Advance 1 more minute (reaching 60 minutes) -> hourly background alerts poll fires once
-      await vi.advanceTimersByTimeAsync(60 * 1000);
+      // Advance past the 60-minute cooldown onto the next 60s scheduler tick -> hourly background alerts poll fires once
+      await vi.advanceTimersByTimeAsync(2 * 60 * 1000);
       expect(countAlertCalls()).toBe(3);
 
-      // Advance 59m59s while paused/offline, then open Alerts right after 1 hour -> waits for transition.finished
+      // Jump clock forward 1 hour (simulating resumed session), then open Alerts -> waits for transition.finished
       const nowBeforePause = Date.now();
       vi.setSystemTime(nowBeforePause + 60 * 60 * 1000);
       document.querySelector<HTMLButtonElement>('.alerts-tab-btn')?.click();
