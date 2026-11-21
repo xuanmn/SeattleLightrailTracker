@@ -93,6 +93,7 @@ describe('transformGtfsAlerts', () => {
       effect: 'REDUCED_SERVICE',
       cause: 'MAINTENANCE',
       lines: ['line-1', 'line-2'],
+      stationIds: [],
       header: '1 Line & 2 Line reduced service',
       description: 'Trains running every 20 minutes.\n\nShuttle active.',
       url: 'https://www.soundtransit.org/alerts/link-both',
@@ -225,7 +226,154 @@ describe('transformGtfsAlerts', () => {
     expect(alerts[0].severity).toBe('INFO');
     expect(alerts[0].header).toBe('Fallback non-en text');
     expect(alerts[0].lines).toEqual(['line-2']);
+    expect(alerts[0].stationIds).toEqual([]);
     expect(alerts[0].url).toBeNull();
+  });
+
+  it('extracts affected stationIds from informed_entity stop_ids including elevator/facility prefixes in route order', () => {
+    const raw: RawGtfsAlertsFeed = {
+      entity: [
+        {
+          id: 'multi-stops',
+          alert: {
+            severity_level: 'WARNING',
+            active_period: [{ start: nowSec - 60 }],
+            informed_entity: [
+              { route_id: '100479', stop_id: '99603' }, // Capitol Hill
+              { route_id: '100479', stop_id: '40_1121' }, // Westlake (with 40_ prefix)
+              { route_id: '100479', stop_id: '990005' }, // Northgate
+              { route_id: '100479', stop_id: '990006' }, // Northgate duplicate platform
+              { route_id: '100479', stop_id: 'N15-E-00001' }, // Shoreline South elevator facility stop_id
+              { route_id: '100479', stop_id: 'UNKNOWN_999' },
+            ],
+            header_text: {
+              translation: [{ language: 'en', text: 'Overnight maintenance affecting multiple stations' }],
+            },
+            description_text: {
+              translation: [{ language: 'en', text: 'Trains to Federal Way Downtown remain on schedule.' }],
+            },
+          },
+        },
+        {
+          id: 'line2-facility',
+          alert: {
+            severity_level: 'WARNING',
+            active_period: [{ start: nowSec - 30 }],
+            informed_entity: [
+              { route_id: '2LINE', stop_id: 'E15-E-00002' }, // Bellevue Downtown elevator
+              { route_id: '2LINE', stop_id: 'E31-T1' }, // Downtown Redmond
+            ],
+            header_text: {
+              translation: [{ language: 'en', text: '2 Line station accessibility notice' }],
+            },
+          },
+        },
+      ],
+    };
+
+    const alerts = transformGtfsAlerts(raw, nowMs);
+    expect(alerts[0].id).toBe('line2-facility');
+    expect(alerts[0].stationIds).toEqual(['downtown-redmond', 'bellevue-downtown']);
+
+    // Structured stop_ids are authoritative (must NOT pull Federal Way Downtown from description)
+    expect(alerts[1].id).toBe('multi-stops');
+    expect(alerts[1].stationIds).toEqual([
+      'shoreline-south-148th',
+      'northgate',
+      'capitol-hill',
+      'westlake',
+    ]);
+  });
+
+  it('falls back to matching station names in header when stop_ids are omitted, avoiding false positives', () => {
+    const raw: RawGtfsAlertsFeed = {
+      entity: [
+        {
+          id: 'lynnwood-no-stops',
+          alert: {
+            severity_level: 'WARNING',
+            active_period: [{ start: nowSec - 10 }],
+            informed_entity: [{ route_id: '100479' }, { route_id: '2LINE' }],
+            header_text: {
+              translation: [
+                {
+                  language: 'en',
+                  text: 'Elevators and escalators at Lynnwood City Center Station closed overnight',
+                },
+              ],
+            },
+          },
+        },
+        {
+          id: 'aliases-header',
+          alert: {
+            severity_level: 'WARNING',
+            active_period: [{ start: nowSec - 20 }],
+            informed_entity: [{ route_id: '100479' }],
+            header_text: {
+              translation: [
+                {
+                  language: 'en',
+                  text: "Shuttle between Int'l District/Chinatown, Mt. Baker, Tukwila Int'l Blvd, and SeaTac/Airport",
+                },
+              ],
+            },
+          },
+        },
+        {
+          id: 'direction-and-husky-no-false-positive',
+          alert: {
+            severity_level: 'INFO',
+            active_period: [{ start: nowSec - 30 }],
+            informed_entity: [{ route_id: '100479' }],
+            header_text: {
+              translation: [
+                {
+                  language: 'en',
+                  text: 'Northbound 1 Line trains toward Lynnwood delayed near Husky Stadium (UW Station)',
+                },
+              ],
+            },
+            description_text: {
+              translation: [{ language: 'en', text: 'Riders heading to Westlake should allow extra time.' }],
+            },
+          },
+        },
+        {
+          id: 'systemwide-no-stations',
+          alert: {
+            severity_level: 'WARNING',
+            active_period: [{ start: nowSec - 40 }],
+            informed_entity: [{ route_id: '2LINE' }],
+            header_text: {
+              translation: [
+                {
+                  language: 'en',
+                  text: 'Real-time transit information may temporarily be inaccurate until end of service',
+                },
+              ],
+            },
+          },
+        },
+      ],
+    };
+
+    const alerts = transformGtfsAlerts(raw, nowMs);
+    const byId = new Map(alerts.map((a) => [a.id, a]));
+
+    expect(byId.get('lynnwood-no-stops')?.stationIds).toEqual(['lynnwood-city-center']);
+    expect(byId.get('aliases-header')?.stationIds).toEqual([
+      'international-district-chinatown',
+      'mount-baker',
+      'tukwila-intl-blvd',
+      'seatac-airport',
+    ]);
+    // UW Station matches university-of-washington; "Husky Stadium" must NOT match stadium,
+    // "toward Lynnwood" must NOT match lynnwood-city-center, and "Westlake" in description is ignored.
+    expect(byId.get('direction-and-husky-no-false-positive')?.stationIds).toEqual([
+      'university-of-washington',
+    ]);
+    expect(byId.get('systemwide-no-stations')?.stationIds).toEqual([]);
   });
 });
 

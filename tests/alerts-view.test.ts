@@ -12,6 +12,7 @@ function makeAlert(overrides: Partial<ServiceAlert> = {}): ServiceAlert {
     effect: 'SIGNIFICANT_DELAYS',
     cause: 'MAINTENANCE',
     lines: ['line-1'],
+    stationIds: [],
     header: '1 Line experiencing 15-minute delays',
     description: 'Single-tracking near SODO station.\n\nAllow extra travel time.',
     url: 'https://www.soundtransit.org/alerts/1',
@@ -296,10 +297,12 @@ describe('AlertsViewComponent', () => {
     expect(olItems[1].value).toBe(5);
   });
 
-  it('omits secondary filter and header bar while still prioritizing activeLine and linking to soundtransit.org in footer', () => {
+  it('omits secondary filter and header bar, prioritizes activeLine, and exposes footer Refresh and soundtransit.org link', () => {
+    const onRefresh = vi.fn();
     const view = new AlertsViewComponent({
       onBackToStations: vi.fn(),
       onRetry: vi.fn(),
+      onRefresh,
     });
 
     view.update({
@@ -317,7 +320,12 @@ describe('AlertsViewComponent', () => {
     const el = view.getElement();
     expect(el.querySelector('.alerts-view-header')).toBeNull();
     expect(el.querySelector('.alerts-filter-group')).toBeNull();
-    expect(el.querySelector('.alerts-refresh-btn')).toBeNull();
+
+    const refreshBtn = el.querySelector<HTMLButtonElement>('.alerts-view-footer .alerts-refresh-btn');
+    expect(refreshBtn).not.toBeNull();
+    expect(refreshBtn?.disabled).toBe(false);
+    refreshBtn?.click();
+    expect(onRefresh).toHaveBeenCalledTimes(1);
 
     const cards = Array.from(el.querySelectorAll<HTMLElement>('.alert-card'));
     expect(cards.map((c) => c.dataset.alertId)).toEqual(['a-line2', 'a-line1']);
@@ -326,50 +334,163 @@ describe('AlertsViewComponent', () => {
     );
   });
 
-  it('skips rebuilding DOM nodes when update receives an unchanged render state or background isLoading toggle, and invalidates on format/midnight changes', () => {
+  it('renders affected station pills with pinned highlights, omits row for line-wide alerts, and caps long lists while preserving pinned stops', () => {
     const view = new AlertsViewComponent({
       onBackToStations: vi.fn(),
       onRetry: vi.fn(),
+      onRefresh: vi.fn(),
+    });
+
+    const baseNow = Date.UTC(2026, 10, 18, 20, 0, 0);
+    view.update({
+      alerts: [
+        makeAlert({
+          id: 'station-alert',
+          header: 'Nightly single-tracking between Northgate and Capitol Hill',
+          stationIds: ['northgate', 'roosevelt', 'u-district', 'university-of-washington', 'capitol-hill'],
+        }),
+        makeAlert({
+          id: 'linewide-alert',
+          header: 'Systemwide real-time accuracy notice',
+          stationIds: [],
+        }),
+        makeAlert({
+          id: 'many-stations-alert',
+          header: 'Corridor maintenance',
+          stationIds: [
+            'lynnwood-city-center',
+            'mountlake-terrace',
+            'shoreline-north-185th',
+            'shoreline-south-148th',
+            'pinehurst',
+            'northgate',
+            'roosevelt',
+            'u-district',
+            'westlake',
+            'seatac-airport',
+          ],
+        }),
+      ],
+      activeLine: 'line-1',
+      updatedAt: baseNow,
+      isLoading: false,
+      error: null,
+      timeFormat24Hour: false,
+      nowEpochMs: baseNow,
+      pinnedStationIds: new Set(['northgate', 'seatac-airport']),
+    });
+
+    const el = view.getElement();
+
+    // Multi-station alert renders pills in route order and marks pinned station
+    const stationCard = el.querySelector<HTMLElement>('[data-alert-id="station-alert"]')!;
+    const pills = Array.from(stationCard.querySelectorAll<HTMLElement>('.alert-station-pill'));
+    expect(pills.map((p) => p.dataset.stationId)).toEqual([
+      'northgate',
+      'roosevelt',
+      'u-district',
+      'university-of-washington',
+      'capitol-hill',
+    ]);
+    expect(pills[0].classList.contains('is-pinned')).toBe(true);
+    expect(pills[0].textContent).toContain('Northgate');
+    expect(pills[1].classList.contains('is-pinned')).toBe(false);
+
+    // Line-wide alert omits affected stations row
+    const linewideCard = el.querySelector<HTMLElement>('[data-alert-id="linewide-alert"]')!;
+    expect(linewideCard.querySelector('.alert-card-stations')).toBeNull();
+
+    // Overflow (> 8 stations) always preserves pinned stops (including seatac-airport at index 9) and appends +N more
+    const manyCard = el.querySelector<HTMLElement>('[data-alert-id="many-stations-alert"]')!;
+    const manyPills = Array.from(manyCard.querySelectorAll<HTMLElement>('.alert-station-pill'));
+    expect(manyPills.some((p) => p.dataset.stationId === 'seatac-airport' && p.classList.contains('is-pinned'))).toBe(true);
+    expect(manyPills.some((p) => p.dataset.stationId === 'northgate' && p.classList.contains('is-pinned'))).toBe(true);
+    const morePill = manyCard.querySelector('.alert-station-pill--more');
+    expect(morePill?.textContent).toBe('+2 more');
+  });
+
+  it('skips rebuilding DOM nodes on background/manual isLoading toggles while patching Refresh button state, and invalidates on pin/format/midnight changes', () => {
+    const view = new AlertsViewComponent({
+      onBackToStations: vi.fn(),
+      onRetry: vi.fn(),
+      onRefresh: vi.fn(),
     });
 
     const baseNow = Date.UTC(2026, 10, 18, 20, 0, 0);
     const state = {
-      alerts: [makeAlert({ id: 'stable-1', header: 'Stable advisory', activeStartMs: baseNow - 3600_000 })],
+      alerts: [
+        makeAlert({
+          id: 'stable-1',
+          header: 'Stable advisory',
+          stationIds: ['northgate'],
+          activeStartMs: baseNow - 3600_000,
+        }),
+      ],
       activeLine: 'line-1' as const,
       updatedAt: baseNow,
       isLoading: false,
       error: null,
       timeFormat24Hour: false,
       nowEpochMs: baseNow,
+      pinnedStationIds: new Set<string>(),
     };
 
     view.update(state);
     const firstListNode = view.getElement().querySelector('.alerts-list');
+    const refreshBtn = view.getElement().querySelector<HTMLButtonElement>('.alerts-refresh-btn');
     expect(firstListNode).not.toBeNull();
+    expect(refreshBtn?.disabled).toBe(false);
 
-    // Unchanged state and background refresh isLoading toggles (with updatedAt !== null) preserve DOM nodes
+    // Unchanged state and isLoading toggles preserve alert list DOM while toggling Refresh button state in-place
     view.update({
       ...state,
       isLoading: true,
-      alerts: [makeAlert({ id: 'stable-1', header: 'Stable advisory', activeStartMs: baseNow - 3600_000 })],
+      alerts: [
+        makeAlert({
+          id: 'stable-1',
+          header: 'Stable advisory',
+          stationIds: ['northgate'],
+          activeStartMs: baseNow - 3600_000,
+        }),
+      ],
     });
     expect(view.getElement().querySelector('.alerts-list')).toBe(firstListNode);
+    expect(view.getElement().querySelector<HTMLButtonElement>('.alerts-refresh-btn')?.disabled).toBe(true);
+    expect(view.getElement().querySelector<HTMLButtonElement>('.alerts-refresh-btn')?.classList.contains('is-loading')).toBe(true);
 
     view.update({
       ...state,
       isLoading: false,
-      alerts: [makeAlert({ id: 'stable-1', header: 'Stable advisory', activeStartMs: baseNow - 3600_000 })],
+      alerts: [
+        makeAlert({
+          id: 'stable-1',
+          header: 'Stable advisory',
+          stationIds: ['northgate'],
+          activeStartMs: baseNow - 3600_000,
+        }),
+      ],
     });
     expect(view.getElement().querySelector('.alerts-list')).toBe(firstListNode);
+    expect(view.getElement().querySelector<HTMLButtonElement>('.alerts-refresh-btn')?.disabled).toBe(false);
+
+    // Pinning an affected station invalidates and highlights the pill
+    view.update({
+      ...state,
+      pinnedStationIds: new Set(['northgate']),
+    });
+    const afterPinChange = view.getElement().querySelector('.alerts-list');
+    expect(afterPinChange).not.toBe(firstListNode);
+    expect(view.getElement().querySelector('.alert-station-pill.is-pinned')?.textContent).toContain('Northgate');
 
     // Changing 24-hour clock format invalidates and re-renders
-    view.update({ ...state, timeFormat24Hour: true });
+    view.update({ ...state, pinnedStationIds: new Set(['northgate']), timeFormat24Hour: true });
     const afterFormatChange = view.getElement().querySelector('.alerts-list');
-    expect(afterFormatChange).not.toBe(firstListNode);
+    expect(afterFormatChange).not.toBe(afterPinChange);
 
     // Crossing midnight invalidates rendered relative dates and re-renders
     view.update({
       ...state,
+      pinnedStationIds: new Set(['northgate']),
       timeFormat24Hour: true,
       nowEpochMs: baseNow + 24 * 60 * 60 * 1000,
     });
@@ -721,16 +842,18 @@ describe('TransitTrackerApp Service Alerts Integration', () => {
     app.destroy();
   });
 
-  it('refreshes alerts after the view transition finishes when opening the Alerts tab', async () => {
-    const fetchMock = mockNetwork({ alertsEntities: [] });
+  it('skips automatic fetch when opening Alerts within 1 hour, supports manual footer Refresh, and refreshes after transition once 1 hour has elapsed', async () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date(Date.UTC(2026, 10, 21, 10, 0, 0)));
 
     let finishTransition!: () => void;
-    const finished = new Promise<void>((resolve) => {
-      finishTransition = resolve;
-    });
+    let currentFinished = Promise.resolve();
     const startViewTransitionSpy = vi.fn((cb: () => void) => {
       cb();
-      return { finished };
+      currentFinished = new Promise<void>((resolve) => {
+        finishTransition = resolve;
+      });
+      return { finished: currentFinished };
     });
     const docWithTransition = document as unknown as {
       startViewTransition?: (cb: () => void) => { finished: Promise<void> };
@@ -739,28 +862,53 @@ describe('TransitTrackerApp Service Alerts Integration', () => {
     docWithTransition.startViewTransition = startViewTransitionSpy;
 
     try {
+      const fetchMock = mockNetwork({ alertsEntities: [] });
       const { TransitTrackerApp } = await import('../src/main');
       const app = new TransitTrackerApp();
-      await new Promise((r) => setTimeout(r, 25));
+      await vi.advanceTimersByTimeAsync(25);
 
       const countAlertCalls = () =>
         fetchMock.mock.calls.filter((call) => String(call[0]) === ST_ALERTS_FEED_URL).length;
 
       expect(countAlertCalls()).toBe(1);
 
+      // Opening Alerts immediately (within 1 hour) should NOT trigger an automatic re-fetch
       document.querySelector<HTMLButtonElement>('.alerts-tab-btn')?.click();
-      await new Promise((r) => setTimeout(r, 10));
-
-      // Background refresh waits for the view transition to complete so DOM updates never interrupt it
-      expect(startViewTransitionSpy).toHaveBeenCalledTimes(1);
+      finishTransition();
+      await vi.advanceTimersByTimeAsync(25);
       expect(countAlertCalls()).toBe(1);
 
-      finishTransition();
-      await new Promise((r) => setTimeout(r, 25));
+      // Manual footer Refresh button triggers an immediate fresh fetch
+      const refreshBtn = document.querySelector<HTMLButtonElement>('.alerts-refresh-btn');
+      expect(refreshBtn).not.toBeNull();
+      refreshBtn?.click();
+      await vi.advanceTimersByTimeAsync(25);
       expect(countAlertCalls()).toBe(2);
+
+      // Return to My Stations, stay on board for 59 minutes (59 x 60s polls) -> NO background alerts poll yet
+      document.querySelectorAll<HTMLButtonElement>('.toolbar-controls .view-mode-btn')[0]?.click();
+      finishTransition();
+      await vi.advanceTimersByTimeAsync(59 * 60 * 1000);
+      expect(countAlertCalls()).toBe(2);
+
+      // Advance 1 more minute (reaching 60 minutes) -> hourly background alerts poll fires once
+      await vi.advanceTimersByTimeAsync(60 * 1000);
+      expect(countAlertCalls()).toBe(3);
+
+      // Advance 59m59s while paused/offline, then open Alerts right after 1 hour -> waits for transition.finished
+      const nowBeforePause = Date.now();
+      vi.setSystemTime(nowBeforePause + 60 * 60 * 1000);
+      document.querySelector<HTMLButtonElement>('.alerts-tab-btn')?.click();
+      await vi.advanceTimersByTimeAsync(10);
+      expect(countAlertCalls()).toBe(3);
+
+      finishTransition();
+      await vi.advanceTimersByTimeAsync(25);
+      expect(countAlertCalls()).toBe(4);
 
       app.destroy();
     } finally {
+      vi.useRealTimers();
       if (originalStartViewTransition === undefined) {
         delete docWithTransition.startViewTransition;
       } else {
@@ -769,8 +917,9 @@ describe('TransitTrackerApp Service Alerts Integration', () => {
     }
   });
 
-  it('does not trigger alerts refresh mid-transition when Alerts transition is superseded by a line switch', async () => {
-    const fetchMock = mockNetwork({ alertsEntities: [] });
+  it('does not trigger alerts refresh mid-transition when a stale Alerts transition is superseded by a line switch', async () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date(Date.UTC(2026, 10, 21, 10, 0, 0)));
 
     const pendingTransitions: { resolve: () => void; reject: (err: unknown) => void }[] = [];
     const startViewTransitionSpy = vi.fn((cb: () => void) => {
@@ -792,14 +941,18 @@ describe('TransitTrackerApp Service Alerts Integration', () => {
     docWithTransition.startViewTransition = startViewTransitionSpy;
 
     try {
+      const fetchMock = mockNetwork({ alertsEntities: [] });
       const { TransitTrackerApp } = await import('../src/main');
       const app = new TransitTrackerApp();
-      await new Promise((r) => setTimeout(r, 25));
+      await vi.advanceTimersByTimeAsync(25);
 
       const countAlertCalls = () =>
         fetchMock.mock.calls.filter((call) => String(call[0]) === ST_ALERTS_FEED_URL).length;
 
       expect(countAlertCalls()).toBe(1);
+
+      // Jump clock forward by 1 hour so opening Alerts would normally refresh on finish
+      vi.setSystemTime(Date.now() + 60 * 60 * 1000);
 
       // Click Alerts (transition #1 starts), then immediately switch to Line 2 (transition #2 supersedes #1)
       document.querySelector<HTMLButtonElement>('.alerts-tab-btn')?.click();
@@ -808,21 +961,59 @@ describe('TransitTrackerApp Service Alerts Integration', () => {
 
       // Browser skips/aborts transition #1 while transition #2 is still animating
       pendingTransitions[0].reject(new DOMException('Transition skipped', 'AbortError'));
-      await new Promise((r) => setTimeout(r, 15));
+      await vi.advanceTimersByTimeAsync(15);
 
       // Superseded transition #1 MUST NOT fire fetchAlerts while transition #2 is still running
       expect(countAlertCalls()).toBe(1);
 
       pendingTransitions[1].resolve();
-      await new Promise((r) => setTimeout(r, 15));
+      await vi.advanceTimersByTimeAsync(15);
 
       app.destroy();
     } finally {
+      vi.useRealTimers();
       if (originalStartViewTransition === undefined) {
         delete docWithTransition.startViewTransition;
       } else {
         docWithTransition.startViewTransition = originalStartViewTransition;
       }
     }
+  });
+
+  it('displays live affected station pills in the Alerts tab and highlights user pinned stations', async () => {
+    const nowSec = Math.floor(Date.now() / 1000);
+    mockNetwork({
+      alertsEntities: [
+        {
+          id: 'westlake-stop-alert',
+          alert: {
+            severity_level: 'WARNING',
+            effect: 'ACCESSIBILITY_ISSUE',
+            active_period: [{ start: nowSec - 60 }],
+            informed_entity: [
+              { route_id: '100479', stop_id: '1121' }, // Westlake (pinned in beforeEach)
+              { route_id: '100479', stop_id: '99603' }, // Capitol Hill (not pinned)
+            ],
+            header_text: {
+              translation: [{ language: 'en', text: 'Elevator maintenance at downtown stations' }],
+            },
+          },
+        },
+      ],
+    });
+
+    const { TransitTrackerApp } = await import('../src/main');
+    const app = new TransitTrackerApp();
+    await new Promise((r) => setTimeout(r, 25));
+
+    document.querySelector<HTMLButtonElement>('.alerts-tab-btn')?.click();
+
+    const pills = Array.from(document.querySelectorAll<HTMLElement>('.alert-station-pill'));
+    expect(pills.map((p) => p.dataset.stationId)).toEqual(['capitol-hill', 'westlake']);
+    expect(pills[0].classList.contains('is-pinned')).toBe(false);
+    expect(pills[1].classList.contains('is-pinned')).toBe(true);
+    expect(pills[1].textContent).toContain('Westlake');
+
+    app.destroy();
   });
 });
