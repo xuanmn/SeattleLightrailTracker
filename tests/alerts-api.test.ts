@@ -5,6 +5,7 @@ import {
   sanitizeAlertUrl,
   fetchServiceAlerts,
   clearAlertsCache,
+  isAlertsFetchStale,
   type RawGtfsAlertsFeed,
 } from '../src/services/alerts-api';
 
@@ -552,5 +553,53 @@ describe('fetchServiceAlerts', () => {
     expect(err).toBeInstanceOf(Error);
     expect(err.name).not.toBe('AbortError');
     expect(err.message).toMatch(/timed out/i);
+  });
+});
+
+describe('isAlertsFetchStale', () => {
+  const hourAt = (hour: number, min = 0, sec = 0, ms = 0) =>
+    Date.UTC(2026, 10, 21, hour, min, sec, ms);
+
+  it('returns true when no fetch has completed yet', () => {
+    expect(isAlertsFetchStale(null, hourAt(10, 25), false)).toBe(true);
+    expect(isAlertsFetchStale(null, hourAt(10, 25), true)).toBe(true);
+  });
+
+  it('enforces exact 15-minute boundary and sub-second offsets against :00 sync boundaries', () => {
+    // Exact 15m before 12:00 -> 12:00:00.000 is synced (>= 15m gap)
+    const exact15m = hourAt(11, 45, 0, 0);
+    expect(isAlertsFetchStale(exact15m, hourAt(11, 59, 59, 999), false)).toBe(false);
+    expect(isAlertsFetchStale(exact15m, hourAt(12, 0, 0, 0), false)).toBe(true);
+
+    // 1ms inside 15m window -> skips 12:00 completely, waits until 13:00:00.000
+    const justInside15m = hourAt(11, 45, 0, 1);
+    expect(isAlertsFetchStale(justInside15m, hourAt(12, 0, 0, 0), false)).toBe(false);
+    expect(isAlertsFetchStale(justInside15m, hourAt(12, 59, 59, 999), false)).toBe(false);
+    expect(isAlertsFetchStale(justInside15m, hourAt(13, 0, 0, 0), false)).toBe(true);
+
+    // Sub-second before 12:00 -> skips 12:00 completely, waits until 13:00:00.000
+    const subSecondBefore = hourAt(11, 59, 59, 500);
+    expect(isAlertsFetchStale(subSecondBefore, hourAt(12, 0, 0, 0), false)).toBe(false);
+    expect(isAlertsFetchStale(subSecondBefore, hourAt(12, 15, 0, 0), false)).toBe(false);
+    expect(isAlertsFetchStale(subSecondBefore, hourAt(13, 0, 0, 0), false)).toBe(true);
+  });
+
+  it('retries errors after 5 minutes even when within 15 minutes of :00', () => {
+    const failedAt = hourAt(11, 55, 0, 0);
+    expect(isAlertsFetchStale(failedAt, hourAt(11, 59, 59, 999), true)).toBe(false);
+    expect(isAlertsFetchStale(failedAt, hourAt(12, 0, 0, 0), true)).toBe(true);
+
+    const failedAt59 = hourAt(11, 59, 0, 0);
+    expect(isAlertsFetchStale(failedAt59, hourAt(12, 3, 59, 999), true)).toBe(false);
+    expect(isAlertsFetchStale(failedAt59, hourAt(12, 4, 0, 0), true)).toBe(true);
+  });
+
+  it('recovers from backward wall-clock jumps (> 60s) while tolerating minor NTP jitter', () => {
+    const fetchedAt = hourAt(12, 30, 0, 0);
+    // Tiny 500ms backward adjustment does not spuriously invalidate cache
+    expect(isAlertsFetchStale(fetchedAt, fetchedAt - 500, false)).toBe(false);
+    // Large backward jump (e.g., clock stepped back 2 hours) triggers refresh
+    expect(isAlertsFetchStale(fetchedAt, hourAt(10, 30, 0, 0), false)).toBe(true);
+    expect(isAlertsFetchStale(fetchedAt, fetchedAt - 61_000, true)).toBe(true);
   });
 });

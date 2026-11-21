@@ -14,6 +14,36 @@ export const ST_ALERTS_WEB_URL =
 const CACHE_TTL_MS = 25 * 1000;
 const REQUEST_TIMEOUT_MS = 6000;
 
+export const ALERTS_POLL_INTERVAL_MS = 60 * 60 * 1000;
+export const ALERTS_MIN_REFETCH_GAP_MS = 15 * 60 * 1000;
+export const ALERTS_ERROR_RETRY_MS = 5 * 60 * 1000;
+const CLOCK_SKEW_TOLERANCE_MS = 60 * 1000;
+
+/**
+ * Determine whether cached alerts should be refreshed on the next poll tick or tab open.
+ * Aligns healthy refreshes to :00 clock boundaries, skipping the upcoming :00 if fetched
+ * within 15 minutes before it. Retries failed fetches every 5 minutes regardless of :00.
+ */
+export function isAlertsFetchStale(
+  lastFetchAt: number | null,
+  nowEpochMs: number = Date.now(),
+  hasError: boolean = false
+): boolean {
+  if (lastFetchAt === null) return true;
+  // Recover from significant backward wall-clock adjustments while ignoring minor NTP jitter
+  if (lastFetchAt - nowEpochMs > CLOCK_SKEW_TOLERANCE_MS) return true;
+  if (hasError) {
+    return nowEpochMs - lastFetchAt >= ALERTS_ERROR_RETRY_MS;
+  }
+  const nextHourBoundary =
+    (Math.floor(lastFetchAt / ALERTS_POLL_INTERVAL_MS) + 1) * ALERTS_POLL_INTERVAL_MS;
+  const nextSyncAt =
+    nextHourBoundary - lastFetchAt < ALERTS_MIN_REFETCH_GAP_MS
+      ? nextHourBoundary + ALERTS_POLL_INTERVAL_MS
+      : nextHourBoundary;
+  return nowEpochMs >= nextSyncAt;
+}
+
 const LINK_ROUTE_TO_LINE: Record<string, TransitLineId> = {
   '100479': 'line-1',
   '1-SHUTTLE': 'line-1',

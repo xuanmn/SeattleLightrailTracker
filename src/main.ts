@@ -12,7 +12,7 @@ import { StationCardComponent } from './components/StationCard';
 import type { StationPickerModal } from './components/StationPickerModal';
 import type { SystemMapModal } from './components/SystemMapModal';
 import { getStationById, getStationsByLine, LINE_CONFIG } from './data/stations';
-import { fetchServiceAlerts } from './services/alerts-api';
+import { fetchServiceAlerts, isAlertsFetchStale } from './services/alerts-api';
 import { fetchArrivalsForStation } from './services/oba-api';
 import { PollScheduler } from './services/pollScheduler';
 import {
@@ -40,9 +40,6 @@ import { createElement, ICONS } from './utils/dom';
 import { formatClockTime } from './utils/time';
 
 const SYNC_INTERVAL_MS = 60 * 1000; // Fixed 60-second real-time sync cycle
-const ALERTS_POLL_INTERVAL_MS = 60 * 60 * 1000; // 1-hour top-of-hour background service alerts sync cycle
-const ALERTS_MIN_REFETCH_GAP_MS = 15 * 60 * 1000; // Skip upcoming :00 sync if fetched within 15 minutes
-const ALERTS_ERROR_RETRY_MS = 5 * 60 * 1000; // 5-minute retry cooldown after a failed alerts fetch
 const MAX_CONCURRENT_STATION_FETCHES = 6; // Each station fetches 2 platforms
 
 const NETWORK_INTERRUPTED_MESSAGE =
@@ -955,20 +952,11 @@ export class TransitTrackerApp {
   }
 
   private isAlertsStale(): boolean {
-    if (this.lastAlertsFetchAt === null) return true;
-    const now = Date.now();
-    if (this.alertsError !== null) {
-      return now - this.lastAlertsFetchAt >= ALERTS_ERROR_RETRY_MS;
-    }
-    const nextHourBoundary =
-      (Math.floor(this.lastAlertsFetchAt / ALERTS_POLL_INTERVAL_MS) + 1) *
-      ALERTS_POLL_INTERVAL_MS;
-    // If fetched within 15 minutes before the next :00, skip that hour and sync on the following :00
-    const nextSyncAt =
-      nextHourBoundary - this.lastAlertsFetchAt < ALERTS_MIN_REFETCH_GAP_MS
-        ? nextHourBoundary + ALERTS_POLL_INTERVAL_MS
-        : nextHourBoundary;
-    return now >= nextSyncAt;
+    return isAlertsFetchStale(
+      this.lastAlertsFetchAt,
+      Date.now(),
+      this.alertsError !== null
+    );
   }
 
   private async fetchAlerts(bypassCache: boolean = false): Promise<void> {

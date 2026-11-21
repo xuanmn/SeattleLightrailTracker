@@ -530,11 +530,12 @@ describe('TransitTrackerApp Service Alerts Integration', () => {
   function mockNetwork(options: {
     alertsEntities?: unknown[];
     alertsFail?: boolean;
+    failNextAlert?: () => boolean;
   }) {
     const nowSec = Math.floor(Date.now() / 1000);
     const fetchMock = vi.fn(async (url: string) => {
       if (String(url) === ST_ALERTS_FEED_URL) {
-        if (options.alertsFail) {
+        if (options.alertsFail || options.failNextAlert?.()) {
           return { ok: false, status: 503, statusText: 'Service Unavailable' };
         }
         return {
@@ -856,7 +857,7 @@ describe('TransitTrackerApp Service Alerts Integration', () => {
     app.destroy();
   });
 
-  it('skips automatic fetch when opening Alerts within 1 hour, supports manual footer Refresh, and refreshes after transition once 1 hour has elapsed', async () => {
+  it('skips automatic fetch on Alerts tab open before the next :00 sync, supports manual footer Refresh, and refreshes after transition once :00 arrives', async () => {
     vi.useFakeTimers();
     vi.setSystemTime(new Date(Date.UTC(2026, 10, 21, 10, 0, 0)));
 
@@ -875,10 +876,11 @@ describe('TransitTrackerApp Service Alerts Integration', () => {
     const originalStartViewTransition = docWithTransition.startViewTransition;
     docWithTransition.startViewTransition = startViewTransitionSpy;
 
+    let app: InstanceType<(typeof import('../src/main'))['TransitTrackerApp']> | undefined;
     try {
       const fetchMock = mockNetwork({ alertsEntities: [] });
       const { TransitTrackerApp } = await import('../src/main');
-      const app = new TransitTrackerApp();
+      app = new TransitTrackerApp();
       await vi.advanceTimersByTimeAsync(25);
 
       const countAlertCalls = () =>
@@ -886,7 +888,7 @@ describe('TransitTrackerApp Service Alerts Integration', () => {
 
       expect(countAlertCalls()).toBe(1);
 
-      // Opening Alerts immediately (within 1 hour) should NOT trigger an automatic re-fetch
+      // Opening Alerts before the next :00 boundary should NOT trigger an automatic re-fetch
       document.querySelector<HTMLButtonElement>('.alerts-tab-btn')?.click();
       finishTransition();
       await vi.advanceTimersByTimeAsync(25);
@@ -899,17 +901,17 @@ describe('TransitTrackerApp Service Alerts Integration', () => {
       await vi.advanceTimersByTimeAsync(25);
       expect(countAlertCalls()).toBe(2);
 
-      // Return to My Stations, stay on board for 59 minutes (59 x 60s polls) -> NO background alerts poll yet
+      // Return to My Stations through 10:59:00 -> NO background alerts poll yet
       document.querySelectorAll<HTMLButtonElement>('.toolbar-controls .view-mode-btn')[0]?.click();
       finishTransition();
       await vi.advanceTimersByTimeAsync(59 * 60 * 1000);
       expect(countAlertCalls()).toBe(2);
 
-      // Advance past the 60-minute cooldown onto the next 60s scheduler tick -> hourly background alerts poll fires once
+      // Cross the 11:00:00 top-of-hour sync boundary -> hourly background alerts poll fires once
       await vi.advanceTimersByTimeAsync(2 * 60 * 1000);
       expect(countAlertCalls()).toBe(3);
 
-      // Jump clock forward 1 hour (simulating resumed session), then open Alerts -> waits for transition.finished
+      // Jump clock forward past 12:00:00 (simulating resumed session), then open Alerts -> waits for transition.finished
       const nowBeforePause = Date.now();
       vi.setSystemTime(nowBeforePause + 60 * 60 * 1000);
       document.querySelector<HTMLButtonElement>('.alerts-tab-btn')?.click();
@@ -919,9 +921,8 @@ describe('TransitTrackerApp Service Alerts Integration', () => {
       finishTransition();
       await vi.advanceTimersByTimeAsync(25);
       expect(countAlertCalls()).toBe(4);
-
-      app.destroy();
     } finally {
+      app?.destroy();
       vi.useRealTimers();
       if (originalStartViewTransition === undefined) {
         delete docWithTransition.startViewTransition;
@@ -931,53 +932,103 @@ describe('TransitTrackerApp Service Alerts Integration', () => {
     }
   });
 
-  it('syncs hourly alerts polling to :00 boundaries and skips the upcoming hour when fetched within 15 minutes', async () => {
+  it('syncs hourly alerts polling to :00 boundaries without multi-hour drift, handles reconnect/error recovery near :00, and skips the upcoming hour within 15 minutes', async () => {
     vi.useFakeTimers();
-    // Start off-the-hour at 10:25:00 UTC
-    vi.setSystemTime(new Date(Date.UTC(2026, 10, 21, 10, 25, 0)));
+    // Start off-the-hour at 10:25:37.200 UTC
+    vi.setSystemTime(new Date(Date.UTC(2026, 10, 21, 10, 25, 37, 200)));
 
+    let app: InstanceType<(typeof import('../src/main'))['TransitTrackerApp']> | undefined;
+    let shouldFailAlert = false;
     try {
-      const fetchMock = mockNetwork({ alertsEntities: [] });
+      const fetchMock = mockNetwork({
+        alertsEntities: [],
+        failNextAlert: () => {
+          if (!shouldFailAlert) return false;
+          shouldFailAlert = false;
+          return true;
+        },
+      });
       const { TransitTrackerApp } = await import('../src/main');
-      const app = new TransitTrackerApp();
+      app = new TransitTrackerApp();
       await vi.advanceTimersByTimeAsync(25);
 
       const countAlertCalls = () =>
         fetchMock.mock.calls.filter((call) => String(call[0]) === ST_ALERTS_FEED_URL).length;
 
-      // Call 1 at startup (10:25:00) -> gap to 11:00 is 35m (>= 15m), so next sync is 11:00
+      // Call 1 at startup (10:25:37) -> gap to 11:00 is ~34m (>= 15m), so next sync is 11:00
       expect(countAlertCalls()).toBe(1);
 
-      // Advance 34m -> 10:59:00: still before 11:00:00
+      // Advance 34m -> 10:59:37: still before 11:00:00
       await vi.advanceTimersByTimeAsync(34 * 60 * 1000);
       expect(countAlertCalls()).toBe(1);
 
-      // Advance 1m -> 11:00:00: syncs on top of the hour (Call 2)
+      // Advance 1m -> 11:00:37: syncs on 11:00 hour boundary (Call 2)
       await vi.advanceTimersByTimeAsync(60 * 1000);
       expect(countAlertCalls()).toBe(2);
 
-      // Advance to 11:46:00 (14 minutes before 12:00) and click manual Refresh (Call 3)
+      // Verify zero multi-hour drift: 11:59:37 still quiet, 12:00:37 fires right on 12:00 (Call 3)
+      await vi.advanceTimersByTimeAsync(59 * 60 * 1000);
+      expect(countAlertCalls()).toBe(2);
+      await vi.advanceTimersByTimeAsync(60 * 1000);
+      expect(countAlertCalls()).toBe(3);
+
+      // Advance to 12:46:37 (within 15m of 13:00) and click manual Refresh (Call 4)
       await vi.advanceTimersByTimeAsync(46 * 60 * 1000);
       document.querySelector<HTMLButtonElement>('.alerts-tab-btn')?.click();
       document.querySelector<HTMLButtonElement>('.alerts-refresh-btn')?.click();
       await vi.advanceTimersByTimeAsync(25);
-      expect(countAlertCalls()).toBe(3);
-
-      // Return to My Stations and cross 12:00:00 -> SKIPPED because 11:46 is within 15 minutes of 12:00
-      document.querySelectorAll<HTMLButtonElement>('.toolbar-controls .view-mode-btn')[0]?.click();
-      await vi.advanceTimersByTimeAsync(14 * 60 * 1000); // 12:00:00
-      expect(countAlertCalls()).toBe(3);
-
-      // Stays synced to the hour through 12:59:00 (does NOT fire mid-hour at 12:01 or 12:15)
-      await vi.advanceTimersByTimeAsync(59 * 60 * 1000); // 12:59:00
-      expect(countAlertCalls()).toBe(3);
-
-      // Advance 1m -> 13:00:00: next top-of-hour poll fires (Call 4)
-      await vi.advanceTimersByTimeAsync(60 * 1000);
       expect(countAlertCalls()).toBe(4);
 
-      app.destroy();
+      // Return to My Stations and cross 13:00:37 -> SKIPPED because 12:46:37 is within 15m of 13:00
+      document.querySelectorAll<HTMLButtonElement>('.toolbar-controls .view-mode-btn')[0]?.click();
+      await vi.advanceTimersByTimeAsync(14 * 60 * 1000); // 13:00:37
+      expect(countAlertCalls()).toBe(4);
+
+      // Stays synced through 13:59:37, then fires right on 14:00:37 (Call 5)
+      await vi.advanceTimersByTimeAsync(59 * 60 * 1000);
+      expect(countAlertCalls()).toBe(4);
+      await vi.advanceTimersByTimeAsync(60 * 1000);
+      expect(countAlertCalls()).toBe(5);
+
+      // Online reconnect at 14:50:37 fetches immediately (Call 6) AND skips 15:00:37 until 16:00:37
+      await vi.advanceTimersByTimeAsync(50 * 60 * 1000); // 14:50:37
+      window.dispatchEvent(new Event('offline'));
+      window.dispatchEvent(new Event('online'));
+      await vi.advanceTimersByTimeAsync(25);
+      expect(countAlertCalls()).toBe(6);
+
+      await vi.advanceTimersByTimeAsync(10 * 60 * 1000); // 15:00:37 -> skipped
+      expect(countAlertCalls()).toBe(6);
+
+      // Visibility sleep/wake resume across an active 15:55:37 failure (5m before 16:00)
+      await vi.advanceTimersByTimeAsync(55 * 60 * 1000); // 15:55:37
+      shouldFailAlert = true;
+      window.dispatchEvent(new Event('offline'));
+      window.dispatchEvent(new Event('online'));
+      await vi.advanceTimersByTimeAsync(25);
+      expect(countAlertCalls()).toBe(7);
+
+      // 5 minutes later at 16:00:37, error retry MUST fire (NOT skipped by 15m window), recovering to Call 8!
+      await vi.advanceTimersByTimeAsync(5 * 60 * 1000);
+      expect(countAlertCalls()).toBe(8);
+
+      // Sleep across 17:00 and wake on visibility resume at 17:47:00 -> fetches immediately (Call 9) and skips 18:00
+      Object.defineProperty(document, 'hidden', { configurable: true, value: true });
+      document.dispatchEvent(new Event('visibilitychange'));
+      vi.setSystemTime(Date.UTC(2026, 10, 21, 17, 47, 0));
+      Object.defineProperty(document, 'hidden', { configurable: true, value: false });
+      document.dispatchEvent(new Event('visibilitychange'));
+      await vi.advanceTimersByTimeAsync(25);
+      expect(countAlertCalls()).toBe(9);
+
+      // Crossing 18:00:00 skips because resume fetch occurred at 17:47:00 (within 15m of 18:00), then fires at 19:00:00 (Call 10)
+      await vi.advanceTimersByTimeAsync(13 * 60 * 1000); // 18:00:00
+      expect(countAlertCalls()).toBe(9);
+      await vi.advanceTimersByTimeAsync(60 * 60 * 1000); // 19:00:00
+      expect(countAlertCalls()).toBe(10);
     } finally {
+      Object.defineProperty(document, 'hidden', { configurable: true, value: false });
+      app?.destroy();
       vi.useRealTimers();
     }
   });
