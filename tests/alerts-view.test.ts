@@ -931,6 +931,57 @@ describe('TransitTrackerApp Service Alerts Integration', () => {
     }
   });
 
+  it('syncs hourly alerts polling to :00 boundaries and skips the upcoming hour when fetched within 15 minutes', async () => {
+    vi.useFakeTimers();
+    // Start off-the-hour at 10:25:00 UTC
+    vi.setSystemTime(new Date(Date.UTC(2026, 10, 21, 10, 25, 0)));
+
+    try {
+      const fetchMock = mockNetwork({ alertsEntities: [] });
+      const { TransitTrackerApp } = await import('../src/main');
+      const app = new TransitTrackerApp();
+      await vi.advanceTimersByTimeAsync(25);
+
+      const countAlertCalls = () =>
+        fetchMock.mock.calls.filter((call) => String(call[0]) === ST_ALERTS_FEED_URL).length;
+
+      // Call 1 at startup (10:25:00) -> gap to 11:00 is 35m (>= 15m), so next sync is 11:00
+      expect(countAlertCalls()).toBe(1);
+
+      // Advance 34m -> 10:59:00: still before 11:00:00
+      await vi.advanceTimersByTimeAsync(34 * 60 * 1000);
+      expect(countAlertCalls()).toBe(1);
+
+      // Advance 1m -> 11:00:00: syncs on top of the hour (Call 2)
+      await vi.advanceTimersByTimeAsync(60 * 1000);
+      expect(countAlertCalls()).toBe(2);
+
+      // Advance to 11:46:00 (14 minutes before 12:00) and click manual Refresh (Call 3)
+      await vi.advanceTimersByTimeAsync(46 * 60 * 1000);
+      document.querySelector<HTMLButtonElement>('.alerts-tab-btn')?.click();
+      document.querySelector<HTMLButtonElement>('.alerts-refresh-btn')?.click();
+      await vi.advanceTimersByTimeAsync(25);
+      expect(countAlertCalls()).toBe(3);
+
+      // Return to My Stations and cross 12:00:00 -> SKIPPED because 11:46 is within 15 minutes of 12:00
+      document.querySelectorAll<HTMLButtonElement>('.toolbar-controls .view-mode-btn')[0]?.click();
+      await vi.advanceTimersByTimeAsync(14 * 60 * 1000); // 12:00:00
+      expect(countAlertCalls()).toBe(3);
+
+      // Stays synced to the hour through 12:59:00 (does NOT fire mid-hour at 12:01 or 12:15)
+      await vi.advanceTimersByTimeAsync(59 * 60 * 1000); // 12:59:00
+      expect(countAlertCalls()).toBe(3);
+
+      // Advance 1m -> 13:00:00: next top-of-hour poll fires (Call 4)
+      await vi.advanceTimersByTimeAsync(60 * 1000);
+      expect(countAlertCalls()).toBe(4);
+
+      app.destroy();
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
   it('does not trigger alerts refresh mid-transition when a stale Alerts transition is superseded by a line switch', async () => {
     vi.useFakeTimers();
     vi.setSystemTime(new Date(Date.UTC(2026, 10, 21, 10, 0, 0)));
