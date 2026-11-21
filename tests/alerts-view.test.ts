@@ -65,6 +65,8 @@ describe('AlertsViewComponent', () => {
     const emptyCard = el.querySelector('.alerts-empty-card');
     expect(emptyCard).not.toBeNull();
     expect(el.textContent).toContain('No active Link service alerts');
+    expect(emptyCard?.textContent).not.toContain('Last checked at');
+    expect(emptyCard?.querySelector('.alerts-official-link')).toBeNull();
 
     const officialLink = el.querySelector<HTMLAnchorElement>(`a[href="${ST_ALERTS_WEB_URL}"]`);
     expect(officialLink).not.toBeNull();
@@ -297,7 +299,7 @@ describe('AlertsViewComponent', () => {
     expect(olItems[1].value).toBe(5);
   });
 
-  it('omits secondary filter and header bar, prioritizes activeLine, and renders source meta bar with Refresh and soundtransit.org link at the top', () => {
+  it('omits redundant header/source/timestamp chrome and renders Refresh + soundtransit.org link cleanly above cards', () => {
     const onRefresh = vi.fn();
     const view = new AlertsViewComponent({
       onBackToStations: vi.fn(),
@@ -321,12 +323,13 @@ describe('AlertsViewComponent', () => {
     expect(el.querySelector('.alerts-view-header')).toBeNull();
     expect(el.querySelector('.alerts-filter-group')).toBeNull();
     expect(el.querySelector('.alerts-view-footer')).toBeNull();
+    expect(el.querySelector('.alerts-source-note')).toBeNull();
 
     const metaBar = el.querySelector<HTMLElement>('.alerts-view-meta');
     const alertsList = el.querySelector<HTMLElement>('.alerts-list');
     expect(metaBar).not.toBeNull();
     expect(alertsList).not.toBeNull();
-    // Source note, Refresh button, and advisory board link appear above the alert cards
+    // Refresh button and advisory board link appear above the alert cards
     expect(el.firstElementChild).toBe(metaBar);
 
     const refreshBtn = el.querySelector<HTMLButtonElement>('.alerts-view-meta .alerts-refresh-btn');
@@ -863,13 +866,17 @@ describe('TransitTrackerApp Service Alerts Integration', () => {
     await new Promise((r) => setTimeout(r, 25));
 
     const titleEl = document.querySelector('.dashboard-toolbar .section-title');
+    const subtitleEl = document.querySelector('.dashboard-toolbar .section-subtitle');
     expect(titleEl?.textContent).toContain('1 Line Live Departures');
 
     document.querySelector<HTMLButtonElement>('.alerts-tab-btn')?.click();
     expect(titleEl?.textContent).toContain('Service Alerts');
     expect(titleEl?.textContent).not.toContain('Live Departures');
-    // AlertsView should not render a duplicate h2 title under the toolbar header
+    expect(subtitleEl?.textContent).toContain('Sound Transit GTFS-RT');
+    expect(subtitleEl?.textContent).toContain('Updated ');
+    // AlertsView should not render a duplicate h2 title or duplicate source/timestamp line
     expect(document.querySelector('.alerts-view-title')).toBeNull();
+    expect(document.querySelector('.alerts-source-note')).toBeNull();
 
     document.querySelectorAll<HTMLButtonElement>('.toolbar-controls .view-mode-btn')[0]?.click();
     expect(titleEl?.textContent).toContain('1 Line Live Departures');

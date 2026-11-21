@@ -99,11 +99,17 @@
 .alert-card-link {
   display: inline-flex;
   align-items: center;
+  gap: 0.3rem;
   min-height: 36px;
   color: var(--text-accent);
   font-size: 0.85rem;
   font-weight: 500;
   text-decoration: none;
+}
+
+.alerts-board-link-arrow {
+  font-size: 0.8rem;
+  opacity: 0.85;
 }
 
 .alerts-official-link:hover,
@@ -478,17 +484,11 @@
   display: flex;
   flex-wrap: wrap;
   align-items: center;
-  justify-content: space-between;
-  gap: 0.75rem;
+  justify-content: flex-end;
+  gap: 0.85rem;
+  margin-top: -0.35rem;
   font-size: 0.82rem;
   color: var(--text-secondary);
-}
-
-.alerts-meta-actions {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  gap: 0.85rem;
 }
 
 .alerts-refresh-btn {
@@ -552,6 +552,11 @@
 }
 
 @media (max-width: 768px) {
+  .alerts-view-meta {
+    justify-content: space-between;
+    margin-top: 0;
+  }
+
   .alert-card,
   .alerts-empty-card,
   .alerts-error-card {

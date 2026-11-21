@@ -2,7 +2,7 @@ import type { AlertSeverity, ServiceAlert, Station, TransitLineId } from '../typ
 import { getStationById } from '../data/stations';
 import { ST_ALERTS_WEB_URL } from '../services/alerts-api';
 import { createElement, ICONS } from '../utils/dom';
-import { formatAlertTimestamp, formatClockTime } from '../utils/time';
+import { formatAlertTimestamp } from '../utils/time';
 
 export interface AlertsViewCallbacks {
   onBackToStations: () => void;
@@ -307,7 +307,7 @@ export class AlertsViewComponent {
     }
 
     if (ordered.length === 0) {
-      fragment.appendChild(this.renderEmptyCard(state));
+      fragment.appendChild(this.renderEmptyCard());
     } else {
       fragment.appendChild(this.renderAlertList(ordered, state, nowEpochMs));
     }
@@ -359,7 +359,7 @@ export class AlertsViewComponent {
     return card;
   }
 
-  private renderEmptyCard(state: AlertsRenderState): HTMLElement {
+  private renderEmptyCard(): HTMLElement {
     const card = createElement('div', 'alerts-empty-card');
 
     const dot = createElement('span', 'alerts-good-dot');
@@ -369,14 +369,10 @@ export class AlertsViewComponent {
     const title = createTextElement('h3', 'alerts-state-title', 'No active Link service alerts');
     titleRow.append(dot, title);
 
-    const lastChecked =
-      state.updatedAt !== null
-        ? ` Last checked at ${formatClockTime(state.updatedAt, state.timeFormat24Hour)}.`
-        : '';
     const message = createTextElement(
       'p',
       'alerts-state-message',
-      `1 Line and 2 Line have no reported disruptions right now.${lastChecked}`
+      '1 Line and 2 Line have no reported disruptions right now.'
     );
 
     const actions = createElement('div', 'alerts-state-actions');
@@ -384,13 +380,7 @@ export class AlertsViewComponent {
     backBtn.type = 'button';
     backBtn.addEventListener('click', () => this.callbacks.onBackToStations());
 
-    const officialLink = createExternalLink(
-      ST_ALERTS_WEB_URL,
-      'View Sound Transit alerts page',
-      'alerts-official-link'
-    );
-
-    actions.append(backBtn, officialLink);
+    actions.appendChild(backBtn);
     card.append(titleRow, message, actions);
     return card;
   }
@@ -550,17 +540,6 @@ export class AlertsViewComponent {
 
   private renderMetaBar(state: AlertsRenderState): HTMLElement {
     const metaBar = createElement('div', 'alerts-view-meta');
-    const updated =
-      state.updatedAt !== null
-        ? ` · Updated ${formatClockTime(state.updatedAt, state.timeFormat24Hour)}`
-        : '';
-    const note = createTextElement(
-      'span',
-      'alerts-source-note',
-      `Source: Sound Transit GTFS-RT alerts feed${updated}.`
-    );
-
-    const actions = createElement('div', 'alerts-meta-actions');
 
     const refreshBtn = createElement('button', 'alerts-refresh-btn') as HTMLButtonElement;
     refreshBtn.type = 'button';
@@ -584,12 +563,14 @@ export class AlertsViewComponent {
 
     const link = createExternalLink(
       ST_ALERTS_WEB_URL,
-      'Full Sound Transit advisory board',
+      'Sound Transit advisory board',
       'alerts-board-link'
     );
+    const arrow = createTextElement('span', 'alerts-board-link-arrow', '↗');
+    arrow.setAttribute('aria-hidden', 'true');
+    link.appendChild(arrow);
 
-    actions.append(refreshBtn, link);
-    metaBar.append(note, actions);
+    metaBar.append(refreshBtn, link);
     return metaBar;
   }
 }

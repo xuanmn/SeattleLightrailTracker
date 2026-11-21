@@ -399,11 +399,11 @@ export class TransitTrackerApp {
 
       this.lineSubtitleEl.textContent =
         this.alertsUpdatedAt !== null
-          ? `Sound Transit Link feed · Updated ${formatClockTime(
+          ? `Sound Transit GTFS-RT · Updated ${formatClockTime(
               this.alertsUpdatedAt,
               this.settings.timeFormat24Hour
             )}`
-          : 'Sound Transit Link GTFS-RT alerts feed';
+          : 'Sound Transit GTFS-RT alerts feed';
       return;
     }
 
