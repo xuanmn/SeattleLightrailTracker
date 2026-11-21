@@ -244,13 +244,15 @@ describe('transformGtfsAlerts', () => {
               { route_id: '100479', stop_id: '990005' }, // Northgate
               { route_id: '100479', stop_id: '990006' }, // Northgate duplicate platform
               { route_id: '100479', stop_id: 'N15-E-00001' }, // Shoreline South elevator facility stop_id
+              { route_id: '100479', stop_id: '40_S07' }, // Federal Way Downtown bare parent station ID
+              { route_id: '590', stop_id: '455' }, // Non-Link bus route sharing 3-digit stop ID (must be ignored)
               { route_id: '100479', stop_id: 'UNKNOWN_999' },
             ],
             header_text: {
               translation: [{ language: 'en', text: 'Overnight maintenance affecting multiple stations' }],
             },
             description_text: {
-              translation: [{ language: 'en', text: 'Trains to Federal Way Downtown remain on schedule.' }],
+              translation: [{ language: 'en', text: 'Trains to Angle Lake remain on schedule.' }],
             },
           },
         },
@@ -260,7 +262,7 @@ describe('transformGtfsAlerts', () => {
             severity_level: 'WARNING',
             active_period: [{ start: nowSec - 30 }],
             informed_entity: [
-              { route_id: '2LINE', stop_id: 'E15-E-00002' }, // Bellevue Downtown elevator
+              { route_id: '2LINE', stop_id: 'E15' }, // Bellevue Downtown bare parent station ID
               { route_id: '2LINE', stop_id: 'E31-T1' }, // Downtown Redmond
             ],
             header_text: {
@@ -275,13 +277,14 @@ describe('transformGtfsAlerts', () => {
     expect(alerts[0].id).toBe('line2-facility');
     expect(alerts[0].stationIds).toEqual(['downtown-redmond', 'bellevue-downtown']);
 
-    // Structured stop_ids are authoritative (must NOT pull Federal Way Downtown from description)
+    // Structured stop_ids are authoritative (must NOT pull Angle Lake from description or Symphony from bus route 590)
     expect(alerts[1].id).toBe('multi-stops');
     expect(alerts[1].stationIds).toEqual([
       'shoreline-south-148th',
       'northgate',
       'capitol-hill',
       'westlake',
+      'federal-way-downtown',
     ]);
   });
 
@@ -314,7 +317,7 @@ describe('transformGtfsAlerts', () => {
               translation: [
                 {
                   language: 'en',
-                  text: "Shuttle between Int'l District/Chinatown, Mt. Baker, Tukwila Int'l Blvd, and SeaTac/Airport",
+                  text: "Shuttle between Int'l Dist/Chinatown, Mt. Baker, Tukwila Int'l Blvd, and SeaTac/Airport",
                 },
               ],
             },
@@ -330,12 +333,44 @@ describe('transformGtfsAlerts', () => {
               translation: [
                 {
                   language: 'en',
-                  text: 'Northbound 1 Line trains toward Lynnwood delayed near Husky Stadium (UW Station)',
+                  text: 'Northbound 1 Line trains toward Lynnwood City Center delayed near Husky Stadium (UW Station)',
                 },
               ],
             },
             description_text: {
               translation: [{ language: 'en', text: 'Riders heading to Westlake should allow extra time.' }],
+            },
+          },
+        },
+        {
+          id: 'full-terminus-direction-phrases',
+          alert: {
+            severity_level: 'WARNING',
+            active_period: [{ start: nowSec - 35 }],
+            informed_entity: [{ route_id: '100479' }, { route_id: '2LINE' }],
+            header_text: {
+              translation: [
+                {
+                  language: 'en',
+                  text: '2 Line trains toward Downtown Redmond and 1 Line trains bound for Federal Way Downtown or trains to Angle Lake are delayed 15 minutes',
+                },
+              ],
+            },
+          },
+        },
+        {
+          id: 'corridor-from-to-matches-both',
+          alert: {
+            severity_level: 'SEVERE',
+            active_period: [{ start: nowSec - 36 }],
+            informed_entity: [{ route_id: '100479' }],
+            header_text: {
+              translation: [
+                {
+                  language: 'en',
+                  text: 'Service suspended from Northgate to Lynnwood City Center due to power issue',
+                },
+              ],
             },
           },
         },
@@ -369,9 +404,14 @@ describe('transformGtfsAlerts', () => {
       'seatac-airport',
     ]);
     // UW Station matches university-of-washington; "Husky Stadium" must NOT match stadium,
-    // "toward Lynnwood" must NOT match lynnwood-city-center, and "Westlake" in description is ignored.
+    // "trains toward Lynnwood City Center" must NOT match lynnwood-city-center, and "Westlake" in description is ignored.
     expect(byId.get('direction-and-husky-no-false-positive')?.stationIds).toEqual([
       'university-of-washington',
+    ]);
+    expect(byId.get('full-terminus-direction-phrases')?.stationIds).toEqual([]);
+    expect(byId.get('corridor-from-to-matches-both')?.stationIds).toEqual([
+      'lynnwood-city-center',
+      'northgate',
     ]);
     expect(byId.get('systemwide-no-stations')?.stationIds).toEqual([]);
   });

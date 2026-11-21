@@ -32,7 +32,13 @@ const SEVERITY_RANK: Record<AlertSeverity, number> = {
   INFO: 2,
 };
 
-const FACILITY_PREFIX_RE = /^([NSE]\d{2})-/;
+const FACILITY_PREFIX_RE = /^([NSE]\d{2})(?:-|$)/;
+
+const DIRECTIONAL_TOWARD_RE =
+  /\b(?:(?:trains?|service)\s+)?(?:(?:heading|headed|traveling|travelling|going)\s+)?(?:toward|towards|bound\s+for)\s+(?:the\s+)?(?:lynnwood(?:\s+city\s+center)?|federal\s+way(?:\s+downtown)?|angle\s+lake|downtown\s+redmond|northgate)\b/gi;
+
+const DIRECTIONAL_TRAINS_TO_RE =
+  /\btrains?\s+(?:(?:heading|headed|traveling|travelling|going)\s+)?to\s+(?:lynnwood(?:\s+city\s+center)?|federal\s+way(?:\s+downtown)?|angle\s+lake|downtown\s+redmond|northgate)\b/gi;
 
 function normalizeStopId(raw: string): string {
   return raw.trim().replace(/^\d+_/, '').toUpperCase();
@@ -80,7 +86,7 @@ const STATION_HEADER_PATTERNS: Record<string, RegExp> = {
   symphony: /\bsymphony\b|\buniversity\s+st(?:reet)?\s+station\b/i,
   'pioneer-square': /\bpioneer\s+square\b/i,
   'international-district-chinatown':
-    /\b(?:int['’]?l\.?|international)\s+district(?:\s*[/&-]\s*chinatown)?\b|\bchinatown\s+station\b|\bid\s*\/\s*chinatown\b/i,
+    /\b(?:int['’]?l\.?|international)\s+dist(?:rict)?\.?(?:\s*[/&-]\s*chinatown)?\b|\bchinatown\s+station\b|\bid\s*\/\s*chinatown\b/i,
   stadium: /\bstadium\b/i,
   sodo: /\bsodo\b/i,
   'beacon-hill': /\bbeacon\s+hill\b/i,
@@ -255,6 +261,10 @@ function extractAffectedStationIds(
 
   if (informed && informed.length > 0) {
     for (const item of informed) {
+      const routeId = item.route_id?.trim();
+      if (routeId && !LINK_ROUTE_TO_LINE[routeId]) {
+        continue;
+      }
       const rawStopId = item.stop_id?.trim();
       if (!rawStopId) continue;
       const normalized = normalizeStopId(rawStopId);
@@ -281,11 +291,14 @@ function extractAffectedStationIds(
 
   if (!header) return [];
 
-  // Strip "Husky Stadium" before checking station names so it never false-matches Stadium station
-  const sanitizedHeader = header.replace(/\bhusky\s+stadium\b/gi, '');
+  // Strip directional terminus phrases and "Husky Stadium" before header station matching
+  const sanitizedHeader = header
+    .replace(DIRECTIONAL_TOWARD_RE, '')
+    .replace(DIRECTIONAL_TRAINS_TO_RE, '');
+  const sanitizedForStadium = sanitizedHeader.replace(/\bhusky\s+stadium\b/gi, '');
   const fallbackIds: string[] = [];
   for (const matcher of STATION_HEADER_MATCHERS) {
-    const targetText = matcher.id === 'stadium' ? sanitizedHeader : header;
+    const targetText = matcher.id === 'stadium' ? sanitizedForStadium : sanitizedHeader;
     if (matcher.pattern.test(targetText)) {
       fallbackIds.push(matcher.id);
     }

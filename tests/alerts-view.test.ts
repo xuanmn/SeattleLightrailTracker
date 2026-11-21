@@ -382,8 +382,15 @@ describe('AlertsViewComponent', () => {
 
     const el = view.getElement();
 
-    // Multi-station alert renders pills in route order and marks pinned station
+    // Multi-station alert renders accessible list semantics and marks pinned station
     const stationCard = el.querySelector<HTMLElement>('[data-alert-id="station-alert"]')!;
+    const stationsRow = stationCard.querySelector<HTMLElement>('.alert-card-stations')!;
+    const stationsList = stationCard.querySelector<HTMLUListElement>('.alert-station-pills')!;
+    const stationsLabel = stationCard.querySelector<HTMLElement>('.alert-stations-label')!;
+    expect(stationsRow.getAttribute('aria-label')).toBeNull();
+    expect(stationsList.getAttribute('aria-label')).toBe('Affected stations');
+    expect(stationsLabel.getAttribute('aria-hidden')).toBe('true');
+
     const pills = Array.from(stationCard.querySelectorAll<HTMLElement>('.alert-station-pill'));
     expect(pills.map((p) => p.dataset.stationId)).toEqual([
       'northgate',
@@ -400,13 +407,14 @@ describe('AlertsViewComponent', () => {
     const linewideCard = el.querySelector<HTMLElement>('[data-alert-id="linewide-alert"]')!;
     expect(linewideCard.querySelector('.alert-card-stations')).toBeNull();
 
-    // Overflow (> 8 stations) always preserves pinned stops (including seatac-airport at index 9) and appends +N more
+    // Overflow (> 8 stations) always preserves pinned stops (including seatac-airport at index 9) and appends +N more with hidden station names in title
     const manyCard = el.querySelector<HTMLElement>('[data-alert-id="many-stations-alert"]')!;
     const manyPills = Array.from(manyCard.querySelectorAll<HTMLElement>('.alert-station-pill'));
     expect(manyPills.some((p) => p.dataset.stationId === 'seatac-airport' && p.classList.contains('is-pinned'))).toBe(true);
     expect(manyPills.some((p) => p.dataset.stationId === 'northgate' && p.classList.contains('is-pinned'))).toBe(true);
-    const morePill = manyCard.querySelector('.alert-station-pill--more');
+    const morePill = manyCard.querySelector<HTMLElement>('.alert-station-pill--more');
     expect(morePill?.textContent).toBe('+2 more');
+    expect(morePill?.title).toBe('U District, Westlake');
   });
 
   it('skips rebuilding DOM nodes on background/manual isLoading toggles while patching Refresh button state, and invalidates on pin/format/midnight changes', () => {
@@ -455,8 +463,11 @@ describe('AlertsViewComponent', () => {
       ],
     });
     expect(view.getElement().querySelector('.alerts-list')).toBe(firstListNode);
-    expect(view.getElement().querySelector<HTMLButtonElement>('.alerts-refresh-btn')?.disabled).toBe(true);
-    expect(view.getElement().querySelector<HTMLButtonElement>('.alerts-refresh-btn')?.classList.contains('is-loading')).toBe(true);
+    const loadingRefreshBtn = view.getElement().querySelector<HTMLButtonElement>('.alerts-refresh-btn');
+    expect(loadingRefreshBtn?.disabled).toBe(true);
+    expect(loadingRefreshBtn?.classList.contains('is-loading')).toBe(true);
+    expect(loadingRefreshBtn?.getAttribute('aria-busy')).toBe('true');
+    expect(loadingRefreshBtn?.textContent).toContain('Refreshing…');
 
     view.update({
       ...state,
@@ -471,7 +482,10 @@ describe('AlertsViewComponent', () => {
       ],
     });
     expect(view.getElement().querySelector('.alerts-list')).toBe(firstListNode);
-    expect(view.getElement().querySelector<HTMLButtonElement>('.alerts-refresh-btn')?.disabled).toBe(false);
+    const idleRefreshBtn = view.getElement().querySelector<HTMLButtonElement>('.alerts-refresh-btn');
+    expect(idleRefreshBtn?.disabled).toBe(false);
+    expect(idleRefreshBtn?.getAttribute('aria-busy')).toBe('false');
+    expect(idleRefreshBtn?.textContent).toContain('Refresh');
 
     // Pinning an affected station invalidates and highlights the pill
     view.update({
@@ -1014,6 +1028,116 @@ describe('TransitTrackerApp Service Alerts Integration', () => {
     expect(pills[1].classList.contains('is-pinned')).toBe(true);
     expect(pills[1].textContent).toContain('Westlake');
 
+    // Return to My Stations, unpin Westlake via card star button, then reopen Alerts -> highlight updates live
+    document.querySelectorAll<HTMLButtonElement>('.toolbar-controls .view-mode-btn')[0]?.click();
+    document.querySelector<HTMLButtonElement>('#station-westlake .star-btn')?.click();
+    document.querySelector<HTMLButtonElement>('.alerts-tab-btn')?.click();
+
+    const updatedWestlakePill = document.querySelector<HTMLElement>(
+      '.alert-station-pill[data-station-id="westlake"]'
+    );
+    expect(updatedWestlakePill?.classList.contains('is-pinned')).toBe(false);
+
     app.destroy();
+  });
+
+  it('retries failed alerts after 5 minutes (not 1 hour), recovers on stale tab open or online reconnect, and never aborts an in-flight alerts fetch on interval ticks', async () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date(Date.UTC(2026, 10, 21, 10, 0, 0)));
+
+    let alertCallNum = 0;
+    let resolveSlowFetch!: () => void;
+    let slowFetchAborted = false;
+
+    const fetchMock = vi.fn((url: string, init?: RequestInit) => {
+      if (String(url) === ST_ALERTS_FEED_URL) {
+        alertCallNum++;
+        // Call 1 (startup): transient 503 failure
+        if (alertCallNum === 1) {
+          return Promise.resolve({ ok: false, status: 503, statusText: 'Service Unavailable' });
+        }
+        // Call 2 (5-min retry): slow in-flight request that spans a 60s PollScheduler tick
+        if (alertCallNum === 2) {
+          return new Promise((resolve, reject) => {
+            init?.signal?.addEventListener('abort', () => {
+              slowFetchAborted = true;
+              reject(new DOMException('Aborted', 'AbortError'));
+            });
+            resolveSlowFetch = () =>
+              resolve({
+                ok: true,
+                status: 200,
+                json: async () => ({
+                  header: { timestamp: Math.floor(Date.now() / 1000) },
+                  entity: [],
+                }),
+              });
+          });
+        }
+        return Promise.resolve({
+          ok: true,
+          status: 200,
+          json: async () => ({
+            header: { timestamp: Math.floor(Date.now() / 1000) },
+            entity: [],
+          }),
+        });
+      }
+      return Promise.resolve({
+        ok: true,
+        status: 200,
+        json: async () => ({
+          code: 200,
+          data: { entry: { stopId: '40_1121', arrivalsAndDepartures: [] } },
+        }),
+      });
+    });
+    vi.stubGlobal('fetch', fetchMock);
+
+    try {
+      const { TransitTrackerApp } = await import('../src/main');
+      const app = new TransitTrackerApp();
+      await vi.advanceTimersByTimeAsync(25);
+      expect(alertCallNum).toBe(1);
+
+      // Opening Alerts immediately after startup failure shows error card without hammering endpoint
+      document.querySelector<HTMLButtonElement>('.alerts-tab-btn')?.click();
+      await vi.advanceTimersByTimeAsync(25);
+      expect(document.querySelector('.alerts-error-card')).not.toBeNull();
+      expect(alertCallNum).toBe(1);
+
+      // 4 minutes pass: still within 5-minute error retry cooldown
+      await vi.advanceTimersByTimeAsync(4 * 60 * 1000);
+      expect(alertCallNum).toBe(1);
+
+      // Advance 1 more minute (crossing the 5-minute error retry mark at t=300s): retry starts (call 2)
+      await vi.advanceTimersByTimeAsync(60 * 1000);
+      expect(alertCallNum).toBe(2);
+
+      // While call 2 is still in flight (< 6s timeout), a visibility resume poll fires -> MUST NOT abort call 2
+      Object.defineProperty(document, 'hidden', { configurable: true, value: true });
+      document.dispatchEvent(new Event('visibilitychange'));
+      Object.defineProperty(document, 'hidden', { configurable: true, value: false });
+      document.dispatchEvent(new Event('visibilitychange'));
+      await vi.advanceTimersByTimeAsync(100);
+      expect(slowFetchAborted).toBe(false);
+      expect(alertCallNum).toBe(2);
+
+      // Resolve slow call 2 -> Alerts view recovers cleanly
+      resolveSlowFetch();
+      await vi.advanceTimersByTimeAsync(25);
+      expect(document.querySelector('.alerts-empty-card')).not.toBeNull();
+
+      // Browser offline -> online reconnect bypasses the 1-hour alerts cooldown
+      window.dispatchEvent(new Event('offline'));
+      window.dispatchEvent(new Event('online'));
+      await vi.advanceTimersByTimeAsync(25);
+      expect(alertCallNum).toBe(3);
+
+      app.destroy();
+    } finally {
+      Object.defineProperty(document, 'hidden', { configurable: true, value: false });
+      vi.useRealTimers();
+    }
   });
 });

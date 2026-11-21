@@ -41,6 +41,7 @@ import { formatClockTime } from './utils/time';
 
 const SYNC_INTERVAL_MS = 60 * 1000; // Fixed 60-second real-time sync cycle
 const ALERTS_POLL_INTERVAL_MS = 60 * 60 * 1000; // 1-hour background service alerts sync cycle
+const ALERTS_ERROR_RETRY_MS = 5 * 60 * 1000; // 5-minute retry cooldown after a failed alerts fetch
 const MAX_CONCURRENT_STATION_FETCHES = 6; // Each station fetches 2 platforms
 
 const NETWORK_INTERRUPTED_MESSAGE =
@@ -143,7 +144,7 @@ export class TransitTrackerApp {
           void this.fetchAlerts(false);
         } else if (reason === 'reconnect') {
           void this.fetchAlerts(true);
-        } else if (this.isAlertsStale()) {
+        } else if (!this.isFetchingAlerts && this.isAlertsStale()) {
           void this.fetchAlerts(true);
         }
       },
@@ -344,7 +345,7 @@ export class TransitTrackerApp {
         }
         if (this.alertsUpdatedAt === null && !this.alertsError) {
           void this.fetchAlerts(false);
-        } else if (this.alertsUpdatedAt !== null && this.isAlertsStale()) {
+        } else if (this.isAlertsStale()) {
           void this.fetchAlerts(true);
         }
       });
@@ -953,10 +954,10 @@ export class TransitTrackerApp {
   }
 
   private isAlertsStale(): boolean {
-    return (
-      this.lastAlertsFetchAt === null ||
-      Date.now() - this.lastAlertsFetchAt >= ALERTS_POLL_INTERVAL_MS
-    );
+    if (this.lastAlertsFetchAt === null) return true;
+    const cooldown =
+      this.alertsError !== null ? ALERTS_ERROR_RETRY_MS : ALERTS_POLL_INTERVAL_MS;
+    return Date.now() - this.lastAlertsFetchAt >= cooldown;
   }
 
   private async fetchAlerts(bypassCache: boolean = false): Promise<void> {

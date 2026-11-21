@@ -488,7 +488,7 @@ export class AlertsViewComponent {
     if (resolved.length === 0) return null;
 
     let visibleStations: Station[];
-    let hiddenCount = 0;
+    let hiddenStations: Station[] = [];
 
     if (resolved.length <= MAX_VISIBLE_STATION_PILLS) {
       visibleStations = resolved;
@@ -497,19 +497,19 @@ export class AlertsViewComponent {
       const unpinnedStations = resolved.filter((s) => !pinnedStationIds?.has(s.id));
       const remainingSlots = Math.max(0, MAX_VISIBLE_STATION_PILLS - pinnedStations.length);
       visibleStations = [...pinnedStations, ...unpinnedStations.slice(0, remainingSlots)];
-      hiddenCount = resolved.length - visibleStations.length;
+      hiddenStations = unpinnedStations.slice(remainingSlots);
     }
 
     const row = createElement('div', 'alert-card-stations');
-    row.setAttribute('aria-label', 'Affected stations');
 
     const label = createElement('span', 'alert-stations-label');
+    label.setAttribute('aria-hidden', 'true');
     const pinIcon = createElement('span', 'alert-stations-icon');
-    pinIcon.setAttribute('aria-hidden', 'true');
     pinIcon.innerHTML = ICONS.mapPin;
     label.append(pinIcon, document.createTextNode('Affected:'));
 
     const pillList = createElement('ul', 'alert-station-pills');
+    pillList.setAttribute('aria-label', 'Affected stations');
     for (const station of visibleStations) {
       const isPinned = Boolean(pinnedStationIds?.has(station.id));
       const pill = createElement(
@@ -533,12 +533,13 @@ export class AlertsViewComponent {
       pillList.appendChild(pill);
     }
 
-    if (hiddenCount > 0) {
+    if (hiddenStations.length > 0) {
       const morePill = createTextElement(
         'li',
         'alert-station-pill alert-station-pill--more',
-        `+${hiddenCount} more`
+        `+${hiddenStations.length} more`
       );
+      morePill.title = hiddenStations.map((s) => s.name).join(', ');
       pillList.appendChild(morePill);
     }
 
