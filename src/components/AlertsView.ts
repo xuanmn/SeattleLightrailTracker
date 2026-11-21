@@ -215,8 +215,12 @@ export class AlertsViewComponent {
     return this.rootEl;
   }
 
-  private buildRenderKey(state: AlertsRenderState, nowEpochMs: number): string {
-    const ordered = sortAlertsForLine(state.alerts, state.activeLine);
+  private buildRenderKey(
+    ordered: ServiceAlert[],
+    state: AlertsRenderState,
+    nowEpochMs: number
+  ): string {
+    const showLoadingSkeleton = state.isLoading && state.updatedAt === null;
     const alertsKey = ordered
       .map((alert) =>
         [
@@ -235,16 +239,17 @@ export class AlertsViewComponent {
     return [
       state.activeLine,
       state.updatedAt ?? '',
-      state.isLoading ? '1' : '0',
+      showLoadingSkeleton ? '1' : '0',
       state.error ?? '',
       state.timeFormat24Hour ? '24' : '12',
       alertsKey,
-    ].join('|');
+    ].join('\u001d');
   }
 
   public update(state: AlertsRenderState): void {
     const nowEpochMs = state.nowEpochMs ?? Date.now();
-    const nextRenderKey = this.buildRenderKey(state, nowEpochMs);
+    const ordered = sortAlertsForLine(state.alerts, state.activeLine);
+    const nextRenderKey = this.buildRenderKey(ordered, state, nowEpochMs);
     if (this.lastRenderKey === nextRenderKey && this.rootEl.childNodes.length > 0) {
       return;
     }
@@ -274,10 +279,10 @@ export class AlertsViewComponent {
       fragment.appendChild(staleNote);
     }
 
-    if (state.alerts.length === 0) {
+    if (ordered.length === 0) {
       fragment.appendChild(this.renderEmptyCard(state));
     } else {
-      fragment.appendChild(this.renderAlertList(state.alerts, state, nowEpochMs));
+      fragment.appendChild(this.renderAlertList(ordered, state, nowEpochMs));
     }
 
     fragment.appendChild(this.renderFooter(state));
@@ -365,12 +370,11 @@ export class AlertsViewComponent {
   }
 
   private renderAlertList(
-    alerts: ServiceAlert[],
+    ordered: ServiceAlert[],
     state: AlertsRenderState,
     nowEpochMs: number
   ): HTMLElement {
     const list = createElement('ul', 'alerts-list');
-    const ordered = sortAlertsForLine(alerts, state.activeLine);
 
     for (const alert of ordered) {
       const item = createElement(

@@ -368,10 +368,20 @@
   view-transition-name: dashboard-stage;
 }
 
+::view-transition-group(dashboard-stage),
 ::view-transition-old(dashboard-stage),
 ::view-transition-new(dashboard-stage) {
   animation-duration: 200ms;
   animation-timing-function: cubic-bezier(0.2, 0, 0, 1);
+}
+
+::view-transition-image-pair(dashboard-stage) {
+  overflow: clip;
+}
+
+::view-transition-old(dashboard-stage),
+::view-transition-new(dashboard-stage) {
+  height: auto;
 }
 
 /* Status Banner / Stale Banner */

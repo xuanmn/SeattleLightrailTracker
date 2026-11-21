@@ -326,28 +326,54 @@ describe('AlertsViewComponent', () => {
     );
   });
 
-  it('skips rebuilding DOM nodes when update receives an unchanged render state', () => {
+  it('skips rebuilding DOM nodes when update receives an unchanged render state or background isLoading toggle, and invalidates on format/midnight changes', () => {
     const view = new AlertsViewComponent({
       onBackToStations: vi.fn(),
       onRetry: vi.fn(),
     });
 
+    const baseNow = Date.UTC(2026, 10, 18, 20, 0, 0);
     const state = {
-      alerts: [makeAlert({ id: 'stable-1', header: 'Stable advisory' })],
+      alerts: [makeAlert({ id: 'stable-1', header: 'Stable advisory', activeStartMs: baseNow - 3600_000 })],
       activeLine: 'line-1' as const,
-      updatedAt: Date.UTC(2026, 10, 18, 20, 0, 0),
+      updatedAt: baseNow,
       isLoading: false,
       error: null,
       timeFormat24Hour: false,
-      nowEpochMs: Date.UTC(2026, 10, 18, 20, 0, 0),
+      nowEpochMs: baseNow,
     };
 
     view.update(state);
     const firstListNode = view.getElement().querySelector('.alerts-list');
     expect(firstListNode).not.toBeNull();
 
-    view.update({ ...state, alerts: [makeAlert({ id: 'stable-1', header: 'Stable advisory' })] });
+    // Unchanged state and background refresh isLoading toggles (with updatedAt !== null) preserve DOM nodes
+    view.update({
+      ...state,
+      isLoading: true,
+      alerts: [makeAlert({ id: 'stable-1', header: 'Stable advisory', activeStartMs: baseNow - 3600_000 })],
+    });
     expect(view.getElement().querySelector('.alerts-list')).toBe(firstListNode);
+
+    view.update({
+      ...state,
+      isLoading: false,
+      alerts: [makeAlert({ id: 'stable-1', header: 'Stable advisory', activeStartMs: baseNow - 3600_000 })],
+    });
+    expect(view.getElement().querySelector('.alerts-list')).toBe(firstListNode);
+
+    // Changing 24-hour clock format invalidates and re-renders
+    view.update({ ...state, timeFormat24Hour: true });
+    const afterFormatChange = view.getElement().querySelector('.alerts-list');
+    expect(afterFormatChange).not.toBe(firstListNode);
+
+    // Crossing midnight invalidates rendered relative dates and re-renders
+    view.update({
+      ...state,
+      timeFormat24Hour: true,
+      nowEpochMs: baseNow + 24 * 60 * 60 * 1000,
+    });
+    expect(view.getElement().querySelector('.alerts-list')).not.toBe(afterFormatChange);
   });
 });
 
@@ -732,6 +758,63 @@ describe('TransitTrackerApp Service Alerts Integration', () => {
       finishTransition();
       await new Promise((r) => setTimeout(r, 25));
       expect(countAlertCalls()).toBe(2);
+
+      app.destroy();
+    } finally {
+      if (originalStartViewTransition === undefined) {
+        delete docWithTransition.startViewTransition;
+      } else {
+        docWithTransition.startViewTransition = originalStartViewTransition;
+      }
+    }
+  });
+
+  it('does not trigger alerts refresh mid-transition when Alerts transition is superseded by a line switch', async () => {
+    const fetchMock = mockNetwork({ alertsEntities: [] });
+
+    const pendingTransitions: { resolve: () => void; reject: (err: unknown) => void }[] = [];
+    const startViewTransitionSpy = vi.fn((cb: () => void) => {
+      cb();
+      let resolve!: () => void;
+      let reject!: (err: unknown) => void;
+      const finished = new Promise<void>((res, rej) => {
+        resolve = res;
+        reject = rej;
+      });
+      pendingTransitions.push({ resolve, reject });
+      return { finished };
+    });
+
+    const docWithTransition = document as unknown as {
+      startViewTransition?: (cb: () => void) => { finished: Promise<void> };
+    };
+    const originalStartViewTransition = docWithTransition.startViewTransition;
+    docWithTransition.startViewTransition = startViewTransitionSpy;
+
+    try {
+      const { TransitTrackerApp } = await import('../src/main');
+      const app = new TransitTrackerApp();
+      await new Promise((r) => setTimeout(r, 25));
+
+      const countAlertCalls = () =>
+        fetchMock.mock.calls.filter((call) => String(call[0]) === ST_ALERTS_FEED_URL).length;
+
+      expect(countAlertCalls()).toBe(1);
+
+      // Click Alerts (transition #1 starts), then immediately switch to Line 2 (transition #2 supersedes #1)
+      document.querySelector<HTMLButtonElement>('.alerts-tab-btn')?.click();
+      document.querySelectorAll<HTMLButtonElement>('.app-header .line-btn')[1]?.click();
+      expect(pendingTransitions).toHaveLength(2);
+
+      // Browser skips/aborts transition #1 while transition #2 is still animating
+      pendingTransitions[0].reject(new DOMException('Transition skipped', 'AbortError'));
+      await new Promise((r) => setTimeout(r, 15));
+
+      // Superseded transition #1 MUST NOT fire fetchAlerts while transition #2 is still running
+      expect(countAlertCalls()).toBe(1);
+
+      pendingTransitions[1].resolve();
+      await new Promise((r) => setTimeout(r, 15));
 
       app.destroy();
     } finally {

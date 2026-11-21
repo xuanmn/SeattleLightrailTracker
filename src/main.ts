@@ -94,6 +94,7 @@ export class TransitTrackerApp {
   private isFetchingAlerts: boolean = false;
   private alertsAbortController?: AbortController;
   private lastAlertsPillKey: string = '';
+  private viewTransitionSeq: number = 0;
   private isDestroyed: boolean = false;
 
   private stationsGridEl!: HTMLElement;
@@ -221,7 +222,15 @@ export class TransitTrackerApp {
     this.syncAlertsUI();
   }
 
-  private performViewTransition(updateFn: () => void): Promise<void> {
+  private performViewTransition(updateFn: () => void): {
+    seq: number;
+    finished: Promise<void>;
+  } {
+    const seq = ++this.viewTransitionSeq;
+    const safeUpdate = () => {
+      if (this.isDestroyed) return;
+      updateFn();
+    };
     const doc = document as Document & {
       startViewTransition?: (callback: () => void) => { finished?: Promise<unknown> };
     };
@@ -230,19 +239,25 @@ export class TransitTrackerApp {
       window.matchMedia('(prefers-reduced-motion: reduce)').matches;
 
     if (typeof doc.startViewTransition === 'function' && !prefersReducedMotion) {
-      const transition = doc.startViewTransition(updateFn);
-      return Promise.resolve(transition?.finished)
-        .then(() => undefined)
-        .catch(() => undefined);
+      try {
+        const transition = doc.startViewTransition(safeUpdate);
+        const finished = Promise.resolve(transition?.finished)
+          .then(() => undefined)
+          .catch(() => undefined);
+        return { seq, finished };
+      } catch {
+        // Fall back to direct DOM update if browser rejects transition initiation
+      }
     }
 
-    updateFn();
-    return Promise.resolve();
+    safeUpdate();
+    return { seq, finished: Promise.resolve() };
   }
 
   private renderViewModePills() {
     if (!this.myStationsBtn || !this.allStationsBtn || !this.alertsBtn) {
       this.viewModePillWrap.innerHTML = '';
+      this.lastAlertsPillKey = '';
 
       this.myStationsBtn = createElement(
         'button',
@@ -302,15 +317,20 @@ export class TransitTrackerApp {
 
     if (nextMode === 'alerts') {
       this.stopSecondTicker();
-      const transitionDone = this.performViewTransition(() => {
+      const { seq, finished } = this.performViewTransition(() => {
         this.stationsGridEl.classList.add('hidden');
         this.alertsView.getElement().classList.remove('hidden');
         this.updateToolbarHeader();
         this.renderViewModePills();
         this.syncAlertsView();
       });
-      void transitionDone.then(() => {
-        if (this.isDestroyed || this.viewMode !== 'alerts' || this.isFetchingAlerts) {
+      void finished.then(() => {
+        if (
+          this.isDestroyed ||
+          this.viewTransitionSeq !== seq ||
+          this.viewMode !== 'alerts' ||
+          this.isFetchingAlerts
+        ) {
           return;
         }
         if (this.alertsUpdatedAt !== null) {
@@ -322,7 +342,7 @@ export class TransitTrackerApp {
       return;
     }
 
-    void this.performViewTransition(() => {
+    this.performViewTransition(() => {
       if (previousMode === 'alerts') {
         this.alertsView.getElement().classList.add('hidden');
         this.stationsGridEl.classList.remove('hidden');
@@ -347,7 +367,7 @@ export class TransitTrackerApp {
     document.body.dataset.activeLine = line;
     setActiveLine(line);
     this.header.setActiveLine(line);
-    void this.performViewTransition(() => {
+    this.performViewTransition(() => {
       this.updateToolbarHeader();
       this.renderViewModePills();
       if (this.viewMode === 'alerts') {
