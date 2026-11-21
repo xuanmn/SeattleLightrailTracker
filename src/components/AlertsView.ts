@@ -294,6 +294,8 @@ export class AlertsViewComponent {
       return;
     }
 
+    fragment.appendChild(this.renderMetaBar(state));
+
     if (state.error && state.updatedAt !== null) {
       const staleNote = createTextElement(
         'div',
@@ -310,7 +312,6 @@ export class AlertsViewComponent {
       fragment.appendChild(this.renderAlertList(ordered, state, nowEpochMs));
     }
 
-    fragment.appendChild(this.renderFooter(state));
     this.rootEl.replaceChildren(fragment);
   }
 
@@ -547,8 +548,8 @@ export class AlertsViewComponent {
     return row;
   }
 
-  private renderFooter(state: AlertsRenderState): HTMLElement {
-    const footer = createElement('div', 'alerts-view-footer');
+  private renderMetaBar(state: AlertsRenderState): HTMLElement {
+    const metaBar = createElement('div', 'alerts-view-meta');
     const updated =
       state.updatedAt !== null
         ? ` · Updated ${formatClockTime(state.updatedAt, state.timeFormat24Hour)}`
@@ -559,7 +560,7 @@ export class AlertsViewComponent {
       `Source: Sound Transit GTFS-RT alerts feed${updated}.`
     );
 
-    const actions = createElement('div', 'alerts-footer-actions');
+    const actions = createElement('div', 'alerts-meta-actions');
 
     const refreshBtn = createElement('button', 'alerts-refresh-btn') as HTMLButtonElement;
     refreshBtn.type = 'button';
@@ -584,11 +585,11 @@ export class AlertsViewComponent {
     const link = createExternalLink(
       ST_ALERTS_WEB_URL,
       'Full Sound Transit advisory board',
-      'alerts-footer-link'
+      'alerts-board-link'
     );
 
     actions.append(refreshBtn, link);
-    footer.append(note, actions);
-    return footer;
+    metaBar.append(note, actions);
+    return metaBar;
   }
 }

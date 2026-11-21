@@ -297,7 +297,7 @@ describe('AlertsViewComponent', () => {
     expect(olItems[1].value).toBe(5);
   });
 
-  it('omits secondary filter and header bar, prioritizes activeLine, and exposes footer Refresh and soundtransit.org link', () => {
+  it('omits secondary filter and header bar, prioritizes activeLine, and renders source meta bar with Refresh and soundtransit.org link at the top', () => {
     const onRefresh = vi.fn();
     const view = new AlertsViewComponent({
       onBackToStations: vi.fn(),
@@ -320,8 +320,16 @@ describe('AlertsViewComponent', () => {
     const el = view.getElement();
     expect(el.querySelector('.alerts-view-header')).toBeNull();
     expect(el.querySelector('.alerts-filter-group')).toBeNull();
+    expect(el.querySelector('.alerts-view-footer')).toBeNull();
 
-    const refreshBtn = el.querySelector<HTMLButtonElement>('.alerts-view-footer .alerts-refresh-btn');
+    const metaBar = el.querySelector<HTMLElement>('.alerts-view-meta');
+    const alertsList = el.querySelector<HTMLElement>('.alerts-list');
+    expect(metaBar).not.toBeNull();
+    expect(alertsList).not.toBeNull();
+    // Source note, Refresh button, and advisory board link appear above the alert cards
+    expect(el.firstElementChild).toBe(metaBar);
+
+    const refreshBtn = el.querySelector<HTMLButtonElement>('.alerts-view-meta .alerts-refresh-btn');
     expect(refreshBtn).not.toBeNull();
     expect(refreshBtn?.disabled).toBe(false);
     refreshBtn?.click();
@@ -329,9 +337,21 @@ describe('AlertsViewComponent', () => {
 
     const cards = Array.from(el.querySelectorAll<HTMLElement>('.alert-card'));
     expect(cards.map((c) => c.dataset.alertId)).toEqual(['a-line2', 'a-line1']);
-    expect(el.querySelector<HTMLAnchorElement>('.alerts-footer-link')?.href).toBe(
+    expect(el.querySelector<HTMLAnchorElement>('.alerts-board-link')?.href).toBe(
       ST_ALERTS_WEB_URL
     );
+
+    // Empty state also places the meta bar above the good-service card
+    view.update({
+      alerts: [],
+      activeLine: 'line-2',
+      updatedAt: Date.UTC(2026, 10, 17, 17, 5, 0),
+      isLoading: false,
+      error: null,
+      timeFormat24Hour: false,
+    });
+    expect(el.firstElementChild?.classList.contains('alerts-view-meta')).toBe(true);
+    expect(el.children[1]?.classList.contains('alerts-empty-card')).toBe(true);
   });
 
   it('renders affected station pills with pinned highlights, omits row for line-wide alerts, and caps long lists while preserving pinned stops', () => {
