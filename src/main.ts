@@ -12,7 +12,7 @@ import { StationCardComponent } from './components/StationCard';
 import type { StationPickerModal } from './components/StationPickerModal';
 import type { SystemMapModal } from './components/SystemMapModal';
 import { getStationById, getStationsByLine, LINE_CONFIG } from './data/stations';
-import { fetchServiceAlerts, isAlertsFetchStale } from './services/alerts-api';
+import { fetchServiceAlerts, isAlertsFetchStale, ST_ALERTS_WEB_URL } from './services/alerts-api';
 import { fetchArrivalsForStation } from './services/oba-api';
 import { PollScheduler } from './services/pollScheduler';
 import {
@@ -215,7 +215,6 @@ export class TransitTrackerApp {
     this.alertsView = new AlertsViewComponent({
       onBackToStations: () => this.setViewMode('pinned'),
       onRetry: () => void this.fetchAlerts(true),
-      onRefresh: () => void this.fetchAlerts(true),
     });
     this.alertsView.getElement().classList.add('hidden');
     viewStage.appendChild(this.alertsView.getElement());
@@ -397,13 +396,27 @@ export class TransitTrackerApp {
       const titleText = document.createTextNode('Service Alerts');
       this.lineTitleEl.replaceChildren(iconWrap, titleText);
 
-      this.lineSubtitleEl.textContent =
+      const subtitlePrefix =
         this.alertsUpdatedAt !== null
           ? `Sound Transit GTFS-RT · Updated ${formatClockTime(
               this.alertsUpdatedAt,
               this.settings.timeFormat24Hour
-            )}`
-          : 'Sound Transit GTFS-RT alerts feed';
+            )} · `
+          : 'Sound Transit GTFS-RT alerts feed · ';
+      const boardLink = createElement('a', 'alerts-board-link') as HTMLAnchorElement;
+      boardLink.href = ST_ALERTS_WEB_URL;
+      boardLink.target = '_blank';
+      boardLink.rel = 'noopener noreferrer';
+      boardLink.textContent = 'Advisory board';
+      const arrow = createElement('span', 'alerts-board-link-arrow');
+      arrow.setAttribute('aria-hidden', 'true');
+      arrow.textContent = '↗';
+      boardLink.appendChild(arrow);
+
+      this.lineSubtitleEl.replaceChildren(
+        document.createTextNode(subtitlePrefix),
+        boardLink
+      );
       return;
     }
 

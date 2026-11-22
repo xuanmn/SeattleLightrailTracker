@@ -44,7 +44,7 @@ describe('AlertsViewComponent', () => {
     expect(el.querySelector('.alerts-error-card')).toBeNull();
   });
 
-  it('renders the good-service empty card with official Sound Transit link and Back to Stations action', () => {
+  it('renders the good-service empty card with Back to Stations action', () => {
     const onBackToStations = vi.fn();
     const view = new AlertsViewComponent({
       onBackToStations,
@@ -67,11 +67,6 @@ describe('AlertsViewComponent', () => {
     expect(el.textContent).toContain('No active Link service alerts');
     expect(emptyCard?.textContent).not.toContain('Last checked at');
     expect(emptyCard?.querySelector('.alerts-official-link')).toBeNull();
-
-    const officialLink = el.querySelector<HTMLAnchorElement>(`a[href="${ST_ALERTS_WEB_URL}"]`);
-    expect(officialLink).not.toBeNull();
-    expect(officialLink?.target).toBe('_blank');
-    expect(officialLink?.rel).toContain('noopener');
 
     const backBtn = el.querySelector<HTMLButtonElement>('.alerts-back-btn');
     expect(backBtn).not.toBeNull();
@@ -299,12 +294,10 @@ describe('AlertsViewComponent', () => {
     expect(olItems[1].value).toBe(5);
   });
 
-  it('omits redundant header/source/timestamp chrome and renders Refresh + soundtransit.org link cleanly above cards', () => {
-    const onRefresh = vi.fn();
+  it('omits redundant header, filter, and extra meta/footer rows above alert cards while prioritizing activeLine', () => {
     const view = new AlertsViewComponent({
       onBackToStations: vi.fn(),
       onRetry: vi.fn(),
-      onRefresh,
     });
 
     view.update({
@@ -322,29 +315,18 @@ describe('AlertsViewComponent', () => {
     const el = view.getElement();
     expect(el.querySelector('.alerts-view-header')).toBeNull();
     expect(el.querySelector('.alerts-filter-group')).toBeNull();
+    expect(el.querySelector('.alerts-view-meta')).toBeNull();
     expect(el.querySelector('.alerts-view-footer')).toBeNull();
     expect(el.querySelector('.alerts-source-note')).toBeNull();
 
-    const metaBar = el.querySelector<HTMLElement>('.alerts-view-meta');
     const alertsList = el.querySelector<HTMLElement>('.alerts-list');
-    expect(metaBar).not.toBeNull();
     expect(alertsList).not.toBeNull();
-    // Refresh button and advisory board link appear above the alert cards
-    expect(el.firstElementChild).toBe(metaBar);
-
-    const refreshBtn = el.querySelector<HTMLButtonElement>('.alerts-view-meta .alerts-refresh-btn');
-    expect(refreshBtn).not.toBeNull();
-    expect(refreshBtn?.disabled).toBe(false);
-    refreshBtn?.click();
-    expect(onRefresh).toHaveBeenCalledTimes(1);
+    expect(el.firstElementChild).toBe(alertsList);
 
     const cards = Array.from(el.querySelectorAll<HTMLElement>('.alert-card'));
     expect(cards.map((c) => c.dataset.alertId)).toEqual(['a-line2', 'a-line1']);
-    expect(el.querySelector<HTMLAnchorElement>('.alerts-board-link')?.href).toBe(
-      ST_ALERTS_WEB_URL
-    );
 
-    // Empty state also places the meta bar above the good-service card
+    // Empty state also starts directly with the card (no extra bar above it)
     view.update({
       alerts: [],
       activeLine: 'line-2',
@@ -353,15 +335,13 @@ describe('AlertsViewComponent', () => {
       error: null,
       timeFormat24Hour: false,
     });
-    expect(el.firstElementChild?.classList.contains('alerts-view-meta')).toBe(true);
-    expect(el.children[1]?.classList.contains('alerts-empty-card')).toBe(true);
+    expect(el.firstElementChild?.classList.contains('alerts-empty-card')).toBe(true);
   });
 
   it('renders affected station pills with pinned highlights, omits row for line-wide alerts, and caps long lists while preserving pinned stops', () => {
     const view = new AlertsViewComponent({
       onBackToStations: vi.fn(),
       onRetry: vi.fn(),
-      onRefresh: vi.fn(),
     });
 
     const baseNow = Date.UTC(2026, 10, 18, 20, 0, 0);
@@ -440,11 +420,10 @@ describe('AlertsViewComponent', () => {
     expect(morePill?.title).toBe('U District, Westlake');
   });
 
-  it('skips rebuilding DOM nodes on background/manual isLoading toggles while patching Refresh button state, and invalidates on pin/format/midnight changes', () => {
+  it('skips rebuilding DOM nodes on background/manual isLoading toggles and invalidates on pin/format/midnight changes', () => {
     const view = new AlertsViewComponent({
       onBackToStations: vi.fn(),
       onRetry: vi.fn(),
-      onRefresh: vi.fn(),
     });
 
     const baseNow = Date.UTC(2026, 10, 18, 20, 0, 0);
@@ -468,11 +447,9 @@ describe('AlertsViewComponent', () => {
 
     view.update(state);
     const firstListNode = view.getElement().querySelector('.alerts-list');
-    const refreshBtn = view.getElement().querySelector<HTMLButtonElement>('.alerts-refresh-btn');
     expect(firstListNode).not.toBeNull();
-    expect(refreshBtn?.disabled).toBe(false);
 
-    // Unchanged state and isLoading toggles preserve alert list DOM while toggling Refresh button state in-place
+    // Unchanged state and isLoading toggles preserve alert list DOM
     view.update({
       ...state,
       isLoading: true,
@@ -486,11 +463,6 @@ describe('AlertsViewComponent', () => {
       ],
     });
     expect(view.getElement().querySelector('.alerts-list')).toBe(firstListNode);
-    const loadingRefreshBtn = view.getElement().querySelector<HTMLButtonElement>('.alerts-refresh-btn');
-    expect(loadingRefreshBtn?.disabled).toBe(true);
-    expect(loadingRefreshBtn?.classList.contains('is-loading')).toBe(true);
-    expect(loadingRefreshBtn?.getAttribute('aria-busy')).toBe('true');
-    expect(loadingRefreshBtn?.textContent).toContain('Refreshing…');
 
     view.update({
       ...state,
@@ -505,10 +477,6 @@ describe('AlertsViewComponent', () => {
       ],
     });
     expect(view.getElement().querySelector('.alerts-list')).toBe(firstListNode);
-    const idleRefreshBtn = view.getElement().querySelector<HTMLButtonElement>('.alerts-refresh-btn');
-    expect(idleRefreshBtn?.disabled).toBe(false);
-    expect(idleRefreshBtn?.getAttribute('aria-busy')).toBe('false');
-    expect(idleRefreshBtn?.textContent).toContain('Refresh');
 
     // Pinning an affected station invalidates and highlights the pill
     view.update({
@@ -858,33 +826,43 @@ describe('TransitTrackerApp Service Alerts Integration', () => {
     app.destroy();
   });
 
-  it('updates top toolbar header cleanly for Alerts view and restores line title on return', async () => {
+  it('places Advisory board link cleanly inside the single dashboard toolbar row without an extra strip or Refresh button', async () => {
     mockNetwork({ alertsEntities: [] });
 
-    const { TransitTrackerApp } = await import('../src/main');
-    const app = new TransitTrackerApp();
-    await new Promise((r) => setTimeout(r, 25));
+    let app: InstanceType<(typeof import('../src/main'))['TransitTrackerApp']> | undefined;
+    try {
+      const { TransitTrackerApp } = await import('../src/main');
+      app = new TransitTrackerApp();
+      await new Promise((r) => setTimeout(r, 25));
 
-    const titleEl = document.querySelector('.dashboard-toolbar .section-title');
-    const subtitleEl = document.querySelector('.dashboard-toolbar .section-subtitle');
-    expect(titleEl?.textContent).toContain('1 Line Live Departures');
+      const titleEl = document.querySelector('.dashboard-toolbar .section-title');
+      const subtitleEl = document.querySelector('.dashboard-toolbar .section-subtitle');
+      expect(titleEl?.textContent).toContain('1 Line Live Departures');
+      expect(document.querySelector('.alerts-refresh-btn')).toBeNull();
 
-    document.querySelector<HTMLButtonElement>('.alerts-tab-btn')?.click();
-    expect(titleEl?.textContent).toContain('Service Alerts');
-    expect(titleEl?.textContent).not.toContain('Live Departures');
-    expect(subtitleEl?.textContent).toContain('Sound Transit GTFS-RT');
-    expect(subtitleEl?.textContent).toContain('Updated ');
-    // AlertsView should not render a duplicate h2 title or duplicate source/timestamp line
-    expect(document.querySelector('.alerts-view-title')).toBeNull();
-    expect(document.querySelector('.alerts-source-note')).toBeNull();
+      document.querySelector<HTMLButtonElement>('.alerts-tab-btn')?.click();
+      expect(titleEl?.textContent).toContain('Service Alerts');
+      expect(titleEl?.textContent).not.toContain('Live Departures');
+      expect(subtitleEl?.textContent).toContain('Sound Transit GTFS-RT');
+      expect(subtitleEl?.textContent).toContain('Updated ');
+      const boardLink = subtitleEl?.querySelector<HTMLAnchorElement>('.alerts-board-link');
+      expect(boardLink?.href).toBe(ST_ALERTS_WEB_URL);
+      expect(boardLink?.target).toBe('_blank');
+      expect(boardLink?.rel).toBe('noopener noreferrer');
+      // No extra refresh button or second header/meta strip
+      expect(document.querySelector('.alerts-refresh-btn')).toBeNull();
+      expect(document.querySelector('.alerts-view-title')).toBeNull();
+      expect(document.querySelector('.alerts-source-note')).toBeNull();
+      expect(document.querySelector('.alerts-view-meta')).toBeNull();
 
-    document.querySelectorAll<HTMLButtonElement>('.toolbar-controls .view-mode-btn')[0]?.click();
-    expect(titleEl?.textContent).toContain('1 Line Live Departures');
-
-    app.destroy();
+      document.querySelectorAll<HTMLButtonElement>('.toolbar-controls .view-mode-btn')[0]?.click();
+      expect(titleEl?.textContent).toContain('1 Line Live Departures');
+    } finally {
+      app?.destroy();
+    }
   });
 
-  it('skips automatic fetch on Alerts tab open before the next :00 sync, supports manual footer Refresh, and refreshes after transition once :00 arrives', async () => {
+  it('skips automatic fetch on Alerts tab open before the next :00 sync and refreshes after transition once :00 arrives', async () => {
     vi.useFakeTimers();
     vi.setSystemTime(new Date(Date.UTC(2026, 10, 21, 10, 0, 0)));
 
@@ -921,33 +899,26 @@ describe('TransitTrackerApp Service Alerts Integration', () => {
       await vi.advanceTimersByTimeAsync(25);
       expect(countAlertCalls()).toBe(1);
 
-      // Manual footer Refresh button triggers an immediate fresh fetch
-      const refreshBtn = document.querySelector<HTMLButtonElement>('.alerts-refresh-btn');
-      expect(refreshBtn).not.toBeNull();
-      refreshBtn?.click();
-      await vi.advanceTimersByTimeAsync(25);
-      expect(countAlertCalls()).toBe(2);
-
       // Return to My Stations through 10:59:00 -> NO background alerts poll yet
       document.querySelectorAll<HTMLButtonElement>('.toolbar-controls .view-mode-btn')[0]?.click();
       finishTransition();
       await vi.advanceTimersByTimeAsync(59 * 60 * 1000);
-      expect(countAlertCalls()).toBe(2);
+      expect(countAlertCalls()).toBe(1);
 
       // Cross the 11:00:00 top-of-hour sync boundary -> hourly background alerts poll fires once
       await vi.advanceTimersByTimeAsync(2 * 60 * 1000);
-      expect(countAlertCalls()).toBe(3);
+      expect(countAlertCalls()).toBe(2);
 
       // Jump clock forward past 12:00:00 (simulating resumed session), then open Alerts -> waits for transition.finished
       const nowBeforePause = Date.now();
       vi.setSystemTime(nowBeforePause + 60 * 60 * 1000);
       document.querySelector<HTMLButtonElement>('.alerts-tab-btn')?.click();
       await vi.advanceTimersByTimeAsync(10);
-      expect(countAlertCalls()).toBe(3);
+      expect(countAlertCalls()).toBe(2);
 
       finishTransition();
       await vi.advanceTimersByTimeAsync(25);
-      expect(countAlertCalls()).toBe(4);
+      expect(countAlertCalls()).toBe(3);
     } finally {
       app?.destroy();
       vi.useRealTimers();
@@ -999,15 +970,14 @@ describe('TransitTrackerApp Service Alerts Integration', () => {
       await vi.advanceTimersByTimeAsync(60 * 1000);
       expect(countAlertCalls()).toBe(3);
 
-      // Advance to 12:46:37 (within 15m of 13:00) and click manual Refresh (Call 4)
+      // Advance to 12:46:37 (within 15m of 13:00) and trigger online reconnect fetch (Call 4)
       await vi.advanceTimersByTimeAsync(46 * 60 * 1000);
-      document.querySelector<HTMLButtonElement>('.alerts-tab-btn')?.click();
-      document.querySelector<HTMLButtonElement>('.alerts-refresh-btn')?.click();
+      window.dispatchEvent(new Event('offline'));
+      window.dispatchEvent(new Event('online'));
       await vi.advanceTimersByTimeAsync(25);
       expect(countAlertCalls()).toBe(4);
 
-      // Return to My Stations and cross 13:00:37 -> SKIPPED because 12:46:37 is within 15m of 13:00
-      document.querySelectorAll<HTMLButtonElement>('.toolbar-controls .view-mode-btn')[0]?.click();
+      // Cross 13:00:37 -> SKIPPED because 12:46:37 is within 15m of 13:00
       await vi.advanceTimersByTimeAsync(14 * 60 * 1000); // 13:00:37
       expect(countAlertCalls()).toBe(4);
 

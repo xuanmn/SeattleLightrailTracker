@@ -7,7 +7,6 @@ import { formatAlertTimestamp } from '../utils/time';
 export interface AlertsViewCallbacks {
   onBackToStations: () => void;
   onRetry: () => void;
-  onRefresh?: () => void;
 }
 
 export interface AlertsRenderState {
@@ -209,8 +208,6 @@ export class AlertsViewComponent {
   private rootEl: HTMLElement;
   private callbacks: AlertsViewCallbacks;
   private lastRenderKey: string = '';
-  private refreshBtnEl?: HTMLButtonElement;
-  private refreshBtnLabelEl?: HTMLElement;
 
   constructor(callbacks: AlertsViewCallbacks) {
     this.callbacks = callbacks;
@@ -220,16 +217,6 @@ export class AlertsViewComponent {
 
   public getElement(): HTMLElement {
     return this.rootEl;
-  }
-
-  private syncRefreshButtonState(isLoading: boolean): void {
-    if (!this.refreshBtnEl) return;
-    this.refreshBtnEl.disabled = isLoading;
-    this.refreshBtnEl.classList.toggle('is-loading', isLoading);
-    this.refreshBtnEl.setAttribute('aria-busy', String(isLoading));
-    if (this.refreshBtnLabelEl) {
-      this.refreshBtnLabelEl.textContent = isLoading ? 'Refreshing…' : 'Refresh';
-    }
   }
 
   private buildRenderKey(
@@ -273,12 +260,9 @@ export class AlertsViewComponent {
     const ordered = sortAlertsForLine(state.alerts, state.activeLine);
     const nextRenderKey = this.buildRenderKey(ordered, state, nowEpochMs);
     if (this.lastRenderKey === nextRenderKey && this.rootEl.childNodes.length > 0) {
-      this.syncRefreshButtonState(state.isLoading);
       return;
     }
     this.lastRenderKey = nextRenderKey;
-    this.refreshBtnEl = undefined;
-    this.refreshBtnLabelEl = undefined;
 
     const fragment = document.createDocumentFragment();
 
@@ -293,8 +277,6 @@ export class AlertsViewComponent {
       this.rootEl.replaceChildren(fragment);
       return;
     }
-
-    fragment.appendChild(this.renderMetaBar(state));
 
     if (state.error && state.updatedAt !== null) {
       const staleNote = createTextElement(
@@ -536,41 +518,5 @@ export class AlertsViewComponent {
 
     row.append(label, pillList);
     return row;
-  }
-
-  private renderMetaBar(state: AlertsRenderState): HTMLElement {
-    const metaBar = createElement('div', 'alerts-view-meta');
-
-    const refreshBtn = createElement('button', 'alerts-refresh-btn') as HTMLButtonElement;
-    refreshBtn.type = 'button';
-    refreshBtn.setAttribute('aria-label', 'Refresh service alerts');
-    const refreshIcon = createElement('span', 'alerts-refresh-icon');
-    refreshIcon.setAttribute('aria-hidden', 'true');
-    refreshIcon.innerHTML = ICONS.refreshCw;
-    const refreshLabel = createTextElement('span', 'alerts-refresh-label', 'Refresh');
-    refreshBtn.append(refreshIcon, refreshLabel);
-    refreshBtn.addEventListener('click', () => {
-      if (this.callbacks.onRefresh) {
-        this.callbacks.onRefresh();
-      } else {
-        this.callbacks.onRetry();
-      }
-    });
-
-    this.refreshBtnEl = refreshBtn;
-    this.refreshBtnLabelEl = refreshLabel;
-    this.syncRefreshButtonState(state.isLoading);
-
-    const link = createExternalLink(
-      ST_ALERTS_WEB_URL,
-      'Sound Transit advisory board',
-      'alerts-board-link'
-    );
-    const arrow = createTextElement('span', 'alerts-board-link-arrow', '↗');
-    arrow.setAttribute('aria-hidden', 'true');
-    link.appendChild(arrow);
-
-    metaBar.append(refreshBtn, link);
-    return metaBar;
   }
 }
