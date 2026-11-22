@@ -48,10 +48,12 @@
   }
 }
 
-.station-card:hover {
-  border-color: var(--border-medium);
-  box-shadow: var(--shadow-lg);
-  transform: translateY(-2px);
+@media (hover: hover) {
+  .station-card:hover {
+    border-color: var(--border-medium);
+    box-shadow: var(--shadow-lg);
+    transform: translateY(-2px);
+  }
 }
 
 .station-card.line-1-card {
@@ -268,10 +270,12 @@
   cursor: pointer;
 }
 
-.star-btn:hover {
-  color: #facc15;
-  background: rgba(250, 204, 21, 0.12);
-  transform: scale(1.15);
+@media (hover: hover) {
+  .star-btn:hover {
+    color: #facc15;
+    background: rgba(250, 204, 21, 0.12);
+    transform: scale(1.15);
+  }
 }
 
 .star-btn.pinned {
@@ -321,9 +325,11 @@
   line-height: 1.2;
 }
 
-.direction-segment-btn:hover {
-  color: var(--text-primary);
-  background: rgba(255, 255, 255, 0.06);
+@media (hover: hover) {
+  .direction-segment-btn:hover {
+    color: var(--text-primary);
+    background: rgba(255, 255, 255, 0.06);
+  }
 }
 
 .direction-segment-btn:active {
@@ -433,7 +439,8 @@
     justify-content: center;
     padding: 0.35rem 0.5rem;
     font-size: 0.8rem;
-    height: 36px;
+    min-height: 40px;
+    height: auto;
     line-height: 1;
   }
 

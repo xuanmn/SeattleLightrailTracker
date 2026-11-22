@@ -124,10 +124,12 @@
   opacity: 0.85;
 }
 
-.alerts-official-link:hover,
-.alerts-board-link:hover,
-.alert-card-link:hover {
-  text-decoration: underline;
+@media (hover: hover) {
+  .alerts-official-link:hover,
+  .alerts-board-link:hover,
+  .alert-card-link:hover {
+    text-decoration: underline;
+  }
 }
 
 .alerts-official-link:focus-visible,
@@ -169,9 +171,11 @@
   transition: background-color var(--transition-fast), border-color var(--transition-fast);
 }
 
-.alerts-stale-retry-btn:hover {
-  background-color: rgba(245, 158, 11, 0.26);
-  border-color: rgba(245, 158, 11, 0.65);
+@media (hover: hover) {
+  .alerts-stale-retry-btn:hover {
+    background-color: rgba(245, 158, 11, 0.26);
+    border-color: rgba(245, 158, 11, 0.65);
+  }
 }
 
 /* Alert Cards (aligned with StationCard depth & glass styling) */
@@ -200,10 +204,12 @@
     border-color var(--transition-normal);
 }
 
-.alert-card:hover {
-  transform: translateY(-1px);
-  border-color: var(--border-medium);
-  box-shadow: var(--shadow-lg);
+@media (hover: hover) {
+  .alert-card:hover {
+    transform: translateY(-1px);
+    border-color: var(--border-medium);
+    box-shadow: var(--shadow-lg);
+  }
 }
 
 .alert-card.severity-severe {
@@ -475,10 +481,12 @@
   transition: background-color var(--transition-fast), border-color var(--transition-fast);
 }
 
-.alerts-back-btn:hover,
-.alerts-retry-btn:hover {
-  background-color: var(--bg-pill-hover);
-  border-color: var(--border-strong);
+@media (hover: hover) {
+  .alerts-back-btn:hover,
+  .alerts-retry-btn:hover {
+    background-color: var(--bg-pill-hover);
+    border-color: var(--border-strong);
+  }
 }
 
 /* Loading Skeleton */
@@ -515,6 +523,21 @@
 
 .alert-skeleton-line--body {
   width: 92%;
+}
+
+@media (pointer: coarse) {
+  .alerts-back-btn,
+  .alerts-retry-btn,
+  .alerts-stale-retry-btn,
+  .alerts-official-link,
+  .alert-card-link {
+    min-height: 44px;
+  }
+
+  .section-subtitle .alerts-board-link {
+    padding-block: 0.35rem;
+    margin-block: -0.35rem;
+  }
 }
 
 @media (max-width: 768px) {

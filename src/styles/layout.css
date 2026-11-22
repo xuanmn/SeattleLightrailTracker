@@ -6,6 +6,7 @@
   display: flex;
   flex-direction: column;
   min-height: 100vh;
+  min-height: 100dvh;
   width: 100%;
 }
 
@@ -13,7 +14,7 @@
   width: 100%;
   max-width: var(--max-width);
   margin: 0 auto;
-  padding: 0 1.5rem;
+  padding: 0 max(1.5rem, env(safe-area-inset-right, 0px)) 0 max(1.5rem, env(safe-area-inset-left, 0px));
 }
 
 /* ==========================================================================
@@ -52,12 +53,14 @@
   transition: opacity var(--transition-fast), transform var(--transition-fast);
 }
 
-.brand-section:hover {
-  opacity: 0.94;
-}
+@media (hover: hover) {
+  .brand-section:hover {
+    opacity: 0.94;
+  }
 
-.brand-section:hover .brand-logo {
-  transform: scale(1.05);
+  .brand-section:hover .brand-logo {
+    transform: scale(1.05);
+  }
 }
 
 .brand-section:active .brand-logo {
@@ -102,8 +105,10 @@
   transition: transform var(--transition-fast);
 }
 
-.brand-logo:hover svg {
-  transform: scale(1.08);
+@media (hover: hover) {
+  .brand-logo:hover svg {
+    transform: scale(1.08);
+  }
 }
 
 .brand-text {
@@ -173,9 +178,11 @@
     transform var(--switch-transition);
 }
 
-.line-btn:hover:not(.active), .view-mode-btn:hover:not(.active) {
-  color: var(--text-primary);
-  background: rgba(255, 255, 255, 0.08);
+@media (hover: hover) {
+  .line-btn:hover:not(.active), .view-mode-btn:hover:not(.active) {
+    color: var(--text-primary);
+    background: rgba(255, 255, 255, 0.08);
+  }
 }
 
 .line-btn:active, .view-mode-btn:active {
@@ -274,14 +281,17 @@
   display: none;
 }
 
-.header-text-btn:hover {
-  background: var(--bg-pill-hover);
-  color: var(--text-primary);
-  border-color: var(--border-medium);
-  transform: translateY(-1px);
+@media (hover: hover) {
+  .header-text-btn:hover {
+    background: var(--bg-pill-hover);
+    color: var(--text-primary);
+    border-color: var(--border-medium);
+    transform: translateY(-1px);
+  }
 }
 
 .icon-btn {
+  position: relative;
   display: inline-flex;
   align-items: center;
   justify-content: center;
@@ -299,11 +309,13 @@
     transform var(--transition-fast);
 }
 
-.icon-btn:hover {
-  background: var(--bg-pill-hover);
-  color: var(--text-primary);
-  border-color: var(--border-medium);
-  transform: translateY(-1px);
+@media (hover: hover) {
+  .icon-btn:hover {
+    background: var(--bg-pill-hover);
+    color: var(--text-primary);
+    border-color: var(--border-medium);
+    transform: translateY(-1px);
+  }
 }
 
 .icon-btn svg {
@@ -402,7 +414,7 @@
 /* Responsive Breakpoints & Mobile Optimization */
 @media (max-width: 768px) {
   .app-container {
-    padding: 0 1rem;
+    padding: 0 max(1rem, env(safe-area-inset-right, 0px)) 0 max(1rem, env(safe-area-inset-left, 0px));
   }
 
   .app-header {
@@ -449,6 +461,7 @@
   }
 
   .header-text-btn {
+    position: relative;
     font-size: 0.78rem;
     padding: 0.25rem 0.65rem;
     height: 36px;
@@ -477,11 +490,12 @@
     justify-content: center;
     padding: 0.35rem 0.5rem;
     font-size: 0.82rem;
-    height: 34px;
+    min-height: 40px;
+    height: auto;
   }
 
   .main-content {
-    padding: 0.85rem 0 2.5rem;
+    padding: 0.85rem 0 max(2.5rem, calc(1.5rem + env(safe-area-inset-bottom, 0px)));
   }
 
   .dashboard-toolbar {
@@ -522,6 +536,32 @@
     padding: 0.3rem 0.45rem;
     font-size: 0.78rem;
     gap: 0.3rem;
+  }
+}
+
+@media (max-width: 360px) {
+  .header-text-btn {
+    padding: 0.25rem 0.5rem;
+  }
+}
+
+@media (pointer: coarse) {
+  /* Expand compact header & icon buttons to >= 44px touch targets without inflating header row height */
+  .header-text-btn,
+  .icon-btn {
+    position: relative;
+  }
+
+  .header-text-btn::after,
+  .icon-btn::after {
+    content: "";
+    position: absolute;
+    inset: -4px;
+  }
+
+  .line-switcher .line-btn,
+  .toolbar-controls .view-mode-btn {
+    min-height: 44px;
   }
 }
 

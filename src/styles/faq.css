@@ -267,10 +267,18 @@ details.faq-item[open] .faq-chevron {
     color var(--transition-fast);
 }
 
-.faq-link-row:hover {
-  background: rgba(56, 189, 248, 0.08);
-  border-color: rgba(56, 189, 248, 0.3);
-  color: var(--text-accent);
+@media (hover: hover) {
+  .faq-link-row:hover {
+    background: rgba(56, 189, 248, 0.08);
+    border-color: rgba(56, 189, 248, 0.3);
+    color: var(--text-accent);
+  }
+}
+
+@media (pointer: coarse) {
+  .faq-link-row {
+    min-height: 44px;
+  }
 }
 
 /* FAQ Modal - Immersive Full-Screen Presentation on Mobile */

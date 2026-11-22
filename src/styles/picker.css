@@ -41,8 +41,9 @@
   border: none;
   background: transparent;
   color: var(--text-primary);
-  font-size: 0.88rem;
-  padding: 0.65rem 0;
+  font-size: 1rem;
+  min-height: 44px;
+  padding: 0.55rem 0;
   outline: none;
 }
 
@@ -81,9 +82,11 @@
   font-size: 1rem;
 }
 
-.picker-station-row:hover {
-  background: rgba(255, 255, 255, 0.07);
-  border-color: var(--border-medium);
+@media (hover: hover) {
+  .picker-station-row:hover {
+    background: rgba(255, 255, 255, 0.07);
+    border-color: var(--border-medium);
+  }
 }
 
 /* Scrollable picker list with sleek custom vertical scrollbar & soft-edge fade */
@@ -200,9 +203,11 @@
     transform var(--transition-fast);
 }
 
-.filter-pill:hover {
-  color: var(--text-primary);
-  background: var(--bg-pill-hover);
+@media (hover: hover) {
+  .filter-pill:hover {
+    color: var(--text-primary);
+    background: var(--bg-pill-hover);
+  }
 }
 
 .filter-pill:active {
@@ -230,6 +235,10 @@
 }
 
 @media (max-width: 768px) {
+  .modal-body .departures-list {
+    max-height: 55dvh;
+  }
+
   .picker-filter-pills {
     display: grid;
     grid-template-columns: 1fr 1fr;
@@ -251,5 +260,12 @@
   /* Picker rows need more tap area */
   .picker-station-row {
     padding: 0.85rem 1rem;
+  }
+}
+
+@media (pointer: coarse) {
+  .filter-pill,
+  .picker-add-btn {
+    min-height: 44px;
   }
 }

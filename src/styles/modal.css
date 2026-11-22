@@ -18,12 +18,14 @@ body.modal-open {
     transform var(--transition-fast);
 }
 
-.icon-btn.modal-close-btn:hover {
-  background: rgba(239, 68, 68, 0.16);
-  border-color: rgba(239, 68, 68, 0.45);
-  color: #f87171;
-  box-shadow: 0 0 12px rgba(239, 68, 68, 0.25);
-  transform: translateY(-1px) scale(1.04);
+@media (hover: hover) {
+  .icon-btn.modal-close-btn:hover {
+    background: rgba(239, 68, 68, 0.16);
+    border-color: rgba(239, 68, 68, 0.45);
+    color: #f87171;
+    box-shadow: 0 0 12px rgba(239, 68, 68, 0.25);
+    transform: translateY(-1px) scale(1.04);
+  }
 }
 
 .icon-btn.modal-close-btn:active {

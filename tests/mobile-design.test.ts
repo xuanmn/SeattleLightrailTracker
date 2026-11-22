@@ -296,5 +296,47 @@ describe('Mobile Frontend Design & UX Specifications', () => {
     // Ensure mobile .modal-footer includes env(safe-area-inset-bottom) padding
     expect(modalCss).toMatch(/\.modal-footer\s*\{[^}]*env\(safe-area-inset-bottom\)/);
   });
+
+  it('prevents iOS search input auto-zoom, enforces dynamic viewport & full safe-area insets, and avoids sticky hover on touch devices', () => {
+    const themeCss = readFileSync(process.cwd() + '/src/styles/theme.css', 'utf-8');
+    const layoutCss = readFileSync(process.cwd() + '/src/styles/layout.css', 'utf-8');
+    const boardCss = readFileSync(process.cwd() + '/src/styles/board.css', 'utf-8');
+    const alertsCss = readFileSync(process.cwd() + '/src/styles/alerts.css', 'utf-8');
+    const pickerCss = readFileSync(process.cwd() + '/src/styles/picker.css', 'utf-8');
+    const settingsCss = readFileSync(process.cwd() + '/src/styles/settings.css', 'utf-8');
+    const faqCss = readFileSync(process.cwd() + '/src/styles/faq.css', 'utf-8');
+
+    // Picker search input must be >= 1rem (16px) so iOS Safari does not auto-zoom on focus
+    expect(pickerCss).toMatch(/\.picker-search-input\s*\{[^}]*font-size:\s*1rem/);
+
+    // Root uses scroll-padding-top for sticky header clearance, 100dvh, and overflow-x: clip
+    expect(themeCss).toMatch(/html\s*\{[^}]*scroll-padding-top:[^;]*var\(--header-height\)[^;]*env\(safe-area-inset-top/);
+    expect(themeCss).toMatch(/body\s*\{[^}]*min-height:\s*100dvh/);
+    expect(themeCss).toMatch(/body\s*\{[^}]*overflow-x:\s*clip/);
+
+    // Layout uses 100dvh and respects left/right/bottom safe-area insets on mobile
+    expect(layoutCss).toMatch(/#app\s*\{[^}]*min-height:\s*100dvh/);
+    expect(layoutCss).toMatch(/\.app-container\s*\{[^}]*env\(safe-area-inset-left/);
+    expect(layoutCss).toMatch(/\.main-content\s*\{[^}]*env\(safe-area-inset-bottom/);
+
+    // Interactive hover styles are gated inside @media (hover: hover) across components
+    for (const [name, css] of [
+      ['layout.css', layoutCss],
+      ['board.css', boardCss],
+      ['alerts.css', alertsCss],
+      ['picker.css', pickerCss],
+      ['settings.css', settingsCss],
+      ['faq.css', faqCss],
+    ] as const) {
+      expect(css, `${name} must use @media (hover: hover)`).toContain('@media (hover: hover)');
+    }
+
+    // Coarse-pointer (touch) ergonomics >= 44px target rules present
+    expect(layoutCss).toMatch(/@media\s*\(pointer:\s*coarse\)/);
+    expect(alertsCss).toMatch(/@media\s*\(pointer:\s*coarse\)[\s\S]*?min-height:\s*44px/);
+    expect(pickerCss).toMatch(/@media\s*\(pointer:\s*coarse\)[\s\S]*?min-height:\s*44px/);
+    expect(settingsCss).toMatch(/@media\s*\(pointer:\s*coarse\)/);
+    expect(faqCss).toMatch(/@media\s*\(pointer:\s*coarse\)[\s\S]*?min-height:\s*44px/);
+  });
 });
 
