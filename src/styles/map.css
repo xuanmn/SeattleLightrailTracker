@@ -149,6 +149,7 @@
 }
 
 .map-official-link {
+  position: relative;
   color: var(--text-accent);
   text-decoration: none;
   font-size: 0.76rem;
@@ -167,10 +168,20 @@
   white-space: nowrap;
 }
 
-.map-official-link:hover {
-  background: rgba(56, 189, 248, 0.16);
-  border-color: rgba(56, 189, 248, 0.4);
-  transform: translateY(-1px);
+@media (hover: hover) {
+  .map-official-link:hover {
+    background: rgba(56, 189, 248, 0.16);
+    border-color: rgba(56, 189, 248, 0.4);
+    transform: translateY(-1px);
+  }
+}
+
+@media (pointer: coarse) {
+  .map-official-link::after {
+    content: "";
+    position: absolute;
+    inset: -11px 0;
+  }
 }
 
 .system-map-header-actions {

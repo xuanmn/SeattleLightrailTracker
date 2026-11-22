@@ -488,8 +488,40 @@ describe('AlertsViewComponent', () => {
       '.alerts-stale-note .alerts-stale-retry-btn'
     );
     expect(staleRetryBtn).not.toBeNull();
+    expect(staleRetryBtn?.disabled).toBe(false);
+    expect(staleRetryBtn?.textContent).toBe('Retry');
     staleRetryBtn?.click();
     expect(onRetry).toHaveBeenCalledTimes(1);
+
+    // While a stale retry is in flight (isLoading: true + error + cached updatedAt),
+    // the button updates to disabled Retrying… state with aria-busy="true" and ignores extra taps
+    view.update({
+      ...state,
+      error: 'HTTP 503',
+      isLoading: true,
+    });
+    const retryingBtn = view.getElement().querySelector<HTMLButtonElement>(
+      '.alerts-stale-note .alerts-stale-retry-btn'
+    );
+    expect(retryingBtn).not.toBeNull();
+    expect(retryingBtn?.disabled).toBe(true);
+    expect(retryingBtn?.getAttribute('aria-busy')).toBe('true');
+    expect(retryingBtn?.textContent).toBe('Retrying…');
+    retryingBtn?.click();
+    expect(onRetry).toHaveBeenCalledTimes(1);
+
+    // If the retry fails again with the same error, the button re-enables back to Retry
+    view.update({
+      ...state,
+      error: 'HTTP 503',
+      isLoading: false,
+    });
+    const reenabledBtn = view.getElement().querySelector<HTMLButtonElement>(
+      '.alerts-stale-note .alerts-stale-retry-btn'
+    );
+    expect(reenabledBtn?.disabled).toBe(false);
+    expect(reenabledBtn?.getAttribute('aria-busy')).toBeNull();
+    expect(reenabledBtn?.textContent).toBe('Retry');
 
     // Clearing error returns cleanly to alert list
     view.update(state);

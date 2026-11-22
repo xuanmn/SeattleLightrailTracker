@@ -243,10 +243,14 @@ export class AlertsViewComponent {
       })
       .join('\u001e');
 
+    const isRetryingStale =
+      state.isLoading && Boolean(state.error) && state.updatedAt !== null;
+
     return [
       state.activeLine,
       state.updatedAt !== null ? '1' : '0',
       showLoadingSkeleton ? '1' : '0',
+      isRetryingStale ? '1' : '0',
       state.error ?? '',
       state.timeFormat24Hour ? '24' : '12',
       alertsKey,
@@ -277,6 +281,7 @@ export class AlertsViewComponent {
     }
 
     if (state.error && state.updatedAt !== null) {
+      const isRetryingStale = state.isLoading;
       const staleNote = createElement('div', 'alerts-stale-note');
       staleNote.setAttribute('role', 'status');
       const noteText = createTextElement(
@@ -284,9 +289,18 @@ export class AlertsViewComponent {
         'alerts-stale-note-text',
         `Could not refresh alerts (${state.error}). Showing cached notices.`
       );
-      const retryBtn = createTextElement('button', 'alerts-stale-retry-btn', 'Retry');
+      const retryBtn = createTextElement(
+        'button',
+        'alerts-stale-retry-btn',
+        isRetryingStale ? 'Retrying…' : 'Retry'
+      );
       retryBtn.type = 'button';
-      retryBtn.addEventListener('click', () => this.callbacks.onRetry());
+      retryBtn.disabled = isRetryingStale;
+      if (isRetryingStale) {
+        retryBtn.setAttribute('aria-busy', 'true');
+      } else {
+        retryBtn.addEventListener('click', () => this.callbacks.onRetry());
+      }
       staleNote.append(noteText, retryBtn);
       fragment.appendChild(staleNote);
     }

@@ -236,6 +236,7 @@
 
 @media (max-width: 768px) {
   .modal-body .departures-list {
+    max-height: 55vh;
     max-height: 55dvh;
   }
 

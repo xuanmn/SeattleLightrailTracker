@@ -247,6 +247,7 @@
 }
 
 .header-text-btn {
+  position: relative;
   display: inline-flex;
   align-items: center;
   gap: 0.4rem;
@@ -461,7 +462,6 @@
   }
 
   .header-text-btn {
-    position: relative;
     font-size: 0.78rem;
     padding: 0.25rem 0.65rem;
     height: 36px;
@@ -501,7 +501,7 @@
   .dashboard-toolbar {
     flex-direction: column;
     align-items: stretch;
-    gap: 0.55rem;
+    gap: 0.75rem;
     margin-bottom: 0.95rem;
   }
 
@@ -546,17 +546,17 @@
 }
 
 @media (pointer: coarse) {
-  /* Expand compact header & icon buttons to >= 44px touch targets without inflating header row height */
-  .header-text-btn,
-  .icon-btn {
-    position: relative;
+  /* Expand compact 36px header buttons (34px padding box) to 44px touch targets without inflating header row height or overlapping siblings */
+  .header-text-btn::after {
+    content: "";
+    position: absolute;
+    inset: -5px 0;
   }
 
-  .header-text-btn::after,
   .icon-btn::after {
     content: "";
     position: absolute;
-    inset: -4px;
+    inset: -5px;
   }
 
   .line-switcher .line-btn,

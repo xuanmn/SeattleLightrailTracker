@@ -224,22 +224,24 @@ details.faq-item[open] .faq-chevron {
   border: 1px solid rgba(16, 185, 129, 0.35);
 }
 
-.faq-action-btn.tel:hover {
-  background: rgba(16, 185, 129, 0.25);
-  border-color: rgba(16, 185, 129, 0.5);
-  color: #ffffff;
-}
-
 .faq-action-btn.sms {
   background: rgba(56, 189, 248, 0.15);
   color: var(--text-accent);
   border: 1px solid rgba(56, 189, 248, 0.35);
 }
 
-.faq-action-btn.sms:hover {
-  background: rgba(56, 189, 248, 0.25);
-  border-color: rgba(56, 189, 248, 0.5);
-  color: #ffffff;
+@media (hover: hover) {
+  .faq-action-btn.tel:hover {
+    background: rgba(16, 185, 129, 0.25);
+    border-color: rgba(16, 185, 129, 0.5);
+    color: #ffffff;
+  }
+
+  .faq-action-btn.sms:hover {
+    background: rgba(56, 189, 248, 0.25);
+    border-color: rgba(56, 189, 248, 0.5);
+    color: #ffffff;
+  }
 }
 
 .faq-links-list {
@@ -276,7 +278,8 @@ details.faq-item[open] .faq-chevron {
 }
 
 @media (pointer: coarse) {
-  .faq-link-row {
+  .faq-link-row,
+  .faq-action-btn {
     min-height: 44px;
   }
 }

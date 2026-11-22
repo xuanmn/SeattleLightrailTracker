@@ -305,12 +305,17 @@ describe('Mobile Frontend Design & UX Specifications', () => {
     const pickerCss = readFileSync(process.cwd() + '/src/styles/picker.css', 'utf-8');
     const settingsCss = readFileSync(process.cwd() + '/src/styles/settings.css', 'utf-8');
     const faqCss = readFileSync(process.cwd() + '/src/styles/faq.css', 'utf-8');
+    const modalCss = readFileSync(process.cwd() + '/src/styles/modal.css', 'utf-8');
+    const mapCss = readFileSync(process.cwd() + '/src/styles/map.css', 'utf-8');
 
-    // Picker search input must be >= 1rem (16px) so iOS Safari does not auto-zoom on focus
+    // Picker search input must be >= 1rem (16px) so iOS Safari does not auto-zoom on focus,
+    // and mobile departure list must declare a vh fallback before 55dvh
     expect(pickerCss).toMatch(/\.picker-search-input\s*\{[^}]*font-size:\s*1rem/);
+    expect(pickerCss).toMatch(/max-height:\s*55vh;\s*max-height:\s*55dvh;/);
 
-    // Root uses scroll-padding-top for sticky header clearance, 100dvh, and overflow-x: clip
+    // Root uses scroll-padding-top for sticky header clearance (with taller mobile --header-height), 100dvh, and overflow-x: clip
     expect(themeCss).toMatch(/html\s*\{[^}]*scroll-padding-top:[^;]*var\(--header-height\)[^;]*env\(safe-area-inset-top/);
+    expect(themeCss).toMatch(/@media\s*\(max-width:\s*768px\)[\s\S]*?:root\s*\{[^}]*--header-height:\s*108px/);
     expect(themeCss).toMatch(/body\s*\{[^}]*min-height:\s*100dvh/);
     expect(themeCss).toMatch(/body\s*\{[^}]*overflow-x:\s*clip/);
 
@@ -319,24 +324,70 @@ describe('Mobile Frontend Design & UX Specifications', () => {
     expect(layoutCss).toMatch(/\.app-container\s*\{[^}]*env\(safe-area-inset-left/);
     expect(layoutCss).toMatch(/\.main-content\s*\{[^}]*env\(safe-area-inset-bottom/);
 
-    // Interactive hover styles are gated inside @media (hover: hover) across components
+    // Every non-scrollbar :hover selector across all stylesheets must be gated inside @media (hover: hover)
+    const findUngatedHoverSelectors = (css: string): string[] => {
+      const stripped = css.replace(/\/\*[\s\S]*?\*\//g, '');
+      const ungated: string[] = [];
+      let depth = 0;
+      const hoverMediaDepths: number[] = [];
+      let buffer = '';
+
+      for (let i = 0; i < stripped.length; i++) {
+        const ch = stripped[i];
+        if (ch === '{') {
+          const prelude = buffer.trim();
+          buffer = '';
+          depth++;
+          if (/^@media\b[^{]*hover:\s*hover/.test(prelude)) {
+            hoverMediaDepths.push(depth);
+          } else if (
+            prelude.includes(':hover') &&
+            !prelude.includes('::-webkit-scrollbar') &&
+            hoverMediaDepths.length === 0
+          ) {
+            ungated.push(prelude);
+          }
+        } else if (ch === '}') {
+          if (hoverMediaDepths[hoverMediaDepths.length - 1] === depth) {
+            hoverMediaDepths.pop();
+          }
+          depth = Math.max(0, depth - 1);
+          buffer = '';
+        } else if (ch === ';') {
+          buffer = '';
+        } else {
+          buffer += ch;
+        }
+      }
+
+      return ungated;
+    };
+
     for (const [name, css] of [
+      ['theme.css', themeCss],
       ['layout.css', layoutCss],
       ['board.css', boardCss],
       ['alerts.css', alertsCss],
       ['picker.css', pickerCss],
       ['settings.css', settingsCss],
       ['faq.css', faqCss],
+      ['modal.css', modalCss],
+      ['map.css', mapCss],
     ] as const) {
-      expect(css, `${name} must use @media (hover: hover)`).toContain('@media (hover: hover)');
+      expect(findUngatedHoverSelectors(css), `${name} has un-gated :hover selectors`).toEqual([]);
     }
 
-    // Coarse-pointer (touch) ergonomics >= 44px target rules present
-    expect(layoutCss).toMatch(/@media\s*\(pointer:\s*coarse\)/);
+    // Coarse-pointer (touch) ergonomics >= 44px target rules present across interactive stylesheets
+    expect(layoutCss).toMatch(/@media\s*\(pointer:\s*coarse\)[\s\S]*?\.header-text-btn::after\s*\{[^}]*inset:\s*-5px\s+0/);
+    expect(layoutCss).toMatch(/@media\s*\(pointer:\s*coarse\)[\s\S]*?\.icon-btn::after\s*\{[^}]*inset:\s*-5px;/);
+    expect(boardCss).toMatch(/@media\s*\(pointer:\s*coarse\)[\s\S]*?\.direction-segment-btn[\s\S]*?min-height:\s*44px/);
+    expect(boardCss).toMatch(/@media\s*\(pointer:\s*coarse\)[\s\S]*?\.empty-dashboard-btn[\s\S]*?min-height:\s*44px/);
+    expect(boardCss).toMatch(/@media\s*\(pointer:\s*coarse\)[\s\S]*?\.star-btn\s*\{[^}]*width:\s*44px;[^}]*height:\s*44px/);
     expect(alertsCss).toMatch(/@media\s*\(pointer:\s*coarse\)[\s\S]*?min-height:\s*44px/);
     expect(pickerCss).toMatch(/@media\s*\(pointer:\s*coarse\)[\s\S]*?min-height:\s*44px/);
     expect(settingsCss).toMatch(/@media\s*\(pointer:\s*coarse\)/);
-    expect(faqCss).toMatch(/@media\s*\(pointer:\s*coarse\)[\s\S]*?min-height:\s*44px/);
+    expect(faqCss).toMatch(/@media\s*\(pointer:\s*coarse\)[\s\S]*?\.faq-action-btn[\s\S]*?min-height:\s*44px/);
+    expect(mapCss).toMatch(/@media\s*\(pointer:\s*coarse\)[\s\S]*?\.map-official-link::after/);
   });
 });
 
