@@ -10,7 +10,6 @@ function makeAlert(overrides: Partial<ServiceAlert> = {}): ServiceAlert {
     id: 'alert-1',
     severity: 'WARNING',
     effect: 'SIGNIFICANT_DELAYS',
-    cause: 'MAINTENANCE',
     lines: ['line-1'],
     stationIds: [],
     header: '1 Line experiencing 15-minute delays',

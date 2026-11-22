@@ -60,7 +60,6 @@ export interface ServiceAlert {
   id: string;
   severity: AlertSeverity;
   effect: string;
-  cause: string;
   lines: TransitLineId[];
   stationIds: string[];
   header: string;

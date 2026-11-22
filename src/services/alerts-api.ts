@@ -14,9 +14,9 @@ export const ST_ALERTS_WEB_URL =
 const CACHE_TTL_MS = 25 * 1000;
 const REQUEST_TIMEOUT_MS = 6000;
 
-export const ALERTS_POLL_INTERVAL_MS = 60 * 60 * 1000;
-export const ALERTS_MIN_REFETCH_GAP_MS = 15 * 60 * 1000;
-export const ALERTS_ERROR_RETRY_MS = 5 * 60 * 1000;
+const ALERTS_POLL_INTERVAL_MS = 60 * 60 * 1000;
+const ALERTS_MIN_REFETCH_GAP_MS = 15 * 60 * 1000;
+const ALERTS_ERROR_RETRY_MS = 5 * 60 * 1000;
 const CLOCK_SKEW_TOLERANCE_MS = 60 * 1000;
 
 /**
@@ -150,30 +150,29 @@ const STATION_HEADER_MATCHERS = STATIONS.flatMap((station) => {
   return pattern ? [{ id: station.id, pattern }] : [];
 });
 
-export interface RawTranslatedTextEntry {
+interface RawTranslatedTextEntry {
   text?: string;
   language?: string;
 }
 
-export interface RawTranslatedText {
+interface RawTranslatedText {
   translation?: RawTranslatedTextEntry[];
 }
 
-export interface RawActivePeriod {
+interface RawActivePeriod {
   start?: number | string;
   end?: number | string;
 }
 
-export interface RawInformedEntity {
+interface RawInformedEntity {
   route_id?: string;
   stop_id?: string;
   agency_id?: string;
 }
 
-export interface RawGtfsAlert {
+interface RawGtfsAlert {
   active_period?: RawActivePeriod[];
   informed_entity?: RawInformedEntity[];
-  cause?: string;
   effect?: string;
   severity_level?: string;
   url?: RawTranslatedText;
@@ -181,7 +180,7 @@ export interface RawGtfsAlert {
   description_text?: RawTranslatedText;
 }
 
-export interface RawGtfsAlertEntity {
+interface RawGtfsAlertEntity {
   id?: string;
   alert?: RawGtfsAlert;
 }
@@ -395,7 +394,6 @@ export function transformGtfsAlerts(
       id: entity.id?.trim() || `alert-${i}`,
       severity: normalizeSeverity(alert.severity_level),
       effect: normalizeText(alert.effect ?? ''),
-      cause: normalizeText(alert.cause ?? ''),
       lines,
       stationIds,
       header,

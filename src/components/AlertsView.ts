@@ -4,12 +4,12 @@ import { ST_ALERTS_WEB_URL } from '../services/alerts-api';
 import { createElement, ICONS } from '../utils/dom';
 import { formatAlertTimestamp } from '../utils/time';
 
-export interface AlertsViewCallbacks {
+interface AlertsViewCallbacks {
   onBackToStations: () => void;
   onRetry: () => void;
 }
 
-export interface AlertsRenderState {
+interface AlertsRenderState {
   alerts: ServiceAlert[];
   activeLine: TransitLineId;
   updatedAt: number | null;
@@ -52,9 +52,7 @@ const EFFECT_LABELS: Record<string, string> = {
 
 const IGNORED_ENUM_VALUES = new Set([
   'UNKNOWN_EFFECT',
-  'UNKNOWN_CAUSE',
   'OTHER_EFFECT',
-  'OTHER_CAUSE',
   'NO_EFFECT',
 ]);
 

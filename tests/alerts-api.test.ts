@@ -40,7 +40,6 @@ describe('transformGtfsAlerts', () => {
           alert: {
             severity_level: 'SEVERE',
             effect: 'REDUCED_SERVICE',
-            cause: 'MAINTENANCE',
             active_period: [{ start: nowSec - 600 }],
             informed_entity: [
               { route_id: '2LINE' },
@@ -68,7 +67,6 @@ describe('transformGtfsAlerts', () => {
           alert: {
             severity_level: 'WARNING',
             effect: 'DETOUR',
-            cause: 'OTHER_CAUSE',
             active_period: [{ start: nowSec - 600 }],
             informed_entity: [{ route_id: 'SNDR_TL' }],
             header_text: { translation: [{ language: 'en', text: 'Sounder alert' }] },
@@ -92,7 +90,6 @@ describe('transformGtfsAlerts', () => {
       id: 'link-both',
       severity: 'SEVERE',
       effect: 'REDUCED_SERVICE',
-      cause: 'MAINTENANCE',
       lines: ['line-1', 'line-2'],
       stationIds: [],
       header: '1 Line & 2 Line reduced service',
