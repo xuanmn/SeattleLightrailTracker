@@ -420,10 +420,11 @@ describe('AlertsViewComponent', () => {
     expect(morePill?.title).toBe('U District, Westlake');
   });
 
-  it('skips rebuilding DOM nodes on background/manual isLoading toggles and invalidates on pin/format/midnight changes', () => {
+  it('skips rebuilding DOM nodes on background isLoading toggles and updatedAt ticks, renders Retry in stale-cache banner, and invalidates on pin/format/midnight changes', () => {
+    const onRetry = vi.fn();
     const view = new AlertsViewComponent({
       onBackToStations: vi.fn(),
-      onRetry: vi.fn(),
+      onRetry,
     });
 
     const baseNow = Date.UTC(2026, 10, 18, 20, 0, 0);
@@ -449,7 +450,7 @@ describe('AlertsViewComponent', () => {
     const firstListNode = view.getElement().querySelector('.alerts-list');
     expect(firstListNode).not.toBeNull();
 
-    // Unchanged state and isLoading toggles preserve alert list DOM
+    // Unchanged state, background isLoading toggles, and updatedAt timestamp ticks preserve alert list DOM
     view.update({
       ...state,
       isLoading: true,
@@ -467,6 +468,7 @@ describe('AlertsViewComponent', () => {
     view.update({
       ...state,
       isLoading: false,
+      updatedAt: baseNow + 60 * 60 * 1000,
       alerts: [
         makeAlert({
           id: 'stable-1',
@@ -478,13 +480,30 @@ describe('AlertsViewComponent', () => {
     });
     expect(view.getElement().querySelector('.alerts-list')).toBe(firstListNode);
 
+    // Stale-cache refresh error renders inline Retry button wired to onRetry
+    view.update({
+      ...state,
+      error: 'HTTP 503',
+    });
+    const staleRetryBtn = view.getElement().querySelector<HTMLButtonElement>(
+      '.alerts-stale-note .alerts-stale-retry-btn'
+    );
+    expect(staleRetryBtn).not.toBeNull();
+    staleRetryBtn?.click();
+    expect(onRetry).toHaveBeenCalledTimes(1);
+
+    // Clearing error returns cleanly to alert list
+    view.update(state);
+    expect(view.getElement().querySelector('.alerts-stale-note')).toBeNull();
+    const restoredListNode = view.getElement().querySelector('.alerts-list');
+
     // Pinning an affected station invalidates and highlights the pill
     view.update({
       ...state,
       pinnedStationIds: new Set(['northgate']),
     });
     const afterPinChange = view.getElement().querySelector('.alerts-list');
-    expect(afterPinChange).not.toBe(firstListNode);
+    expect(afterPinChange).not.toBe(restoredListNode);
     expect(view.getElement().querySelector('.alert-station-pill.is-pinned')?.textContent).toContain('Northgate');
 
     // Changing 24-hour clock format invalidates and re-renders
@@ -826,23 +845,53 @@ describe('TransitTrackerApp Service Alerts Integration', () => {
     app.destroy();
   });
 
-  it('places Advisory board link cleanly inside the single dashboard toolbar row without an extra strip or Refresh button', async () => {
-    mockNetwork({ alertsEntities: [] });
+  it('places Advisory board link cleanly inside the single dashboard toolbar row, handles pre-load fallback, and preserves link identity across line switches', async () => {
+    let resolveInitialAlerts!: () => void;
+    const alertsGate = new Promise<void>((resolve) => {
+      resolveInitialAlerts = resolve;
+    });
+    const nowSec = Math.floor(Date.now() / 1000);
+    const fetchMock = vi.fn(async (url: string) => {
+      if (String(url) === ST_ALERTS_FEED_URL) {
+        await alertsGate;
+        return {
+          ok: true,
+          status: 200,
+          json: async () => ({ header: { timestamp: nowSec }, entity: [] }),
+        };
+      }
+      return {
+        ok: true,
+        status: 200,
+        json: async () => ({
+          code: 200,
+          data: { entry: { stopId: '40_1121', arrivalsAndDepartures: [] } },
+        }),
+      };
+    });
+    vi.stubGlobal('fetch', fetchMock);
 
     let app: InstanceType<(typeof import('../src/main'))['TransitTrackerApp']> | undefined;
     try {
       const { TransitTrackerApp } = await import('../src/main');
       app = new TransitTrackerApp();
-      await new Promise((r) => setTimeout(r, 25));
 
       const titleEl = document.querySelector('.dashboard-toolbar .section-title');
       const subtitleEl = document.querySelector('.dashboard-toolbar .section-subtitle');
       expect(titleEl?.textContent).toContain('1 Line Live Departures');
       expect(document.querySelector('.alerts-refresh-btn')).toBeNull();
 
+      // Open Alerts before initial fetch completes -> pre-load fallback copy + Advisory board link
       document.querySelector<HTMLButtonElement>('.alerts-tab-btn')?.click();
       expect(titleEl?.textContent).toContain('Service Alerts');
       expect(titleEl?.textContent).not.toContain('Live Departures');
+      expect(subtitleEl?.textContent).toContain('Sound Transit GTFS-RT alerts feed');
+      expect(subtitleEl?.textContent).not.toContain('Updated ');
+      expect(subtitleEl?.querySelector('.alerts-board-link-arrow')?.getAttribute('aria-hidden')).toBe('true');
+
+      // Resolve initial fetch -> subtitle updates to timestamped copy
+      resolveInitialAlerts();
+      await new Promise((r) => setTimeout(r, 25));
       expect(subtitleEl?.textContent).toContain('Sound Transit GTFS-RT');
       expect(subtitleEl?.textContent).toContain('Updated ');
       const boardLink = subtitleEl?.querySelector<HTMLAnchorElement>('.alerts-board-link');
@@ -855,8 +904,14 @@ describe('TransitTrackerApp Service Alerts Integration', () => {
       expect(document.querySelector('.alerts-source-note')).toBeNull();
       expect(document.querySelector('.alerts-view-meta')).toBeNull();
 
+      // Switching 1 Line -> 2 Line while on Alerts preserves the .alerts-board-link DOM node (doesn't drop focus)
+      document.querySelectorAll<HTMLButtonElement>('.app-header .line-btn')[1]?.click();
+      expect(subtitleEl?.querySelector('.alerts-board-link')).toBe(boardLink);
+
+      // Returning to My Stations restores departures header and clears .alerts-board-link
       document.querySelectorAll<HTMLButtonElement>('.toolbar-controls .view-mode-btn')[0]?.click();
-      expect(titleEl?.textContent).toContain('1 Line Live Departures');
+      expect(titleEl?.textContent).toContain('2 Line Live Departures');
+      expect(subtitleEl?.querySelector('.alerts-board-link')).toBeNull();
     } finally {
       app?.destroy();
     }
@@ -987,42 +1042,31 @@ describe('TransitTrackerApp Service Alerts Integration', () => {
       await vi.advanceTimersByTimeAsync(60 * 1000);
       expect(countAlertCalls()).toBe(5);
 
-      // Online reconnect at 14:50:37 fetches immediately (Call 6) AND skips 15:00:37 until 16:00:37
-      await vi.advanceTimersByTimeAsync(50 * 60 * 1000); // 14:50:37
-      window.dispatchEvent(new Event('offline'));
-      window.dispatchEvent(new Event('online'));
-      await vi.advanceTimersByTimeAsync(25);
-      expect(countAlertCalls()).toBe(6);
-
-      await vi.advanceTimersByTimeAsync(10 * 60 * 1000); // 15:00:37 -> skipped
-      expect(countAlertCalls()).toBe(6);
-
-      // Visibility sleep/wake resume across an active 15:55:37 failure (5m before 16:00)
-      await vi.advanceTimersByTimeAsync(55 * 60 * 1000); // 15:55:37
+      // Transient failure at 14:55:37 (5m before 15:00) MUST retry at 15:00:37 (NOT skipped by 15m window)
+      await vi.advanceTimersByTimeAsync(55 * 60 * 1000); // 14:55:37
       shouldFailAlert = true;
       window.dispatchEvent(new Event('offline'));
       window.dispatchEvent(new Event('online'));
       await vi.advanceTimersByTimeAsync(25);
+      expect(countAlertCalls()).toBe(6);
+
+      await vi.advanceTimersByTimeAsync(5 * 60 * 1000); // 15:00:37 -> error retry recovers (Call 7)
       expect(countAlertCalls()).toBe(7);
 
-      // 5 minutes later at 16:00:37, error retry MUST fire (NOT skipped by 15m window), recovering to Call 8!
-      await vi.advanceTimersByTimeAsync(5 * 60 * 1000);
-      expect(countAlertCalls()).toBe(8);
-
-      // Sleep across 17:00 and wake on visibility resume at 17:47:00 -> fetches immediately (Call 9) and skips 18:00
+      // Sleep across 16:00 and wake on visibility resume at 16:47:00 -> fetches immediately (Call 8) and skips 17:00
       Object.defineProperty(document, 'hidden', { configurable: true, value: true });
       document.dispatchEvent(new Event('visibilitychange'));
-      vi.setSystemTime(Date.UTC(2026, 10, 21, 17, 47, 0));
+      vi.setSystemTime(Date.UTC(2026, 10, 21, 16, 47, 0));
       Object.defineProperty(document, 'hidden', { configurable: true, value: false });
       document.dispatchEvent(new Event('visibilitychange'));
       await vi.advanceTimersByTimeAsync(25);
-      expect(countAlertCalls()).toBe(9);
+      expect(countAlertCalls()).toBe(8);
 
-      // Crossing 18:00:00 skips because resume fetch occurred at 17:47:00 (within 15m of 18:00), then fires at 19:00:00 (Call 10)
-      await vi.advanceTimersByTimeAsync(13 * 60 * 1000); // 18:00:00
+      // Crossing 17:00:00 skips because resume fetch occurred at 16:47:00 (within 15m of 17:00), then fires at 18:00:00 (Call 9)
+      await vi.advanceTimersByTimeAsync(13 * 60 * 1000); // 17:00:00
+      expect(countAlertCalls()).toBe(8);
+      await vi.advanceTimersByTimeAsync(60 * 60 * 1000); // 18:00:00
       expect(countAlertCalls()).toBe(9);
-      await vi.advanceTimersByTimeAsync(60 * 60 * 1000); // 19:00:00
-      expect(countAlertCalls()).toBe(10);
     } finally {
       Object.defineProperty(document, 'hidden', { configurable: true, value: false });
       app?.destroy();

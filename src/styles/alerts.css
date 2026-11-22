@@ -109,6 +109,9 @@
 .section-subtitle .alerts-board-link {
   font-size: inherit;
   line-height: inherit;
+  padding-block: 0.25rem;
+  margin-block: -0.25rem;
+  border-radius: 4px;
 }
 
 .alerts-official-link,
@@ -131,18 +134,44 @@
 .alerts-board-link:focus-visible,
 .alert-card-link:focus-visible,
 .alerts-back-btn:focus-visible,
-.alerts-retry-btn:focus-visible {
+.alerts-retry-btn:focus-visible,
+.alerts-stale-retry-btn:focus-visible {
   outline: 2px solid var(--border-focus);
   outline-offset: 2px;
 }
 
 .alerts-stale-note {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.65rem;
   padding: 0.65rem 0.9rem;
   border-radius: var(--radius-md);
   border: 1px solid rgba(245, 158, 11, 0.35);
   background-color: var(--status-delayed-bg);
   color: var(--text-primary);
   font-size: 0.85rem;
+}
+
+.alerts-stale-retry-btn {
+  min-height: 32px;
+  padding: 0.28rem 0.75rem;
+  border-radius: var(--radius-pill);
+  border: 1px solid rgba(245, 158, 11, 0.45);
+  background-color: rgba(245, 158, 11, 0.16);
+  color: var(--text-primary);
+  font-family: var(--font-body);
+  font-size: 0.8rem;
+  font-weight: 600;
+  cursor: pointer;
+  flex-shrink: 0;
+  transition: background-color var(--transition-fast), border-color var(--transition-fast);
+}
+
+.alerts-stale-retry-btn:hover {
+  background-color: rgba(245, 158, 11, 0.26);
+  border-color: rgba(245, 158, 11, 0.65);
 }
 
 /* Alert Cards (aligned with StationCard depth & glass styling) */

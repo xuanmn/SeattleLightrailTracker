@@ -247,7 +247,7 @@ export class AlertsViewComponent {
 
     return [
       state.activeLine,
-      state.updatedAt ?? '',
+      state.updatedAt !== null ? '1' : '0',
       showLoadingSkeleton ? '1' : '0',
       state.error ?? '',
       state.timeFormat24Hour ? '24' : '12',
@@ -279,12 +279,17 @@ export class AlertsViewComponent {
     }
 
     if (state.error && state.updatedAt !== null) {
-      const staleNote = createTextElement(
-        'div',
-        'alerts-stale-note',
+      const staleNote = createElement('div', 'alerts-stale-note');
+      staleNote.setAttribute('role', 'status');
+      const noteText = createTextElement(
+        'span',
+        'alerts-stale-note-text',
         `Could not refresh alerts (${state.error}). Showing cached notices.`
       );
-      staleNote.setAttribute('role', 'status');
+      const retryBtn = createTextElement('button', 'alerts-stale-retry-btn', 'Retry');
+      retryBtn.type = 'button';
+      retryBtn.addEventListener('click', () => this.callbacks.onRetry());
+      staleNote.append(noteText, retryBtn);
       fragment.appendChild(staleNote);
     }
 

@@ -95,6 +95,7 @@ export class TransitTrackerApp {
   private isFetchingAlerts: boolean = false;
   private alertsAbortController?: AbortController;
   private lastAlertsPillKey: string = '';
+  private lastToolbarHeaderKey: string = '';
   private viewTransitionSeq: number = 0;
   private isDestroyed: boolean = false;
 
@@ -389,6 +390,15 @@ export class TransitTrackerApp {
   }
 
   private updateToolbarHeader() {
+    const nextHeaderKey =
+      this.viewMode === 'alerts'
+        ? `alerts|${this.alertsUpdatedAt ?? ''}|${this.settings.timeFormat24Hour ? '24' : '12'}`
+        : `stations|${this.activeLine}`;
+    if (this.lastToolbarHeaderKey === nextHeaderKey) {
+      return;
+    }
+    this.lastToolbarHeaderKey = nextHeaderKey;
+
     if (this.viewMode === 'alerts') {
       const iconWrap = createElement('span', 'toolbar-alert-icon');
       iconWrap.setAttribute('aria-hidden', 'true');
