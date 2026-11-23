@@ -77,8 +77,10 @@ export class TransitTrackerApp {
     return this.pickerModal;
   });
 
+  private loadAlertsViewModule = () => import('./components/AlertsView');
+
   private getAlertsView = createLazySingleton(async (): Promise<AlertsViewComponent> => {
-    const { AlertsViewComponent } = await import('./components/AlertsView');
+    const { AlertsViewComponent } = await this.loadAlertsViewModule();
     const view = new AlertsViewComponent({
       onBackToStations: () => this.setViewMode('pinned'),
       onRetry: () => void this.fetchAlerts(true),
@@ -113,6 +115,8 @@ export class TransitTrackerApp {
   private lastAlertsPillKey: string = '';
   private lastToolbarHeaderKey: string = '';
   private viewTransitionSeq: number = 0;
+  private alertsLoadSeq: number = 0;
+  private hasAlertsChunkErrorBanner: boolean = false;
   private isDestroyed: boolean = false;
 
   private viewStageEl!: HTMLElement;
@@ -334,6 +338,7 @@ export class TransitTrackerApp {
 
     if (nextMode === 'alerts') {
       this.stopSecondTicker();
+      const loadSeq = ++this.alertsLoadSeq;
       const { seq, finished } = this.performViewTransition(() => {
         this.stationsGridEl.classList.add('hidden');
         this.alertsView?.getElement().classList.remove('hidden');
@@ -347,9 +352,13 @@ export class TransitTrackerApp {
         : this.getAlertsView()
             .then((view) => {
               if (this.isDestroyed) return view;
-              if (this.viewMode === 'alerts') {
+              if (this.viewMode === 'alerts' && this.alertsLoadSeq === loadSeq) {
                 view.getElement().classList.remove('hidden');
                 this.syncAlertsView();
+                if (this.hasAlertsChunkErrorBanner) {
+                  this.hasAlertsChunkErrorBanner = false;
+                  this.staleBannerEl.classList.add('hidden');
+                }
               } else {
                 view.getElement().classList.add('hidden');
               }
@@ -357,15 +366,22 @@ export class TransitTrackerApp {
             })
             .catch((err) => {
               console.warn('Failed loading alerts view chunk:', err);
-              if (!this.isDestroyed && this.viewMode === 'alerts') {
+              if (
+                !this.isDestroyed &&
+                this.viewMode === 'alerts' &&
+                this.alertsLoadSeq === loadSeq
+              ) {
                 this.viewMode = previousMode;
                 this.stationsGridEl.classList.remove('hidden');
                 this.updateToolbarHeader();
                 this.renderViewModePills();
+                this.renderStationCards();
                 this.syncSecondTicker();
+                this.hasAlertsChunkErrorBanner = true;
                 this.showStatusBanner(
                   navigator.onLine === false ? OFFLINE_MESSAGE : NETWORK_INTERRUPTED_MESSAGE
                 );
+                this.fetchVisibleArrivals();
               }
               return undefined;
             });
@@ -389,6 +405,8 @@ export class TransitTrackerApp {
       return;
     }
 
+    this.alertsLoadSeq++;
+    this.hasAlertsChunkErrorBanner = false;
     this.performViewTransition(() => {
       if (previousMode === 'alerts') {
         this.alertsView?.getElement().classList.add('hidden');
@@ -885,6 +903,9 @@ export class TransitTrackerApp {
 
   private async fetchVisibleArrivals(isManual: boolean = false) {
     if (this.viewMode === 'alerts') return;
+    if (isManual) {
+      this.hasAlertsChunkErrorBanner = false;
+    }
     if (this.isFetching) {
       this.hasPendingFetch = true;
       if (isManual) this.pendingFetchIsManual = true;
@@ -956,7 +977,7 @@ export class TransitTrackerApp {
           this.showStatusBanner(
             navigator.onLine === false ? OFFLINE_MESSAGE : NETWORK_INTERRUPTED_MESSAGE
           );
-        } else {
+        } else if (!this.hasAlertsChunkErrorBanner) {
           this.staleBannerEl.classList.add('hidden');
         }
       }

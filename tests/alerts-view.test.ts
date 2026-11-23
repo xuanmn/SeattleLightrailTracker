@@ -1323,7 +1323,7 @@ describe('TransitTrackerApp Service Alerts Integration', () => {
     }
   });
 
-  it('reverts to the station board and shows status banner if the lazy AlertsView chunk fails to load', async () => {
+  it('reverts to the active view/line on AlertsView chunk failure and recovers on retry without banner bleed', async () => {
     mockNetwork({ alertsEntities: [] });
 
     const { TransitTrackerApp } = await import('../src/main');
@@ -1331,15 +1331,59 @@ describe('TransitTrackerApp Service Alerts Integration', () => {
     await new Promise((r) => setTimeout(r, 25));
 
     const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
-    const privateApp = app as unknown as { getAlertsView: () => Promise<unknown> };
-    privateApp.getAlertsView = () => Promise.reject(new TypeError('Failed to fetch alerts chunk'));
+    const realAlertsModule = await import('../src/components/AlertsView');
 
-    document.querySelector<HTMLButtonElement>('.alerts-tab-btn')?.click();
-    await new Promise((r) => setTimeout(r, 15));
+    let rejectFirstLoad!: (err: unknown) => void;
+    let loadCalls = 0;
+    const privateApp = app as unknown as {
+      loadAlertsViewModule: () => Promise<typeof realAlertsModule>;
+    };
+    privateApp.loadAlertsViewModule = () => {
+      loadCalls++;
+      if (loadCalls === 1) {
+        return new Promise((_resolve, reject) => {
+          rejectFirstLoad = reject;
+        });
+      }
+      return Promise.resolve(realAlertsModule);
+    };
+
+    // Rapid view switch while chunk is pending: pinned -> alerts -> all -> alerts
+    const alertsTabBtn = document.querySelector<HTMLButtonElement>('.alerts-tab-btn');
+    const allStationsBtn = document.querySelectorAll<HTMLButtonElement>(
+      '.toolbar-controls .view-mode-btn'
+    )[1];
+
+    alertsTabBtn?.click();
+    allStationsBtn?.click();
+    alertsTabBtn?.click();
+    expect(loadCalls).toBe(1); // createLazySingleton deduplicates concurrent loads
+
+    // Also switch line from 1 Line -> 2 Line while chunk load is pending
+    document.querySelectorAll<HTMLButtonElement>('.app-header .line-btn')[1]?.click();
+
+    // Fail the pending chunk load -> reverts to 'all' on 2 Line (not stale 'pinned' or 1 Line cards)
+    rejectFirstLoad(new TypeError('Failed to fetch alerts chunk'));
+    await new Promise((r) => setTimeout(r, 25));
 
     expect(warnSpy).toHaveBeenCalled();
+    expect(alertsTabBtn?.classList.contains('active')).toBe(false);
+    expect(allStationsBtn?.classList.contains('active')).toBe(true);
+    expect(document.querySelector('.section-title')?.textContent).toContain('2 Line Live Departures');
     expect(document.querySelector('.stations-grid')?.classList.contains('hidden')).toBe(false);
+    expect(document.querySelector('#station-bellevue-downtown')).not.toBeNull();
+    expect(document.querySelector('#station-westlake')).toBeNull();
     expect(document.querySelector('.status-banner')?.classList.contains('hidden')).toBe(false);
+
+    // Retry clicking Alerts -> createLazySingleton cleared rejection and succeeds cleanly, clearing chunk banner
+    alertsTabBtn?.click();
+    await new Promise((r) => setTimeout(r, 25));
+
+    expect(loadCalls).toBe(2);
+    expect(alertsTabBtn?.classList.contains('active')).toBe(true);
+    expect(document.querySelector('.dashboard-view-stage .alerts-view')).not.toBeNull();
+    expect(document.querySelector('.alerts-empty-card')).not.toBeNull();
+    expect(document.querySelector('.status-banner')?.classList.contains('hidden')).toBe(true);
 
     app.destroy();
   });
