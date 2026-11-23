@@ -377,6 +377,125 @@
   gap: 0.75rem;
 }
 
+/* Dashboard Toolbar Alerts Tab Indicator & Header Link (rendered eagerly in main shell) */
+.toolbar-alert-icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 26px;
+  height: 26px;
+  border-radius: 50%;
+  background-color: var(--status-delayed-bg);
+  color: var(--status-delayed);
+  flex-shrink: 0;
+}
+
+.toolbar-alert-icon svg {
+  width: 15px;
+  height: 15px;
+}
+
+.view-mode-btn.alerts-tab-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.36rem;
+}
+
+.view-mode-btn.alerts-tab-btn.has-warning:not(.active) {
+  color: var(--status-delayed);
+  border-color: rgba(245, 158, 11, 0.35);
+}
+
+.view-mode-btn.alerts-tab-btn.has-severe:not(.active) {
+  color: var(--status-delayed-severe);
+  border-color: rgba(239, 68, 68, 0.4);
+}
+
+.alert-indicator-dot {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  flex-shrink: 0;
+  background-color: var(--status-delayed);
+  transition:
+    background-color 0.2s cubic-bezier(0.16, 1, 0.3, 1),
+    box-shadow 0.2s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+.alerts-tab-btn.has-severe .alert-indicator-dot {
+  background-color: var(--status-delayed-severe);
+  box-shadow: 0 0 8px rgba(239, 68, 68, 0.55);
+}
+
+.alerts-tab-btn.has-warning .alert-indicator-dot {
+  background-color: var(--status-delayed);
+  box-shadow: 0 0 8px rgba(245, 158, 11, 0.45);
+}
+
+.alert-count-badge {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 1.15rem;
+  height: 18px;
+  padding: 0 0.35rem;
+  border-radius: var(--radius-pill);
+  font-size: 0.7rem;
+  font-weight: 700;
+  line-height: 1;
+  font-variant-numeric: tabular-nums;
+  background-color: var(--status-delayed-bg);
+  color: var(--status-delayed);
+  transition:
+    background-color 0.2s cubic-bezier(0.16, 1, 0.3, 1),
+    color 0.2s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+.alerts-tab-btn.has-severe .alert-count-badge {
+  background-color: var(--status-delayed-severe-bg);
+  color: var(--status-delayed-severe);
+}
+
+.alerts-tab-btn.active .alert-count-badge {
+  background-color: rgba(255, 255, 255, 0.18);
+  color: var(--text-primary);
+}
+
+.alerts-board-link {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.25rem;
+  color: var(--text-accent);
+  font-size: 0.85rem;
+  font-weight: 500;
+  text-decoration: none;
+}
+
+.section-subtitle .alerts-board-link {
+  font-size: inherit;
+  line-height: inherit;
+  padding-block: 0.25rem;
+  margin-block: -0.25rem;
+  border-radius: 4px;
+}
+
+.alerts-board-link-arrow {
+  font-size: 0.78em;
+  opacity: 0.85;
+}
+
+@media (hover: hover) {
+  .alerts-board-link:hover {
+    text-decoration: underline;
+  }
+}
+
+.alerts-board-link:focus-visible {
+  outline: 2px solid var(--border-focus);
+  outline-offset: 2px;
+}
+
 .dashboard-view-stage {
   view-transition-name: dashboard-stage;
 }
@@ -562,6 +681,11 @@
   .line-switcher .line-btn,
   .toolbar-controls .view-mode-btn {
     min-height: 44px;
+  }
+
+  .section-subtitle .alerts-board-link {
+    padding-block: 0.65rem;
+    margin-block: -0.65rem;
   }
 }
 

@@ -1,3 +1,5 @@
+import '../styles/alerts.css';
+
 import type { AlertSeverity, ServiceAlert, Station, TransitLineId } from '../types/transit';
 import { getStationById } from '../data/stations';
 import { ST_ALERTS_WEB_URL } from '../services/alerts-api';

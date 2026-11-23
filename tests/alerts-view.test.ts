@@ -634,11 +634,14 @@ describe('TransitTrackerApp Service Alerts Integration', () => {
 
     expect(document.querySelector('.disruption-banner')).toBeNull();
     expect(document.querySelector('.dashboard-view-stage .stations-grid')).not.toBeNull();
-    expect(document.querySelector('.dashboard-view-stage .alerts-view')).not.toBeNull();
+    // AlertsView is lazily imported/mounted on first Alerts tab open
+    expect(document.querySelector('.dashboard-view-stage .alerts-view')).toBeNull();
 
     alertsTabBtn?.click();
+    await new Promise((r) => setTimeout(r, 0));
     const stationsGrid = document.querySelector<HTMLElement>('.stations-grid');
     expect(stationsGrid?.classList.contains('hidden')).toBe(true);
+    expect(document.querySelector('.dashboard-view-stage .alerts-view')).not.toBeNull();
     expect(document.querySelector('.alerts-empty-card')?.textContent).toContain(
       'No active Link service alerts'
     );
@@ -690,6 +693,7 @@ describe('TransitTrackerApp Service Alerts Integration', () => {
     expect(document.querySelector('.disruption-banner')).toBeNull();
 
     alertsTabBtn?.click();
+    await new Promise((r) => setTimeout(r, 0));
     expect(document.querySelector('.stations-grid')?.classList.contains('hidden')).toBe(true);
     expect(document.querySelectorAll('.alert-card')).toHaveLength(2);
     // Pill child node should be preserved across active toggle so CSS transitions run smoothly
@@ -757,6 +761,7 @@ describe('TransitTrackerApp Service Alerts Integration', () => {
 
     const alertsTabBtn = document.querySelector<HTMLButtonElement>('.alerts-tab-btn');
     alertsTabBtn?.click();
+    await new Promise((r) => setTimeout(r, 0));
     expect(document.querySelector('.alerts-error-card')).not.toBeNull();
     expect(document.querySelector('.alerts-retry-btn')).not.toBeNull();
 
@@ -792,6 +797,7 @@ describe('TransitTrackerApp Service Alerts Integration', () => {
       await vi.advanceTimersByTimeAsync(6000);
 
       document.querySelector<HTMLButtonElement>('.alerts-tab-btn')?.click();
+      await vi.advanceTimersByTimeAsync(0);
       expect(document.querySelector('.alerts-error-card')).not.toBeNull();
       expect(document.querySelector('.alerts-empty-card')).toBeNull();
 
@@ -851,6 +857,7 @@ describe('TransitTrackerApp Service Alerts Integration', () => {
 
     // Open Alerts view (attempt 1 failed -> shows error card + Retry)
     document.querySelector<HTMLButtonElement>('.alerts-tab-btn')?.click();
+    await new Promise((r) => setTimeout(r, 0));
     const retryBtn = document.querySelector<HTMLButtonElement>('.alerts-retry-btn');
     expect(retryBtn).not.toBeNull();
 
@@ -1195,6 +1202,7 @@ describe('TransitTrackerApp Service Alerts Integration', () => {
     await new Promise((r) => setTimeout(r, 25));
 
     document.querySelector<HTMLButtonElement>('.alerts-tab-btn')?.click();
+    await new Promise((r) => setTimeout(r, 0));
 
     const pills = Array.from(document.querySelectorAll<HTMLElement>('.alert-station-pill'));
     expect(pills.map((p) => p.dataset.stationId)).toEqual(['capitol-hill', 'westlake']);
@@ -1313,5 +1321,26 @@ describe('TransitTrackerApp Service Alerts Integration', () => {
       Object.defineProperty(document, 'hidden', { configurable: true, value: false });
       vi.useRealTimers();
     }
+  });
+
+  it('reverts to the station board and shows status banner if the lazy AlertsView chunk fails to load', async () => {
+    mockNetwork({ alertsEntities: [] });
+
+    const { TransitTrackerApp } = await import('../src/main');
+    const app = new TransitTrackerApp();
+    await new Promise((r) => setTimeout(r, 25));
+
+    const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
+    const privateApp = app as unknown as { getAlertsView: () => Promise<unknown> };
+    privateApp.getAlertsView = () => Promise.reject(new TypeError('Failed to fetch alerts chunk'));
+
+    document.querySelector<HTMLButtonElement>('.alerts-tab-btn')?.click();
+    await new Promise((r) => setTimeout(r, 15));
+
+    expect(warnSpy).toHaveBeenCalled();
+    expect(document.querySelector('.stations-grid')?.classList.contains('hidden')).toBe(false);
+    expect(document.querySelector('.status-banner')?.classList.contains('hidden')).toBe(false);
+
+    app.destroy();
   });
 });

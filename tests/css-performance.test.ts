@@ -27,12 +27,20 @@ describe("CSS rendering performance", () => {
     }
   });
 
-  it("excludes lazy modal-only rules from critical-path layout.css and board.css", () => {
+  it("excludes lazy modal-only and alerts-panel rules from critical-path layout.css and board.css", () => {
     const layoutCss = readFileSync(`${process.cwd()}/src/styles/layout.css`, "utf-8");
     const boardCss = readFileSync(`${process.cwd()}/src/styles/board.css`, "utf-8");
 
     expect(layoutCss).not.toMatch(/\.modal-overlay\b|\.settings-row\b|\.toggle-switch\b|\.picker-search-wrap\b/);
+    expect(layoutCss).not.toMatch(/\.alert-card\b|\.alerts-list\b|\.alerts-loading-skeleton\b/);
     expect(boardCss).not.toMatch(/\.picker-station-row\b|\.picker-add-btn\b|\.picker-filter-pills\b/);
+  });
+
+  it("preconnects to both OneBusAway and Sound Transit alerts origins in index.html", () => {
+    const html = readFileSync(`${process.cwd()}/index.html`, "utf-8");
+
+    expect(html).toMatch(/<link\s+rel="preconnect"\s+href="https:\/\/api\.pugetsound\.onebusaway\.org"/);
+    expect(html).toMatch(/<link\s+rel="preconnect"\s+href="https:\/\/s3\.amazonaws\.com"/);
   });
 
   it("defers content-visibility: auto only on below-the-fold station cards", () => {

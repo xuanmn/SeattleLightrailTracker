@@ -1,10 +1,9 @@
 import './styles/theme.css';
 import './styles/layout.css';
 import './styles/board.css';
-import './styles/alerts.css';
-// map.css is imported by the lazily loaded SystemMapModal chunk
+// alerts.css, map.css, faq.css, picker.css, settings.css are imported by their lazily loaded chunks
 
-import { AlertsViewComponent } from './components/AlertsView';
+import type { AlertsViewComponent } from './components/AlertsView';
 import type { FaqModal } from './components/FaqModal';
 import { HeaderComponent } from './components/Header';
 import type { SettingsModal } from './components/SettingsModal';
@@ -78,6 +77,23 @@ export class TransitTrackerApp {
     return this.pickerModal;
   });
 
+  private getAlertsView = createLazySingleton(async (): Promise<AlertsViewComponent> => {
+    const { AlertsViewComponent } = await import('./components/AlertsView');
+    const view = new AlertsViewComponent({
+      onBackToStations: () => this.setViewMode('pinned'),
+      onRetry: () => void this.fetchAlerts(true),
+    });
+    if (this.isDestroyed) {
+      return view;
+    }
+    if (this.viewMode !== 'alerts') {
+      view.getElement().classList.add('hidden');
+    }
+    this.alertsView = view;
+    this.viewStageEl.appendChild(view.getElement());
+    return view;
+  });
+
   private activeLine: TransitLineId = 'line-1';
   private viewMode: DashboardViewMode = 'pinned'; // Default to showing only user's chosen favorite stations
   private settings: AppSettings;
@@ -99,11 +115,12 @@ export class TransitTrackerApp {
   private viewTransitionSeq: number = 0;
   private isDestroyed: boolean = false;
 
+  private viewStageEl!: HTMLElement;
   private stationsGridEl!: HTMLElement;
   private lineTitleEl!: HTMLElement;
   private lineSubtitleEl!: HTMLElement;
   private staleBannerEl!: HTMLElement;
-  private alertsView!: AlertsViewComponent;
+  private alertsView?: AlertsViewComponent;
   private viewModePillWrap!: HTMLElement;
   private toastEl!: HTMLElement;
 
@@ -205,22 +222,14 @@ export class TransitTrackerApp {
     toolbar.appendChild(controls);
     container.appendChild(toolbar);
 
-    // Shared View Transition Stage for Station Grid & Alerts View
-    const viewStage = createElement('div', 'dashboard-view-stage');
+    // Shared View Transition Stage for Station Grid & lazily mounted Alerts View
+    this.viewStageEl = createElement('div', 'dashboard-view-stage');
 
     // Stations Grid
     this.stationsGridEl = createElement('div', 'stations-grid');
-    viewStage.appendChild(this.stationsGridEl);
+    this.viewStageEl.appendChild(this.stationsGridEl);
 
-    // Service Alerts View (hidden by default)
-    this.alertsView = new AlertsViewComponent({
-      onBackToStations: () => this.setViewMode('pinned'),
-      onRetry: () => void this.fetchAlerts(true),
-    });
-    this.alertsView.getElement().classList.add('hidden');
-    viewStage.appendChild(this.alertsView.getElement());
-
-    container.appendChild(viewStage);
+    container.appendChild(this.viewStageEl);
 
     main.appendChild(container);
     this.appEl.appendChild(main);
@@ -327,13 +336,43 @@ export class TransitTrackerApp {
       this.stopSecondTicker();
       const { seq, finished } = this.performViewTransition(() => {
         this.stationsGridEl.classList.add('hidden');
-        this.alertsView.getElement().classList.remove('hidden');
+        this.alertsView?.getElement().classList.remove('hidden');
         this.updateToolbarHeader();
         this.renderViewModePills();
         this.syncAlertsView();
       });
-      void finished.then(() => {
+
+      const loadAlertsViewPromise = this.alertsView
+        ? Promise.resolve(this.alertsView)
+        : this.getAlertsView()
+            .then((view) => {
+              if (this.isDestroyed) return view;
+              if (this.viewMode === 'alerts') {
+                view.getElement().classList.remove('hidden');
+                this.syncAlertsView();
+              } else {
+                view.getElement().classList.add('hidden');
+              }
+              return view;
+            })
+            .catch((err) => {
+              console.warn('Failed loading alerts view chunk:', err);
+              if (!this.isDestroyed && this.viewMode === 'alerts') {
+                this.viewMode = previousMode;
+                this.stationsGridEl.classList.remove('hidden');
+                this.updateToolbarHeader();
+                this.renderViewModePills();
+                this.syncSecondTicker();
+                this.showStatusBanner(
+                  navigator.onLine === false ? OFFLINE_MESSAGE : NETWORK_INTERRUPTED_MESSAGE
+                );
+              }
+              return undefined;
+            });
+
+      void Promise.all([finished, loadAlertsViewPromise]).then(([, view]) => {
         if (
+          !view ||
           this.isDestroyed ||
           this.viewTransitionSeq !== seq ||
           this.viewMode !== 'alerts' ||
@@ -352,7 +391,7 @@ export class TransitTrackerApp {
 
     this.performViewTransition(() => {
       if (previousMode === 'alerts') {
-        this.alertsView.getElement().classList.add('hidden');
+        this.alertsView?.getElement().classList.add('hidden');
         this.stationsGridEl.classList.remove('hidden');
       }
       this.updateToolbarHeader();
