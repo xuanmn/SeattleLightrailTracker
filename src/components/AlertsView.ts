@@ -161,7 +161,7 @@ function buildDescriptionElements(text: string): HTMLElement[] {
         const itemNum = Number(orderedMatch[1]);
         if (listType !== 'ol') {
           flushList();
-          const ol = createElement('ol', 'alert-card-list alert-card-list--ordered');
+          const ol = createElement('ol', 'alert-card-list');
           if (itemNum !== 1) {
             ol.start = itemNum;
           }

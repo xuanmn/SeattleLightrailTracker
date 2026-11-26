@@ -14,7 +14,7 @@
 const BUILD_ID_PLACEHOLDER = /const BUILD_ID = ['"]dev['"];/;
 const BUILD_ASSETS_PLACEHOLDER = /const BUILD_ASSETS = \[\];/;
 
-export interface SwManifest {
+interface SwManifest {
   buildId: string;
   assets: string[];
 }

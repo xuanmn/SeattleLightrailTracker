@@ -996,11 +996,11 @@ export class SystemMapModal {
         <line x1="${x - 13}" y1="${y}" x2="${x + 13}" y2="${y}" stroke="rgba(255, 255, 255, 0.95)" stroke-width="3" stroke-linecap="round" />
 
         <!-- Line 1 Station Node (Green) -->
-        <circle class="map-station-circle" cx="${x - 13}" cy="${y}" r="6" fill="#ffffff" stroke="#008542" stroke-width="3" />
+        <circle cx="${x - 13}" cy="${y}" r="6" fill="#ffffff" stroke="#008542" stroke-width="3" />
         <circle cx="${x - 13}" cy="${y}" r="2" fill="#008542" />
 
         <!-- Line 2 Station Node (Blue) -->
-        <circle class="map-station-circle" cx="${x + 13}" cy="${y}" r="6" fill="#ffffff" stroke="#0072CE" stroke-width="3" />
+        <circle cx="${x + 13}" cy="${y}" r="6" fill="#ffffff" stroke="#0072CE" stroke-width="3" />
         <circle cx="${x + 13}" cy="${y}" r="2" fill="#0072CE" />
 
         <!-- Station Name -->
@@ -1038,8 +1038,8 @@ export class SystemMapModal {
     return `
       <g class="map-station-node" id="map-node-${id}">
         <!-- Two distinct circles centered on each parallel line with ample separation -->
-        <circle class="map-station-circle" cx="${x - 13}" cy="${y}" r="${r}" fill="#ffffff" stroke="#008542" stroke-width="2.5" />
-        <circle class="map-station-circle" cx="${x + 13}" cy="${y}" r="${r}" fill="#ffffff" stroke="#0072CE" stroke-width="2.5" />
+        <circle cx="${x - 13}" cy="${y}" r="${r}" fill="#ffffff" stroke="#008542" stroke-width="2.5" />
+        <circle cx="${x + 13}" cy="${y}" r="${r}" fill="#ffffff" stroke="#0072CE" stroke-width="2.5" />
         <text class="map-station-label" x="${textX}" y="${y + 4.5}" text-anchor="end">${name}</text>
         ${sub ? `<text class="map-station-sublabel" x="${textX}" y="${y + 16.5}" text-anchor="end">${sub}</text>` : ""}
       </g>
@@ -1055,7 +1055,7 @@ export class SystemMapModal {
 
     return `
       <g class="map-station-node" id="map-node-${id}">
-        <circle class="map-station-circle" cx="${x}" cy="${y}" r="${r}" fill="#ffffff" stroke="#008542" stroke-width="3" />
+        <circle cx="${x}" cy="${y}" r="${r}" fill="#ffffff" stroke="#008542" stroke-width="3" />
         <text class="map-station-label" x="${textX}" y="${y + 4.5}" text-anchor="end">${name}</text>
         ${sub ? `<text class="map-station-sublabel" x="${textX}" y="${y + 16.5}" text-anchor="end">${sub}</text>` : ""}
       </g>
@@ -1079,7 +1079,7 @@ export class SystemMapModal {
 
     return `
       <g class="map-station-node" id="map-node-${id}">
-        <circle class="map-station-circle" cx="${x}" cy="${y}" r="${r}" fill="#ffffff" stroke="#0072CE" stroke-width="3" />
+        <circle cx="${x}" cy="${y}" r="${r}" fill="#ffffff" stroke="#0072CE" stroke-width="3" />
         <text class="map-station-label" x="${textX}" y="${textY}" text-anchor="${textAnchor}">${name}</text>
         ${sub ? `<text class="map-station-sublabel" x="${textX}" y="${textY + 12}" text-anchor="${textAnchor}">${sub}</text>` : ""}
       </g>
@@ -1094,7 +1094,7 @@ export class SystemMapModal {
 
     return `
       <g class="map-station-node" id="map-node-${id}">
-        <circle class="map-station-circle" cx="${x}" cy="${y}" r="6" fill="#ffffff" stroke="#008542" stroke-width="3" />
+        <circle cx="${x}" cy="${y}" r="6" fill="#ffffff" stroke="#008542" stroke-width="3" />
         <rect x="${x - 7}" y="${y - 7}" width="14" height="14" rx="3" fill="#f59e0b" />
         <text x="${x}" y="${y + 3.5}" fill="#0f172a" font-size="9" font-weight="900" text-anchor="middle">✈</text>
         <text class="map-station-label" x="${textX}" y="${y + 4.5}" text-anchor="end">${name}</text>

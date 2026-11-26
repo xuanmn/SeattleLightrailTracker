@@ -15,10 +15,8 @@ interface RawObaArrival {
   predictedDepartureTime?: number | null; // ms
   scheduledArrivalTime?: number; // ms
   predictedArrivalTime?: number | null; // ms
-  arrivalEnabled?: boolean;
   departureEnabled?: boolean;
   predicted?: boolean;
-  status?: string;
 }
 
 interface RawObaResponse {

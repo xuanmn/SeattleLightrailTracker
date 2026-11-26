@@ -167,7 +167,6 @@ interface RawActivePeriod {
 interface RawInformedEntity {
   route_id?: string;
   stop_id?: string;
-  agency_id?: string;
 }
 
 interface RawGtfsAlert {
@@ -187,7 +186,6 @@ interface RawGtfsAlertEntity {
 
 export interface RawGtfsAlertsFeed {
   header?: {
-    gtfs_realtime_version?: string;
     timestamp?: number | string;
   };
   entity?: RawGtfsAlertEntity[];
