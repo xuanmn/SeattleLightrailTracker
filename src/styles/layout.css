@@ -550,6 +550,14 @@
     gap: 0.35rem;
   }
 
+  .brand-section {
+    flex: 1 1 0;
+    min-width: 0;
+    gap: 0.5rem;
+    padding-inline: 0;
+    margin-inline: 0;
+  }
+
   .brand-logo {
     width: 34px;
     height: 34px;
@@ -562,16 +570,22 @@
   }
 
   .brand-title {
-    font-size: 1.02rem;
+    font-size: 0.96rem;
+    line-height: 1.15;
   }
 
   .brand-subtitle {
+    display: block;
     font-size: 0.7rem;
     line-height: 1.15;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
   }
 
   .header-actions {
     gap: 0.4rem;
+    flex-shrink: 0;
   }
 
   .header-btn-label-desktop {
@@ -661,6 +675,10 @@
 }
 
 @media (max-width: 360px) {
+  .brand-title {
+    font-size: 0.88rem;
+  }
+
   .header-text-btn {
     padding: 0.25rem 0.5rem;
   }

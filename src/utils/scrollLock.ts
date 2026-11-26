@@ -7,8 +7,9 @@ let activeLocks = 0;
 
 export function lockBodyScroll(): void {
   activeLocks++;
-  if (activeLocks === 1 && typeof document !== 'undefined' && document.body) {
-    document.body.classList.add('modal-open');
+  if (activeLocks === 1 && typeof document !== 'undefined') {
+    document.documentElement?.classList.add('modal-open');
+    document.body?.classList.add('modal-open');
   }
 }
 
@@ -17,7 +18,8 @@ export function unlockBodyScroll(): void {
     activeLocks--;
   }
 
-  if (activeLocks === 0 && typeof document !== 'undefined' && document.body) {
-    document.body.classList.remove('modal-open');
+  if (activeLocks === 0 && typeof document !== 'undefined') {
+    document.documentElement?.classList.remove('modal-open');
+    document.body?.classList.remove('modal-open');
   }
 }

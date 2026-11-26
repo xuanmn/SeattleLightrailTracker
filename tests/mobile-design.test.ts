@@ -390,31 +390,57 @@ describe('Mobile Frontend Design & UX Specifications', () => {
     expect(mapCss).toMatch(/@media\s*\(pointer:\s*coarse\)[\s\S]*?\.map-official-link::after/);
   });
 
-  it('prevents mobile horizontal overflow in root, header padding, grid tracks, and full-screen modals', () => {
+  it('prevents mobile horizontal overflow in root, header padding, grid tracks, and full-screen modals while preserving modal scroll lock', () => {
     const themeCss = readFileSync(process.cwd() + '/src/styles/theme.css', 'utf-8');
     const layoutCss = readFileSync(process.cwd() + '/src/styles/layout.css', 'utf-8');
     const boardCss = readFileSync(process.cwd() + '/src/styles/board.css', 'utf-8');
+    const modalCss = readFileSync(process.cwd() + '/src/styles/modal.css', 'utf-8');
+    const pickerCss = readFileSync(process.cwd() + '/src/styles/picker.css', 'utf-8');
     const faqCss = readFileSync(process.cwd() + '/src/styles/faq.css', 'utf-8');
     const mapCss = readFileSync(process.cwd() + '/src/styles/map.css', 'utf-8');
 
-    // Both html and body clip horizontal spillover without breaking sticky header
-    expect(themeCss).toMatch(/html\s*\{[^}]*overflow-x:\s*clip/);
-    expect(themeCss).toMatch(/body\s*\{[^}]*overflow-x:\s*clip/);
+    const extractBlock = (css: string, headerRe: RegExp): string => {
+      const match = headerRe.exec(css);
+      if (!match) return '';
+      let idx = match.index + match[0].length;
+      let depth = 1;
+      const start = idx;
+      while (idx < css.length && depth > 0) {
+        if (css[idx] === '{') depth++;
+        else if (css[idx] === '}') depth--;
+        idx++;
+      }
+      return css.slice(start, idx - 1);
+    };
 
-    // Mobile .header-inner must use padding-block so .app-container horizontal padding (1rem + safe-area-inset) stays intact
-    // and coarse .icon-btn::after (inset: -5px) + .brand-section negative margin never overflow the viewport
-    const mobileBlock = layoutCss.split('@media (max-width: 768px)')[1] ?? '';
-    const mobileHeaderInner = mobileBlock.match(/\.header-inner\s*\{[^}]*\}/)?.[0] ?? '';
+    // Both html and body clip horizontal spillover without fixed html height, and modal scroll lock targets html.modal-open
+    const htmlRule = extractBlock(themeCss, /\bhtml\s*\{/);
+    expect(htmlRule).toMatch(/overflow-x:\s*clip/);
+    expect(htmlRule).toMatch(/min-height:\s*100%/);
+    expect(htmlRule).not.toMatch(/(?:^|[\s;])height:\s*100%/);
+    expect(themeCss).toMatch(/body\s*\{[^}]*overflow-x:\s*clip/);
+    expect(modalCss).toMatch(/html\.modal-open,\s*body\.modal-open\s*\{[^}]*overflow:\s*hidden/);
+
+    // Mobile .header-inner uses padding-block only (never clobbering .app-container horizontal safe-area padding)
+    // and keeps Row 1 on a single row via flex: 1 1 0 on .brand-section + flex-shrink: 0 on .header-actions
+    const mobile768Block = extractBlock(layoutCss, /@media\s*\(max-width:\s*768px\)\s*\{/);
+    const mobileHeaderInner = extractBlock(mobile768Block, /\.header-inner\s*\{/);
     expect(mobileHeaderInner).toContain('padding-block:');
-    expect(mobileHeaderInner).not.toMatch(/\bpadding:\s*[^;]*0/);
+    expect(mobileHeaderInner).not.toMatch(/\bpadding(?:-(?:inline|left|right))?\s*:/);
+    expect(extractBlock(mobile768Block, /\.brand-section\s*\{/)).toMatch(/flex:\s*1\s+1\s+0/);
+    expect(extractBlock(mobile768Block, /\.header-actions\s*\{/)).toMatch(/flex-shrink:\s*0/);
     expect(layoutCss).toMatch(/\.brand-section\s*\{[^}]*min-width:\s*0/);
     expect(layoutCss).toMatch(/\.brand-text\s*\{[^}]*min-width:\s*0/);
 
-    // Single-column mobile grid uses minmax(0, 1fr) so items never expand grid track past viewport
-    expect(boardCss).toMatch(/@media\s*\(max-width:\s*640px\)[\s\S]*?grid-template-columns:\s*minmax\(0,\s*1fr\)/);
+    // Grid tracks clamp to 100% above 640px (notched landscape) and use minmax(0, 1fr) on mobile
+    expect(boardCss).toMatch(/\.stations-grid\s*\{[^}]*minmax\(min\(540px,\s*100%\),\s*1fr\)/);
+    const mobile640Block = extractBlock(boardCss, /@media\s*\(max-width:\s*640px\)\s*\{/);
+    expect(extractBlock(mobile640Block, /\.stations-grid\s*\{/)).toMatch(/grid-template-columns:\s*minmax\(0,\s*1fr\)/);
 
-    // Avoid 100vw on full-width overlays/containers which ignores scrollbar width
+    // Picker search input shrinks inside flex container, and full-screen modals avoid 100vw & uncap max-width
+    expect(pickerCss).toMatch(/\.picker-search-input\s*\{[^}]*min-width:\s*0/);
     expect(faqCss).not.toMatch(/width:\s*100vw/);
+    expect(faqCss).toMatch(/\.modal-container\.faq-modal-container\s*\{[^}]*max-width:\s*100%/);
     expect(mapCss).not.toMatch(/(?:max-)?width:\s*100vw/);
   });
 });

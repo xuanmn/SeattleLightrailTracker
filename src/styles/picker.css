@@ -38,6 +38,8 @@
 
 .picker-search-input {
   flex: 1;
+  min-width: 0;
+  width: 100%;
   border: none;
   background: transparent;
   color: var(--text-primary);

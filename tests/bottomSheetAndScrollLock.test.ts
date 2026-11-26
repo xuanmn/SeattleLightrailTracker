@@ -9,33 +9,41 @@ import { SystemMapModal } from '../src/components/SystemMapModal';
 
 describe('Scroll Lock Utility', () => {
   beforeEach(() => {
+    document.documentElement.className = '';
     document.body.className = '';
     document.body.innerHTML = '';
   });
 
-  it('adds modal-open class on lock and removes on unlock', () => {
+  it('adds modal-open class on both html and body on lock and removes on unlock', () => {
+    expect(document.documentElement.classList.contains('modal-open')).toBe(false);
     expect(document.body.classList.contains('modal-open')).toBe(false);
 
     lockBodyScroll();
+    expect(document.documentElement.classList.contains('modal-open')).toBe(true);
     expect(document.body.classList.contains('modal-open')).toBe(true);
 
     unlockBodyScroll();
+    expect(document.documentElement.classList.contains('modal-open')).toBe(false);
     expect(document.body.classList.contains('modal-open')).toBe(false);
   });
 
   it('handles nested/multiple locks with reference counting', () => {
     lockBodyScroll();
     lockBodyScroll();
+    expect(document.documentElement.classList.contains('modal-open')).toBe(true);
     expect(document.body.classList.contains('modal-open')).toBe(true);
 
     unlockBodyScroll();
+    expect(document.documentElement.classList.contains('modal-open')).toBe(true);
     expect(document.body.classList.contains('modal-open')).toBe(true);
 
     unlockBodyScroll();
+    expect(document.documentElement.classList.contains('modal-open')).toBe(false);
     expect(document.body.classList.contains('modal-open')).toBe(false);
 
     // Extra unlocks should be safe
     unlockBodyScroll();
+    expect(document.documentElement.classList.contains('modal-open')).toBe(false);
     expect(document.body.classList.contains('modal-open')).toBe(false);
   });
 });
@@ -147,6 +155,7 @@ describe('Bottom Sheet Gesture Controller', () => {
 
 describe('Modal Scroll Lock and Gesture Integration', () => {
   beforeEach(() => {
+    document.documentElement.className = '';
     document.body.className = '';
     document.body.innerHTML = '';
   });
@@ -156,12 +165,15 @@ describe('Modal Scroll Lock and Gesture Integration', () => {
       onSettingsSaved: () => {},
     });
 
+    expect(document.documentElement.classList.contains('modal-open')).toBe(false);
     expect(document.body.classList.contains('modal-open')).toBe(false);
 
     settingsModal.open();
+    expect(document.documentElement.classList.contains('modal-open')).toBe(true);
     expect(document.body.classList.contains('modal-open')).toBe(true);
 
     settingsModal.close();
+    expect(document.documentElement.classList.contains('modal-open')).toBe(false);
     expect(document.body.classList.contains('modal-open')).toBe(false);
   });
 
