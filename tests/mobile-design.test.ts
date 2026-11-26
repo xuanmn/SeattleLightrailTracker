@@ -389,5 +389,33 @@ describe('Mobile Frontend Design & UX Specifications', () => {
     expect(faqCss).toMatch(/@media\s*\(pointer:\s*coarse\)[\s\S]*?\.faq-action-btn[\s\S]*?min-height:\s*44px/);
     expect(mapCss).toMatch(/@media\s*\(pointer:\s*coarse\)[\s\S]*?\.map-official-link::after/);
   });
+
+  it('prevents mobile horizontal overflow in root, header padding, grid tracks, and full-screen modals', () => {
+    const themeCss = readFileSync(process.cwd() + '/src/styles/theme.css', 'utf-8');
+    const layoutCss = readFileSync(process.cwd() + '/src/styles/layout.css', 'utf-8');
+    const boardCss = readFileSync(process.cwd() + '/src/styles/board.css', 'utf-8');
+    const faqCss = readFileSync(process.cwd() + '/src/styles/faq.css', 'utf-8');
+    const mapCss = readFileSync(process.cwd() + '/src/styles/map.css', 'utf-8');
+
+    // Both html and body clip horizontal spillover without breaking sticky header
+    expect(themeCss).toMatch(/html\s*\{[^}]*overflow-x:\s*clip/);
+    expect(themeCss).toMatch(/body\s*\{[^}]*overflow-x:\s*clip/);
+
+    // Mobile .header-inner must use padding-block so .app-container horizontal padding (1rem + safe-area-inset) stays intact
+    // and coarse .icon-btn::after (inset: -5px) + .brand-section negative margin never overflow the viewport
+    const mobileBlock = layoutCss.split('@media (max-width: 768px)')[1] ?? '';
+    const mobileHeaderInner = mobileBlock.match(/\.header-inner\s*\{[^}]*\}/)?.[0] ?? '';
+    expect(mobileHeaderInner).toContain('padding-block:');
+    expect(mobileHeaderInner).not.toMatch(/\bpadding:\s*[^;]*0/);
+    expect(layoutCss).toMatch(/\.brand-section\s*\{[^}]*min-width:\s*0/);
+    expect(layoutCss).toMatch(/\.brand-text\s*\{[^}]*min-width:\s*0/);
+
+    // Single-column mobile grid uses minmax(0, 1fr) so items never expand grid track past viewport
+    expect(boardCss).toMatch(/@media\s*\(max-width:\s*640px\)[\s\S]*?grid-template-columns:\s*minmax\(0,\s*1fr\)/);
+
+    // Avoid 100vw on full-width overlays/containers which ignores scrollbar width
+    expect(faqCss).not.toMatch(/width:\s*100vw/);
+    expect(mapCss).not.toMatch(/(?:max-)?width:\s*100vw/);
+  });
 });
 
