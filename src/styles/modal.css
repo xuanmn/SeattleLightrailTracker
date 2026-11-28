@@ -2,10 +2,14 @@
    Shared Modal Dialog & Mobile Bottom-Sheet Shell (Lazy-Loaded)
    ========================================================================== */
 
-/* Root & body scroll lock when any modal is open (html.modal-open required when html sets overflow-x: clip) */
-html.modal-open,
-body.modal-open {
+/* Root scroll lock when any modal is open (overflow: hidden stays on html only so body
+   never becomes a nested scroll container that detaches sticky .app-header mid-scroll) */
+html.modal-open {
   overflow: hidden;
+  touch-action: none;
+}
+
+body.modal-open {
   touch-action: none;
 }
 

@@ -390,7 +390,7 @@ describe('Mobile Frontend Design & UX Specifications', () => {
     expect(mapCss).toMatch(/@media\s*\(pointer:\s*coarse\)[\s\S]*?\.map-official-link::after/);
   });
 
-  it('prevents mobile horizontal overflow in root, header padding, grid tracks, and full-screen modals while preserving modal scroll lock', () => {
+  it('prevents mobile horizontal overflow in root, header padding, grid tracks, picker rows, and full-screen modals while preserving sticky header & modal scroll lock', () => {
     const themeCss = readFileSync(process.cwd() + '/src/styles/theme.css', 'utf-8');
     const layoutCss = readFileSync(process.cwd() + '/src/styles/layout.css', 'utf-8');
     const boardCss = readFileSync(process.cwd() + '/src/styles/board.css', 'utf-8');
@@ -399,48 +399,77 @@ describe('Mobile Frontend Design & UX Specifications', () => {
     const faqCss = readFileSync(process.cwd() + '/src/styles/faq.css', 'utf-8');
     const mapCss = readFileSync(process.cwd() + '/src/styles/map.css', 'utf-8');
 
-    const extractBlock = (css: string, headerRe: RegExp): string => {
-      const match = headerRe.exec(css);
-      if (!match) return '';
-      let idx = match.index + match[0].length;
-      let depth = 1;
-      const start = idx;
-      while (idx < css.length && depth > 0) {
-        if (css[idx] === '{') depth++;
-        else if (css[idx] === '}') depth--;
-        idx++;
+    const extractBlocks = (css: string, headerRe: RegExp): string => {
+      const stripped = css.replace(/\/\*[\s\S]*?\*\//g, '');
+      const globalRe = new RegExp(headerRe.source, headerRe.flags.includes('g') ? headerRe.flags : `${headerRe.flags}g`);
+      const chunks: string[] = [];
+      let match: RegExpExecArray | null;
+      while ((match = globalRe.exec(stripped)) !== null) {
+        let idx = match.index + match[0].length;
+        let depth = 1;
+        const start = idx;
+        while (idx < stripped.length && depth > 0) {
+          if (stripped[idx] === '{') depth++;
+          else if (stripped[idx] === '}') depth--;
+          idx++;
+        }
+        chunks.push(stripped.slice(start, idx - 1));
       }
-      return css.slice(start, idx - 1);
+      return chunks.join('\n');
     };
 
-    // Both html and body clip horizontal spillover without fixed html height, and modal scroll lock targets html.modal-open
-    const htmlRule = extractBlock(themeCss, /\bhtml\s*\{/);
+    // Both html and body clip horizontal spillover without fixed html height.
+    // Modal scroll lock puts overflow: hidden ONLY on html.modal-open (not body.modal-open)
+    // so body never becomes a nested scroll container that detaches sticky .app-header mid-scroll.
+    const htmlRule = extractBlocks(themeCss, /\bhtml\s*\{/);
     expect(htmlRule).toMatch(/overflow-x:\s*clip/);
     expect(htmlRule).toMatch(/min-height:\s*100%/);
     expect(htmlRule).not.toMatch(/(?:^|[\s;])height:\s*100%/);
-    expect(themeCss).toMatch(/body\s*\{[^}]*overflow-x:\s*clip/);
-    expect(modalCss).toMatch(/html\.modal-open,\s*body\.modal-open\s*\{[^}]*overflow:\s*hidden/);
+    expect(extractBlocks(themeCss, /\bbody\s*\{/)).toMatch(/overflow-x:\s*clip/);
+    expect(extractBlocks(modalCss, /html\.modal-open\s*\{/)).toMatch(/overflow:\s*hidden/);
+    expect(extractBlocks(modalCss, /body\.modal-open\s*\{/)).not.toMatch(/overflow(?:-x|-y)?:\s*hidden/);
 
     // Mobile .header-inner uses padding-block only (never clobbering .app-container horizontal safe-area padding)
-    // and keeps Row 1 on a single row via flex: 1 1 0 on .brand-section + flex-shrink: 0 on .header-actions
-    const mobile768Block = extractBlock(layoutCss, /@media\s*\(max-width:\s*768px\)\s*\{/);
-    const mobileHeaderInner = extractBlock(mobile768Block, /\.header-inner\s*\{/);
+    // and keeps Row 1 on a single row via flex: 1 1 0 on .header-inner .brand-section + flex-shrink: 0 on .header-actions
+    const mobile768Block = extractBlocks(layoutCss, /@media\s*\(max-width:\s*768px\)\s*\{/);
+    const mobileHeaderInner = extractBlocks(mobile768Block, /\.header-inner\s*\{/);
     expect(mobileHeaderInner).toContain('padding-block:');
-    expect(mobileHeaderInner).not.toMatch(/\bpadding(?:-(?:inline|left|right))?\s*:/);
-    expect(extractBlock(mobile768Block, /\.brand-section\s*\{/)).toMatch(/flex:\s*1\s+1\s+0/);
-    expect(extractBlock(mobile768Block, /\.header-actions\s*\{/)).toMatch(/flex-shrink:\s*0/);
-    expect(layoutCss).toMatch(/\.brand-section\s*\{[^}]*min-width:\s*0/);
-    expect(layoutCss).toMatch(/\.brand-text\s*\{[^}]*min-width:\s*0/);
+    expect(mobileHeaderInner).not.toMatch(/\bpadding(?:-(?:inline(?:-(?:start|end))?|left|right))?\s*:/);
+    expect(extractBlocks(mobile768Block, /(?:\.header-inner\s+)?\.brand-section\s*\{/)).toMatch(/flex:\s*1\s+1\s+0/);
+    expect(extractBlocks(mobile768Block, /\.header-actions\s*\{/)).toMatch(/flex-shrink:\s*0/);
+    expect(extractBlocks(layoutCss, /\.brand-section\s*\{/)).toMatch(/min-width:\s*0/);
+    expect(extractBlocks(layoutCss, /\.brand-text\s*\{/)).toMatch(/min-width:\s*0/);
+
+    // StationPickerModal rows use dedicated .picker-station-info (decoupled from header .brand-section)
+    // with row gap and non-shrinking action button
+    const picker = new StationPickerModal({ onTogglePin: () => {}, isStationPinned: () => false });
+    picker.open('line-1');
+    try {
+      const firstRow = document.querySelector('.picker-station-row');
+      expect(firstRow?.querySelector('.picker-station-info')).not.toBeNull();
+      expect(firstRow?.querySelector('.brand-section')).toBeNull();
+    } finally {
+      picker.close();
+    }
+    expect(extractBlocks(pickerCss, /\.picker-station-row\s*\{/)).toMatch(/gap:/);
+    const pickerInfoRule = extractBlocks(pickerCss, /\.picker-station-info\s*\{/);
+    expect(pickerInfoRule).toMatch(/flex:\s*1\s+1\s+0/);
+    expect(pickerInfoRule).toMatch(/min-width:\s*0/);
+    expect(extractBlocks(pickerCss, /\.picker-station-row\s+\.station-name-wrap\s*\{/)).toMatch(/min-width:\s*0/);
+    const pickerAddBtnRule = extractBlocks(pickerCss, /\.picker-add-btn\s*\{/);
+    expect(pickerAddBtnRule).toMatch(/flex-shrink:\s*0/);
+    expect(pickerAddBtnRule).toMatch(/white-space:\s*nowrap/);
 
     // Grid tracks clamp to 100% above 640px (notched landscape) and use minmax(0, 1fr) on mobile
-    expect(boardCss).toMatch(/\.stations-grid\s*\{[^}]*minmax\(min\(540px,\s*100%\),\s*1fr\)/);
-    const mobile640Block = extractBlock(boardCss, /@media\s*\(max-width:\s*640px\)\s*\{/);
-    expect(extractBlock(mobile640Block, /\.stations-grid\s*\{/)).toMatch(/grid-template-columns:\s*minmax\(0,\s*1fr\)/);
+    expect(extractBlocks(boardCss, /\.stations-grid\s*\{/)).toMatch(/minmax\(min\(540px,\s*100%\),\s*1fr\)/);
+    const mobile640Block = extractBlocks(boardCss, /@media\s*\(max-width:\s*640px\)\s*\{/);
+    expect(extractBlocks(mobile640Block, /\.stations-grid\s*\{/)).toMatch(/grid-template-columns:\s*minmax\(0,\s*1fr\)/);
 
-    // Picker search input shrinks inside flex container, and full-screen modals avoid 100vw & uncap max-width
-    expect(pickerCss).toMatch(/\.picker-search-input\s*\{[^}]*min-width:\s*0/);
+    // Picker search input shrinks inside flex container, and full-screen modals avoid 100vw & uncap max-width on mobile
+    expect(extractBlocks(pickerCss, /\.picker-search-input\s*\{/)).toMatch(/min-width:\s*0/);
     expect(faqCss).not.toMatch(/width:\s*100vw/);
-    expect(faqCss).toMatch(/\.modal-container\.faq-modal-container\s*\{[^}]*max-width:\s*100%/);
+    const faqMobile768 = extractBlocks(faqCss, /@media\s*\(max-width:\s*768px\)\s*\{/);
+    expect(extractBlocks(faqMobile768, /\.modal-container\.faq-modal-container\s*\{/)).toMatch(/max-width:\s*100%/);
     expect(mapCss).not.toMatch(/(?:max-)?width:\s*100vw/);
   });
 });

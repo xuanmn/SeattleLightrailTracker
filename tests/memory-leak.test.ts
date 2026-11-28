@@ -8,6 +8,7 @@ import { STATIONS } from "../src/data/stations";
 
 describe("Memory Leak Prevention & Lifecycle Tests", () => {
   beforeEach(() => {
+    document.documentElement.className = "";
     document.body.innerHTML = "";
     document.body.className = "";
   });
@@ -17,9 +18,13 @@ describe("Memory Leak Prevention & Lifecycle Tests", () => {
       const faq = new FaqModal();
       faq.open();
       faq.open(); // Duplicate call
-      expect(document.body.classList.contains("modal-open")).toBe(true);
-
-      faq.close();
+      try {
+        expect(document.documentElement.classList.contains("modal-open")).toBe(true);
+        expect(document.body.classList.contains("modal-open")).toBe(true);
+      } finally {
+        faq.close();
+      }
+      expect(document.documentElement.classList.contains("modal-open")).toBe(false);
       expect(document.body.classList.contains("modal-open")).toBe(false);
     });
 
@@ -27,9 +32,13 @@ describe("Memory Leak Prevention & Lifecycle Tests", () => {
       const settings = new SettingsModal({ onSettingsSaved: () => {} });
       settings.open();
       settings.open(); // Duplicate call
-      expect(document.body.classList.contains("modal-open")).toBe(true);
-
-      settings.close();
+      try {
+        expect(document.documentElement.classList.contains("modal-open")).toBe(true);
+        expect(document.body.classList.contains("modal-open")).toBe(true);
+      } finally {
+        settings.close();
+      }
+      expect(document.documentElement.classList.contains("modal-open")).toBe(false);
       expect(document.body.classList.contains("modal-open")).toBe(false);
     });
 
@@ -40,9 +49,13 @@ describe("Memory Leak Prevention & Lifecycle Tests", () => {
       });
       picker.open();
       picker.open(); // Duplicate call
-      expect(document.body.classList.contains("modal-open")).toBe(true);
-
-      picker.close();
+      try {
+        expect(document.documentElement.classList.contains("modal-open")).toBe(true);
+        expect(document.body.classList.contains("modal-open")).toBe(true);
+      } finally {
+        picker.close();
+      }
+      expect(document.documentElement.classList.contains("modal-open")).toBe(false);
       expect(document.body.classList.contains("modal-open")).toBe(false);
     });
 
@@ -50,9 +63,13 @@ describe("Memory Leak Prevention & Lifecycle Tests", () => {
       const map = new SystemMapModal();
       map.open();
       map.open(); // Duplicate call
-      expect(document.body.classList.contains("modal-open")).toBe(true);
-
-      map.close();
+      try {
+        expect(document.documentElement.classList.contains("modal-open")).toBe(true);
+        expect(document.body.classList.contains("modal-open")).toBe(true);
+      } finally {
+        map.close();
+      }
+      expect(document.documentElement.classList.contains("modal-open")).toBe(false);
       expect(document.body.classList.contains("modal-open")).toBe(false);
     });
   });

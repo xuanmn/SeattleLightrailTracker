@@ -161,7 +161,7 @@ export class StationPickerModal {
 
     const row = createElement("div", "picker-station-row");
 
-    const info = createElement("div", "brand-section");
+    const info = createElement("div", "picker-station-info");
 
     const linePill = createElement(
       "span",

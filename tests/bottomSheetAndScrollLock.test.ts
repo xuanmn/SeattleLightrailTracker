@@ -160,7 +160,7 @@ describe('Modal Scroll Lock and Gesture Integration', () => {
     document.body.innerHTML = '';
   });
 
-  it('locks body scroll when SettingsModal is opened and unlocks when closed', () => {
+  it('locks root and body scroll when SettingsModal is opened and unlocks when closed', () => {
     const settingsModal = new SettingsModal({
       onSettingsSaved: () => {},
     });
@@ -169,44 +169,58 @@ describe('Modal Scroll Lock and Gesture Integration', () => {
     expect(document.body.classList.contains('modal-open')).toBe(false);
 
     settingsModal.open();
-    expect(document.documentElement.classList.contains('modal-open')).toBe(true);
-    expect(document.body.classList.contains('modal-open')).toBe(true);
-
-    settingsModal.close();
+    try {
+      expect(document.documentElement.classList.contains('modal-open')).toBe(true);
+      expect(document.body.classList.contains('modal-open')).toBe(true);
+    } finally {
+      settingsModal.close();
+    }
     expect(document.documentElement.classList.contains('modal-open')).toBe(false);
     expect(document.body.classList.contains('modal-open')).toBe(false);
   });
 
-  it('locks body scroll when StationPickerModal is opened and unlocks when closed', () => {
+  it('locks root and body scroll when StationPickerModal is opened and unlocks when closed', () => {
     const picker = new StationPickerModal({
       onTogglePin: () => {},
       isStationPinned: () => false,
     });
 
     picker.open();
-    expect(document.body.classList.contains('modal-open')).toBe(true);
-
-    picker.close();
+    try {
+      expect(document.documentElement.classList.contains('modal-open')).toBe(true);
+      expect(document.body.classList.contains('modal-open')).toBe(true);
+    } finally {
+      picker.close();
+    }
+    expect(document.documentElement.classList.contains('modal-open')).toBe(false);
     expect(document.body.classList.contains('modal-open')).toBe(false);
   });
 
-  it('locks body scroll when FaqModal is opened and unlocks when closed', () => {
+  it('locks root and body scroll when FaqModal is opened and unlocks when closed', () => {
     const faq = new FaqModal();
 
     faq.open();
-    expect(document.body.classList.contains('modal-open')).toBe(true);
-
-    faq.close();
+    try {
+      expect(document.documentElement.classList.contains('modal-open')).toBe(true);
+      expect(document.body.classList.contains('modal-open')).toBe(true);
+    } finally {
+      faq.close();
+    }
+    expect(document.documentElement.classList.contains('modal-open')).toBe(false);
     expect(document.body.classList.contains('modal-open')).toBe(false);
   });
 
-  it('locks body scroll when SystemMapModal is opened and unlocks when closed', () => {
+  it('locks root and body scroll when SystemMapModal is opened and unlocks when closed', () => {
     const map = new SystemMapModal();
 
     map.open();
-    expect(document.body.classList.contains('modal-open')).toBe(true);
-
-    map.close();
+    try {
+      expect(document.documentElement.classList.contains('modal-open')).toBe(true);
+      expect(document.body.classList.contains('modal-open')).toBe(true);
+    } finally {
+      map.close();
+    }
+    expect(document.documentElement.classList.contains('modal-open')).toBe(false);
     expect(document.body.classList.contains('modal-open')).toBe(false);
   });
 
